@@ -23,8 +23,11 @@
         <button class="navBtn" data-view="elements">Elementos</button>
         <button class="navBtn" data-view="crew">Equipo técnico</button>
         <button class="navBtn" data-view="schedule">Cronograma</button>
-        <button class="navBtn" data-view="payments">Pagos</button>
-        <button class="navBtn" data-view="settings">Sync / Ajustes</button>
+<button class="navBtn" data-view="payments">Pagos</button>
+<button class="navBtn" data-view="reports">Reportes</button>
+<button class="navBtn" data-view="callsheet">Call Sheets</button>
+<button class="navBtn" data-view="settings">Sync / Ajustes</button>
+
       </nav>
 
       <div class="sidebarFooter">
@@ -90,19 +93,28 @@
               </table>
             </div>
 
-            <details class="importBox">
-              <summary>Importar escenas (CSV/TSV)</summary>
-              <p class="muted">
-                Pegá una tabla. Columnas sugeridas:
-                <code>number, slugline, location, timeOfDay, pages, summary</code>
-                (header opcional).
-              </p>
-              <textarea id="sceneImportText" class="textarea" rows="6" placeholder="1	INT. CASA - NOCHE	Casa	Noche	1.5	Discuten..."></textarea>
-              <div class="row gap">
-                <button class="btn" id="btnImportScenes">Importar</button>
-                <button class="btn" id="btnClearImport">Limpiar</button>
-              </div>
-            </details>
+<details class="importBox">
+  <summary>Importar guion (texto) y detectar escenas</summary>
+  <p class="muted">
+    Pegá el guion. Se detectan escenas por encabezados tipo <code>INT.</code> / <code>EXT.</code> / <code>INT/EXT</code>.
+    Si tu formato es raro, podés agregar keywords.
+  </p>
+
+  <div class="filters">
+    <input id="scriptKeywords" class="input" placeholder="Keywords extra (separadas por coma). Ej: ESCENA, SCENE" />
+  </div>
+
+  <textarea id="scriptImportText" class="textarea" rows="10" placeholder="INT. CASA - NOCHE
+Lucio entra...
+..."></textarea>
+
+  <div class="row gap">
+    <button class="btn" id="btnParseScript">Detectar escenas y cargar</button>
+    <button class="btn danger" id="btnClearScript">Limpiar</button>
+  </div>
+
+  <p class="muted">Tip: esto NO borra tus escenas existentes, agrega nuevas. Si querés reemplazar, borrás escenas y reimportás.</p>
+</details>
           </div>
 
           <div class="card">
@@ -179,82 +191,100 @@
       </section>
 
       <!-- SHOOTING -->
-      <section class="view hidden" id="view-shooting">
-        <div class="grid2">
-          <div class="card">
-            <div class="cardHeader">
-              <h2>Días de rodaje</h2>
-              <div class="row gap">
-                <button class="btn" id="btnAddShootDay">+ Día</button>
-                <button class="btn danger" id="btnDeleteShootDay">Borrar</button>
-              </div>
-            </div>
+<section class="view hidden" id="view-shooting">
+  <div class="boardWrap">
+    <div class="card sceneBank">
+      <div class="cardHeader">
+        <h2>Scene Bank</h2>
+        <div class="row gap">
+          <button class="btn" id="btnAddShootDay">+ Día</button>
+        </div>
+      </div>
 
-            <div class="tableWrap">
-              <table class="table" id="shootDayTable">
-                <thead>
-                  <tr>
-                    <th>Fecha</th>
-                    <th>Call</th>
-                    <th>Locación</th>
-                    <th>Escenas</th>
-                  </tr>
-                </thead>
-                <tbody></tbody>
-              </table>
-            </div>
+      <div class="filters">
+        <input id="bankSearch" class="input" placeholder="Buscar escena…" />
+        <select id="bankFilter" class="input">
+          <option value="all">Todas</option>
+          <option value="unassigned">No asignadas</option>
+        </select>
+      </div>
 
-            <p class="muted">
-              Tip: asigná escenas al día con el botón “+” en la lista de escenas del día.
-              (Drag & drop se puede sumar después; por ahora, que funcione y no haga cosplay de bug).
-            </p>
-          </div>
+      <div id="sceneBankList" class="list"></div>
+      <p class="muted">Arrastrá escenas a un día. También podés mover entre días y reordenar.</p>
+    </div>
 
-          <div class="card">
-            <div class="cardHeader">
-              <h2>Detalle del día</h2>
-              <span class="muted" id="selectedDayHint">Seleccioná un día</span>
-            </div>
+    <div class="card" style="flex:1;">
+      <div class="cardHeader">
+        <h2>Plan de rodaje</h2>
+        <div class="row gap noPrint">
+          <button class="btn" id="btnDeleteShootDay">Borrar día</button>
+        </div>
+      </div>
 
-            <div class="formGrid">
-              <label class="field">
-                <span>Fecha</span>
-                <input id="day_date" class="input" type="date" />
-              </label>
-              <label class="field">
-                <span>Call time</span>
-                <input id="day_call" class="input" type="time" />
-              </label>
-              <label class="field col2">
-                <span>Locación principal</span>
-                <input id="day_location" class="input" />
-              </label>
-              <label class="field col2">
-                <span>Notas</span>
-                <textarea id="day_notes" class="textarea" rows="3"></textarea>
-              </label>
-            </div>
+      <div class="daysBoard" id="daysBoard"></div>
 
-            <div class="hr"></div>
+      <div class="hr"></div>
 
-            <div class="cardSubHeader">
-              <h3>Escenas de este día</h3>
-            </div>
-
-            <div id="daySceneList" class="list"></div>
-
-            <div class="hr"></div>
-
-            <div class="cardSubHeader">
-              <h3>Pool de escenas</h3>
-              <div class="row gap">
-                <input id="poolSearch" class="input" placeholder="Buscar escena…" />
-              </div>
-            </div>
-            <div id="scenePool" class="list"></div>
+      <div class="dayDetailGrid">
+        <div class="cardSubHeader">
+          <h3>Detalle del día</h3>
+          <div class="row gap noPrint">
+            <button class="btn" id="btnOpenCallSheet">Generar Call Sheet</button>
           </div>
         </div>
-      </section>
+
+        <div class="pairs">
+          <label class="field">
+            <span>Fecha</span>
+            <input id="day_date" class="input" type="date" />
+          </label>
+          <label class="field">
+            <span>Call time</span>
+            <input id="day_call" class="input" type="time" />
+          </label>
+          <label class="field">
+            <span>Locación</span>
+            <input id="day_location" class="input" />
+          </label>
+          <label class="field">
+            <span>Nombre del día (opcional)</span>
+            <input id="day_label" class="input" placeholder="Ej: Día 3 - Casa" />
+          </label>
+        </div>
+
+        <label class="field">
+          <span>Notas</span>
+          <textarea id="day_notes" class="textarea" rows="3"></textarea>
+        </label>
+
+        <div class="hr"></div>
+
+        <div class="grid2" style="grid-template-columns:1fr 1fr;">
+          <div>
+            <h3 class="h3">Personas citadas</h3>
+            <div class="muted">Cast (auto por breakdown):</div>
+            <div id="dayCast" class="chips" style="margin:8px 0 12px;"></div>
+
+            <div class="muted">Equipo técnico (seleccioná quién va):</div>
+            <div id="dayCrewPicker" class="list" style="margin-top:8px;"></div>
+          </div>
+
+          <div>
+            <h3 class="h3">Necesidades por área</h3>
+            <div id="dayNeeds" class="list"></div>
+
+            <div class="hr"></div>
+
+            <h3 class="h3">Cronograma que cae este día</h3>
+            <div id="daySchedule" class="list"></div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
 
       <!-- ELEMENTS -->
       <section class="view hidden" id="view-elements">
@@ -391,6 +421,32 @@
       </section>
 
       <!-- SETTINGS -->
+
+<section class="view hidden" id="view-reports">
+  <div class="card">
+    <div class="cardHeader">
+      <h2>Reportes por día</h2>
+      <div class="row gap">
+        <button class="btn" id="btnRefreshReports">Actualizar</button>
+      </div>
+    </div>
+    <div id="reportsList" class="list"></div>
+  </div>
+</section>
+
+<section class="view hidden" id="view-callsheet">
+  <div class="card">
+    <div class="cardHeader">
+      <h2>Call Sheet</h2>
+      <div class="row gap noPrint">
+        <button class="btn" id="btnPrintCallSheet">Imprimir</button>
+      </div>
+    </div>
+    <div id="callSheetWrap"></div>
+  </div>
+</section>
+
+
       <section class="view hidden" id="view-settings">
         <div class="grid2">
           <div class="card">

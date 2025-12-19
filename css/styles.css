@@ -253,3 +253,83 @@ input[type="time"].input{
   display:none;
   max-width: 360px;
 }
+/* --- v2: Shooting board (drag & drop) --- */
+.boardWrap{ display:flex; gap:14px; align-items:flex-start; }
+.sceneBank{
+  width: 360px;
+  min-width: 320px;
+  max-height: calc(100vh - 170px);
+  overflow:auto;
+}
+.daysBoard{
+  flex:1;
+  display:flex;
+  gap:12px;
+  overflow:auto;
+  padding-bottom:10px;
+}
+.dayCol{
+  min-width: 320px;
+  border:1px solid var(--border);
+  border-radius:18px;
+  background: rgba(16,26,45,.55);
+}
+.dayHeader{
+  padding:10px 12px;
+  border-bottom:1px solid rgba(36,49,77,.8);
+  display:flex;
+  justify-content:space-between;
+  gap:10px;
+  cursor:pointer;
+}
+.dayHeader:hover{ background: rgba(110,231,255,.06); }
+.dayHeader .t{ font-weight:900; font-size:13px; }
+.dayHeader .m{ color:var(--muted); font-size:12px; margin-top:2px; }
+
+.dropZone{
+  min-height: 120px;
+  padding:10px;
+  display:flex;
+  flex-direction:column;
+  gap:8px;
+}
+.dropZone.over{
+  outline: 2px dashed rgba(110,231,255,.45);
+  outline-offset: -6px;
+  border-radius: 16px;
+}
+
+.sceneCard{
+  border:1px solid rgba(36,49,77,.9);
+  border-radius:14px;
+  padding:10px 10px;
+  background: rgba(255,255,255,.03);
+  display:flex;
+  justify-content:space-between;
+  gap:10px;
+}
+.sceneCard.dragging{ opacity:.55; }
+.sceneCard .left{ display:flex; flex-direction:column; gap:2px; }
+.sceneCard .title{ font-weight:800; font-size:13px; }
+.sceneCard .meta{ color:var(--muted); font-size:12px; }
+.sceneCard .right{ display:flex; gap:6px; align-items:center; }
+.dragHandle{ cursor:grab; user-select:none; color:var(--muted); font-size:14px; padding:2px 6px; border-radius:10px; border:1px solid rgba(36,49,77,.8); }
+.dragHandle:hover{ color:var(--text); }
+
+.dayDetailGrid{ display:grid; grid-template-columns:1fr; gap:12px; }
+.pairs{ display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+@media (max-width: 1100px){
+  .boardWrap{ flex-direction:column; }
+  .sceneBank{ width:100%; max-height:none; }
+  .daysBoard{ width:100%; }
+}
+
+.printOnly{ display:none; }
+@media print{
+  body{ background:#fff; color:#000; }
+  .sidebar,.topbar,.toast{ display:none !important; }
+  .view{ padding:0; }
+  .card{ box-shadow:none; border:none; background:#fff; }
+  .noPrint{ display:none !important; }
+  .printOnly{ display:block; }
+}
