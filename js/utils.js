@@ -16,8 +16,10 @@
   }
 
   function safeJsonParse(str, fallback=null){
+    if (str === null || str === undefined || str === "") return fallback;
     try{ return JSON.parse(str); }catch{ return fallback; }
   }
+
 
   function parseTableText(text){
     // Acepta CSV simple o TSV. Separa por \n y detecta separador por primera línea.
@@ -39,3 +41,4 @@
 
   window.U = { uid, nowISO, debounce, safeJsonParse, parseTableText, isHeaderRow, moneyARS };
 })();
+
