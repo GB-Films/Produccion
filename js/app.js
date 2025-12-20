@@ -37,6 +37,11 @@ function renderScheduleBoard(){
   if(!board) return;
   board.innerHTML = "";
 
+  if(!state.shootDays?.length){
+    board.innerHTML = `<div class="muted">No hay días de rodaje creados.</div>`;
+    return;
+  }
+
   const pxPerHour = Number(el("schedZoom")?.value || 60);
   const snapMin = Number(el("schedSnap")?.value || 15);
   const pxPerMin = pxPerHour / 60;
@@ -656,6 +661,8 @@ function renderElementDetail(cat, dayFilter, name, info){
           renderSceneElementsChips();
           renderReports();
           renderDayDetail();
+renderElementsExplorer();
+
         });
         wrap.appendChild(chip);
       }
@@ -739,6 +746,8 @@ function renderElementDetail(cat, dayFilter, name, info){
     renderSceneElementsChips();
     renderReports();
     renderDayDetail();
+renderElementsExplorer();
+
   }
 
   function importScenesTable(){
@@ -1632,9 +1641,18 @@ renderScheduleBoard();
   }
 
   function bindEvents(){
-    document.querySelectorAll(".navBtn").forEach(b=>{
-      b.addEventListener("click", ()=>showView(b.dataset.view));
-    });
+document.querySelectorAll(".navBtn").forEach(b=>{
+  b.addEventListener("click", ()=>{
+    const v = b.dataset.view;
+    showView(v);
+
+    if(v === "elements") renderElementsExplorer();
+    if(v === "schedule") renderScheduleBoard();
+    if(v === "reports") renderReports();
+    if(v === "callsheet"){ renderCallSheetCalendar(); renderCallSheet(); }
+  });
+});
+
 
     el("btnAddScene")?.addEventListener("click", addScene);
     el("btnDeleteScene")?.addEventListener("click", deleteScene);
