@@ -39,10 +39,13 @@
   let selectedDayId = null;
   let callSheetDayId = null;
 
-  let selectedElementItem = null;
+  let selectedElementKey = null; // key, no solo nombre
 
   let resizing = null; // schedule resize
   let calCursor = { year: new Date().getFullYear(), month: new Date().getMonth() };
+
+  // drag schedule
+  let schedDrag = null; // {sceneId, fromDayId, pxPerMin, snapMin, ghostEl, targetDayId, targetIndex}
 
   const saveDebouncedRemote = window.U.debounce(async ()=>{
     const cfg = StorageLayer.loadCfg();
@@ -81,7 +84,7 @@
       scenes: [],
       shootDays: [], // {id,date,callTime,location,label,notes,sceneIds[],crewIds[],durations:{}}
       crew: [],      // {id,area,role,name,phone,email,notes}
-      scheduleItems: [] // ranges (opcional)
+      scheduleItems: []
     };
   }
 
@@ -135,15 +138,15 @@
   }
 
   function sortShootDaysInPlace(){
-    // fecha vacía al final
     state.shootDays.sort((a,b)=>{
       const ta = a.date ? Date.parse(a.date+"T00:00:00") : Number.POSITIVE_INFINITY;
       const tb = b.date ? Date.parse(b.date+"T00:00:00") : Number.POSITIVE_INFINITY;
       if(ta !== tb) return ta - tb;
-      // tie-break: label
       return (a.label||"").localeCompare(b.label||"");
     });
   }
+
+  function union(arr){ return Array.from(new Set((arr||[]).filter(Boolean))); }
 
   // ----------- Script parser -----------
   function parseScreenplayToScenes(text, extraKeywordsCsv=""){
@@ -223,9 +226,8 @@
 
   // ----------- Breakdown render -----------
   function renderCatSelects(){
-    // breakdown add-element category select
     const sel = el("elCategory");
-    if(sel && sel.options.length === 0){
+    if(sel){
       sel.innerHTML = cats.map(c=>`<option value="${c}">${esc(catNames[c])}</option>`).join("");
     }
   }
@@ -287,8 +289,6 @@
 
       const row = document.createElement("div");
       row.className = "sceneCatRow";
-      row.style.borderColor = "rgba(36,49,77,.7)";
-
       row.innerHTML = `
         <div class="sceneCatHead">
           <div class="left">
@@ -296,7 +296,6 @@
             <div class="name">${esc(catNames[cat])}</div>
             <div class="count">(${items.length})</div>
           </div>
-          <div class="muted small"> </div>
         </div>
         <div class="chips" id="chips_${cat}"></div>
       `;
@@ -311,7 +310,6 @@
         items.forEach(it=>{
           const chip = document.createElement("div");
           chip.className = "chip";
-          chip.style.borderColor = "rgba(36,49,77,.8)";
           chip.innerHTML = `<span>${esc(it)}</span><button title="Quitar">×</button>`;
           chip.querySelector("button").addEventListener("click", ()=>{
             s.elements[cat] = (s.elements[cat]||[]).filter(x=>x!==it);
@@ -321,6 +319,10 @@
             renderReports();
             renderElementsExplorer();
             renderScheduleBoard();
+            renderDaysBoard();
+            renderSceneBank();
+            renderCallSheetCalendar();
+            renderCallSheet();
           });
           chipsWrap.appendChild(chip);
         });
@@ -350,6 +352,8 @@
     renderSceneBank();
     renderDaysBoard();
     renderScheduleBoard();
+    renderReports();
+    renderElementsExplorer();
   }
 
   function deleteScene(){
@@ -373,6 +377,8 @@
     renderReports();
     renderElementsExplorer();
     renderScheduleBoard();
+    renderCallSheetCalendar();
+    renderCallSheet();
   }
 
   function duplicateScene(){
@@ -388,6 +394,8 @@
     renderScenesTable();
     renderSceneEditor();
     renderSceneBank();
+    renderDaysBoard();
+    renderScheduleBoard();
   }
 
   function addSceneElement(){
@@ -407,6 +415,7 @@
     renderReports();
     renderElementsExplorer();
     renderScheduleBoard();
+    renderCallSheet();
   }
 
   function importScenesTable(){
@@ -443,6 +452,8 @@
       renderSceneBank();
       renderDaysBoard();
       renderScheduleBoard();
+      renderReports();
+      renderElementsExplorer();
     }
   }
 
@@ -461,6 +472,8 @@
     renderSceneBank();
     renderDaysBoard();
     renderScheduleBoard();
+    renderReports();
+    renderElementsExplorer();
   }
 
   // ----------- Shooting plan (drag drop) -----------
@@ -503,6 +516,7 @@
     renderElementsExplorer();
     renderScheduleBoard();
     renderCallSheetCalendar();
+    renderCallSheet();
   }
 
   function sceneAssignedDayId(sceneId){
@@ -603,33 +617,9 @@
         const data = JSON.parse(raw);
         if(data.type !== "scene") return;
 
-        const targetDay = getDay(d.id);
-        if(!targetDay) return;
+        moveSceneToDayWithIndex(data.sceneId, d.id, null);
 
-        // remove from any day
-        for(const dd of state.shootDays){
-          dd.sceneIds = (dd.sceneIds||[]).filter(x=>x!==data.sceneId);
-        }
-
-        // insert
-        const after = e.target.closest(".sceneCard");
-        targetDay.sceneIds = targetDay.sceneIds || [];
-        if(after && after.dataset.sceneId){
-          const idx = targetDay.sceneIds.indexOf(after.dataset.sceneId);
-          if(idx >= 0) targetDay.sceneIds.splice(idx, 0, data.sceneId);
-          else targetDay.sceneIds.push(data.sceneId);
-        }else{
-          targetDay.sceneIds.push(data.sceneId);
-        }
-
-        // de-dup
-        targetDay.sceneIds = Array.from(new Set(targetDay.sceneIds));
-
-        // durations default 60
-        targetDay.durations = targetDay.durations || {};
-        if(!targetDay.durations[data.sceneId]) targetDay.durations[data.sceneId] = 60;
-
-        selectedDayId = targetDay.id;
+        selectedDayId = d.id;
         touch();
         renderDaysBoard();
         renderSceneBank();
@@ -637,6 +627,8 @@
         renderReports();
         renderElementsExplorer();
         renderScheduleBoard();
+        renderCallSheetCalendar();
+        renderCallSheet();
       });
 
       const ids = d.sceneIds || [];
@@ -681,8 +673,6 @@
   function dayScenes(d){
     return (d.sceneIds||[]).map(getScene).filter(Boolean);
   }
-
-  function union(arr){ return Array.from(new Set((arr||[]).filter(Boolean))); }
 
   function renderDayCast(){
     const wrap = el("dayCast");
@@ -753,6 +743,7 @@
           d.crewIds = Array.from(new Set(d.crewIds));
           touch();
           renderReports();
+          renderCallSheet();
         });
         inner.appendChild(row);
       });
@@ -871,19 +862,18 @@
     renderDaySchedule();
   }
 
-  // ----------- Elements explorer -----------
+  // ----------- Elements explorer (✅ Todas las categorías) -----------
   function populateElementsFilters(){
     const catSel = el("elxCategory");
     const daySel = el("elxDay");
     if(!catSel || !daySel) return;
 
-    // preserve current selection
-    const prevCat = catSel.value || "props";
+    const prevCat = catSel.value || "all";
     const prevDay = daySel.value || "all";
 
-    if(catSel.options.length === 0){
-      catSel.innerHTML = cats.map(c=>`<option value="${c}">${esc(catNames[c])}</option>`).join("");
-    }
+    catSel.innerHTML =
+      `<option value="all">Todas las categorías</option>` +
+      cats.map(c=>`<option value="${c}">${esc(catNames[c])}</option>`).join("");
 
     daySel.innerHTML = `
       <option value="all">Todos los días</option>
@@ -891,8 +881,7 @@
       ${state.shootDays.map(d=>`<option value="${esc(d.id)}">${esc(formatDayTitle(d.date))}</option>`).join("")}
     `;
 
-    // restore if possible
-    catSel.value = cats.includes(prevCat) ? prevCat : "props";
+    catSel.value = (prevCat === "all" || cats.includes(prevCat)) ? prevCat : "all";
     if(prevDay === "unassigned" || prevDay === "all" || state.shootDays.some(d=>d.id===prevDay)){
       daySel.value = prevDay;
     }else{
@@ -916,23 +905,44 @@
 
     populateElementsFilters();
 
-    const cat = el("elxCategory").value || "props";
+    const catFilter = el("elxCategory").value || "all";
     const dayFilter = el("elxDay").value || "all";
     const q = (el("elxSearch").value || "").toLowerCase();
 
     const scenes = scenesForDayFilter(dayFilter);
 
-    const counts = new Map(); // item -> {count, sceneIds:Set}
+    // counts map: key -> {count, sceneIds:Set, cat, item}
+    const counts = new Map();
+
+    const pushItem = (cat, item, sceneId)=>{
+      const key = `${cat}::${item}`;
+      if(q && !item.toLowerCase().includes(q)) return;
+
+      if(!counts.has(key)){
+        counts.set(key, {count:0, sceneIds:new Set(), cat, item});
+      }
+      const obj = counts.get(key);
+      obj.count += 1;
+      obj.sceneIds.add(sceneId);
+    };
+
     for(const s of scenes){
-      const items = s.elements?.[cat] || [];
-      for(const it of items){
-        const key = it.trim();
-        if(!key) continue;
-        if(q && !key.toLowerCase().includes(q)) continue;
-        if(!counts.has(key)) counts.set(key, {count:0, sceneIds:new Set()});
-        const obj = counts.get(key);
-        obj.count += 1;
-        obj.sceneIds.add(s.id);
+      if(catFilter === "all"){
+        for(const cat of cats){
+          const items = s.elements?.[cat] || [];
+          for(const it of items){
+            const item = it.trim();
+            if(!item) continue;
+            pushItem(cat, item, s.id);
+          }
+        }
+      }else{
+        const items = s.elements?.[catFilter] || [];
+        for(const it of items){
+          const item = it.trim();
+          if(!item) continue;
+          pushItem(catFilter, item, s.id);
+        }
       }
     }
 
@@ -941,40 +951,52 @@
     listWrap.innerHTML = "";
     detailWrap.innerHTML = "";
 
-    const items = Array.from(counts.entries()).sort((a,b)=>a[0].localeCompare(b[0]));
+    let entries = Array.from(counts.entries());
 
-    if(!items.length){
+    // sort: por orden de cats y luego alfabético
+    entries.sort((a,b)=>{
+      const A = a[1], B = b[1];
+      const ia = cats.indexOf(A.cat);
+      const ib = cats.indexOf(B.cat);
+      if(ia !== ib) return ia - ib;
+      return A.item.localeCompare(B.item);
+    });
+
+    if(!entries.length){
       listWrap.innerHTML = `<div class="muted">No hay elementos para este filtro.</div>`;
       return;
     }
 
-    for(const [name, info] of items){
+    for(const [key, info] of entries){
       const row = document.createElement("div");
       row.className = "listItem";
       row.style.cursor = "pointer";
       row.innerHTML = `
         <div>
           <div class="title">
-            <span class="catBadge"><span class="dot" style="background:${catColors[cat]}"></span>${esc(name)}</span>
+            <span class="catBadge">
+              <span class="dot" style="background:${catColors[info.cat]}"></span>
+              ${esc(info.item)}
+            </span>
           </div>
-          <div class="meta">${info.sceneIds.size} escena(s)</div>
+          <div class="meta">${esc(catNames[info.cat])} · ${info.sceneIds.size} escena(s)</div>
         </div>
         <div class="muted">${info.count}</div>
       `;
       row.addEventListener("click", ()=>{
-        selectedElementItem = name;
-        renderElementDetail(cat, dayFilter, name, info);
+        selectedElementKey = key;
+        renderElementDetail(dayFilter, key, info);
       });
       listWrap.appendChild(row);
     }
 
-    if(!selectedElementItem || !counts.has(selectedElementItem)){
-      selectedElementItem = items[0][0];
+    if(!selectedElementKey || !counts.has(selectedElementKey)){
+      selectedElementKey = entries[0][0];
     }
-    renderElementDetail(cat, dayFilter, selectedElementItem, counts.get(selectedElementItem));
+    renderElementDetail(dayFilter, selectedElementKey, counts.get(selectedElementKey));
   }
 
-  function renderElementDetail(cat, dayFilter, name, info){
+  function renderElementDetail(dayFilter, key, info){
     const wrap = el("elxDetail");
     wrap.innerHTML = "";
 
@@ -985,9 +1007,9 @@
     header.style.flexDirection = "column";
     header.innerHTML = `
       <div class="title">
-        <span class="catBadge"><span class="dot" style="background:${catColors[cat]}"></span>${esc(name)}</span>
+        <span class="catBadge"><span class="dot" style="background:${catColors[info.cat]}"></span>${esc(info.item)}</span>
       </div>
-      <div class="meta">${esc(catNames[cat])} · ${esc(dayFilter==="all"?"Todos los días":(dayFilter==="unassigned"?"No asignadas":formatDayTitle(getDay(dayFilter)?.date)))}</div>
+      <div class="meta">${esc(catNames[info.cat])} · ${esc(dayFilter==="all"?"Todos los días":(dayFilter==="unassigned"?"No asignadas":formatDayTitle(getDay(dayFilter)?.date)))}</div>
     `;
     wrap.appendChild(header);
 
@@ -1020,6 +1042,7 @@
     renderCrew();
     renderDayDetail();
     renderReports();
+    renderCallSheet();
   }
 
   function renderCrew(){
@@ -1043,9 +1066,9 @@
       `;
 
       const [areaSel, role, name, phone, email, notes] = tr.querySelectorAll("select,input");
-      areaSel.addEventListener("change", ()=>{ c.area = areaSel.value; touch(); renderDayDetail(); renderReports(); });
-      role.addEventListener("input", ()=>{ c.role = role.value; touch(); renderDayDetail(); renderReports(); });
-      name.addEventListener("input", ()=>{ c.name = name.value; touch(); renderDayDetail(); renderReports(); });
+      areaSel.addEventListener("change", ()=>{ c.area = areaSel.value; touch(); renderDayDetail(); renderReports(); renderCallSheet(); });
+      role.addEventListener("input", ()=>{ c.role = role.value; touch(); renderDayDetail(); renderReports(); renderCallSheet(); });
+      name.addEventListener("input", ()=>{ c.name = name.value; touch(); renderDayDetail(); renderReports(); renderCallSheet(); });
       phone.addEventListener("input", ()=>{ c.phone = phone.value; touch(); });
       email.addEventListener("input", ()=>{ c.email = email.value; touch(); });
       notes.addEventListener("input", ()=>{ c.notes = notes.value; touch(); });
@@ -1060,13 +1083,14 @@
         renderCrew();
         renderDayDetail();
         renderReports();
+        renderCallSheet();
       });
 
       tbody.appendChild(tr);
     });
   }
 
-  // ----------- Reports (columns) -----------
+  // ----------- Reports (✅ Necesidades lindas por categoría) -----------
   function renderReports(){
     const board = el("reportsBoard");
     if(!board) return;
@@ -1084,13 +1108,32 @@
       const cast = union(scenes.flatMap(s=>s.elements?.cast || []));
       const crew = (d.crewIds||[]).map(getCrew).filter(Boolean);
 
-      const needs = [];
+      const needsByCat = {};
       for(const cat of cats){
+        if(cat === "cast") continue;
         const items = union(scenes.flatMap(s=>s.elements?.[cat] || []));
-        if(items.length && cat !== "cast"){
-          needs.push(`${catNames[cat]}: ${items.join(", ")}`);
-        }
+        if(items.length) needsByCat[cat] = items;
       }
+
+      const needsHtml = Object.keys(needsByCat).length ? `
+        <div class="needsStack">
+          ${cats.filter(c=>needsByCat[c]).map(cat=>`
+            <div class="needCatBlock">
+              <div class="needCatHead">
+                <div class="name">
+                  <span class="catBadge"><span class="dot" style="background:${catColors[cat]}"></span>${esc(catNames[cat])}</span>
+                </div>
+                <div class="muted small">${needsByCat[cat].length}</div>
+              </div>
+              <div class="needItems">
+                ${needsByCat[cat].map(it=>`
+                  <div class="chip"><span>${esc(it)}</span></div>
+                `).join("")}
+              </div>
+            </div>
+          `).join("")}
+        </div>
+      ` : `<div class="muted">-</div>`;
 
       const col = document.createElement("div");
       col.className = "reportCol";
@@ -1105,7 +1148,7 @@
 
         <details style="margin-top:10px;">
           <summary class="muted">Necesidades</summary>
-          <div class="muted" style="margin-top:8px;">${esc(needs.join(" · ") || "-")}</div>
+          ${needsHtml}
         </details>
 
         <div class="row gap" style="margin-top:12px;">
@@ -1216,15 +1259,10 @@
       crewByArea[a].push(c);
     }
 
-    const needsByDept = {};
+    const needsByCat = {};
     for(const cat of cats){
       const items = union(scenes.flatMap(s=>s.elements?.[cat] || []));
-      if(!items.length) continue;
-      const dept = deptFromCat(cat);
-      needsByDept[dept] = needsByDept[dept] || [];
-      for(const it of items){
-        needsByDept[dept].push({cat, text: `${catNames[cat]}: ${it}`});
-      }
+      if(items.length) needsByCat[cat] = items;
     }
 
     wrap.innerHTML = `
@@ -1242,7 +1280,7 @@
       <div class="hr"></div>
 
       <h3>Escenas</h3>
-      <div class="tableWrap">
+      <div class="tableWrap" style="max-height:520px;">
         <table class="table" style="min-width:600px;">
           <thead><tr><th>#</th><th>Slugline</th><th>Locación</th><th>Horario</th><th>Pág</th></tr></thead>
           <tbody>
@@ -1282,17 +1320,22 @@
 
       <div class="hr"></div>
 
-      <h3>Necesidades por área</h3>
-      ${Object.keys(needsByDept).length ? Object.keys(needsByDept).sort().map(dept=>`
-        <div class="listItem" style="flex-direction:column; margin:10px 0;">
-          <div class="title">${esc(dept)}</div>
-          <div class="chips" style="margin-top:8px;">
-            ${needsByDept[dept].map(x=>`
-              <div class="chip"><span class="catBadge"><span class="dot" style="background:${catColors[x.cat]}"></span>${esc(x.text)}</span></div>
-            `).join("")}
-          </div>
+      <h3>Necesidades (por categoría)</h3>
+      ${cats.filter(c=>needsByCat[c] && needsByCat[c].length).length ? `
+        <div class="needsStack">
+          ${cats.filter(c=>needsByCat[c] && needsByCat[c].length).map(cat=>`
+            <div class="needCatBlock">
+              <div class="needCatHead">
+                <div class="name"><span class="catBadge"><span class="dot" style="background:${catColors[cat]}"></span>${esc(catNames[cat])}</span></div>
+                <div class="muted small">${needsByCat[cat].length}</div>
+              </div>
+              <div class="needItems">
+                ${needsByCat[cat].map(it=>`<div class="chip"><span>${esc(it)}</span></div>`).join("")}
+              </div>
+            </div>
+          `).join("")}
         </div>
-      `).join("") : `<div class="muted">-</div>`}
+      ` : `<div class="muted">-</div>`}
 
       <div class="hr"></div>
       <h3>Notas</h3>
@@ -1300,7 +1343,7 @@
     `;
   }
 
-  // ----------- Schedule (timeline) + tooltip on hover -----------
+  // ----------- Schedule (timeline) + tooltip + drag move/reorder -----------
   function hhmmFromMinutes(m){
     const h = Math.floor(m/60);
     const mm = String(m%60).padStart(2,"0");
@@ -1368,6 +1411,60 @@
     tip.innerHTML = "";
   }
 
+  function clearSchedDropTargets(){
+    document.querySelectorAll(".schedDay.dropTarget").forEach(n=>n.classList.remove("dropTarget"));
+  }
+
+  function computeInsertIndexByY(day, yMin){
+    // yMin: minutos desde el inicio del día (0..)
+    ensureDayDurations(day);
+    const ids = day.sceneIds || [];
+    let cursor = 0;
+    for(let i=0;i<ids.length;i++){
+      const sid = ids[i];
+      const dur = day.durations[sid] || 60;
+      const mid = cursor + dur/2;
+      if(yMin < mid) return i;
+      cursor += dur;
+    }
+    return ids.length;
+  }
+
+  function moveSceneToDayWithIndex(sceneId, targetDayId, targetIndex){
+    // remove from any day
+    let fromDay = null;
+    for(const d of state.shootDays){
+      const had = (d.sceneIds||[]).includes(sceneId);
+      if(had) fromDay = d;
+      d.sceneIds = (d.sceneIds||[]).filter(x=>x!==sceneId);
+    }
+
+    const targetDay = getDay(targetDayId);
+    if(!targetDay) return;
+
+    targetDay.sceneIds = targetDay.sceneIds || [];
+    ensureDayDurations(targetDay);
+
+    // preserve duration
+    let dur = 60;
+    if(fromDay && fromDay.durations && fromDay.durations[sceneId]) dur = fromDay.durations[sceneId];
+    targetDay.durations[sceneId] = targetDay.durations[sceneId] || dur;
+
+    // clean from source durations
+    if(fromDay && fromDay.durations) delete fromDay.durations[sceneId];
+
+    // insert
+    if(targetIndex === null || targetIndex === undefined){
+      targetDay.sceneIds.push(sceneId);
+    }else{
+      const idx = Math.max(0, Math.min(targetIndex, targetDay.sceneIds.length));
+      targetDay.sceneIds.splice(idx, 0, sceneId);
+    }
+
+    // de-dup
+    targetDay.sceneIds = Array.from(new Set(targetDay.sceneIds));
+  }
+
   function renderScheduleBoard(){
     const board = el("schedBoard");
     if(!board) return;
@@ -1394,12 +1491,14 @@
 
       const col = document.createElement("div");
       col.className = "schedDay";
+      col.dataset.dayId = d.id;
+
       col.innerHTML = `
         <div class="schedHead">
           <div class="t">${esc(formatDayTitle(d.date))}${d.label? " · "+esc(d.label):""}</div>
           <div class="m">Call ${esc(d.callTime||"")} · ${esc(d.location||"")}</div>
         </div>
-        <div class="schedGrid" style="height:${gridHeight + 20}px;"></div>
+        <div class="schedGrid" data-dayid="${esc(d.id)}" style="height:${gridHeight + 20}px;"></div>
       `;
       const grid = col.querySelector(".schedGrid");
 
@@ -1444,8 +1543,9 @@
           <div class="resize" title="Arrastrá para cambiar duración"></div>
         `;
 
-        // hover tooltip
+        // hover tooltip (si NO estamos draggeando)
         block.addEventListener("mouseenter", (e)=>{
+          if(schedDrag) return;
           showHoverTip(buildSceneTooltipHTML(s), e.clientX, e.clientY);
         });
         block.addEventListener("mousemove", (e)=>{
@@ -1455,16 +1555,17 @@
           hideHoverTip();
         });
 
-        // click opens scene (except resize)
+        // click abre escena (except resize / drag)
         block.addEventListener("click", (e)=>{
           if(e.target.classList.contains("resize")) return;
+          if(schedDrag) return;
           selectedSceneId = sid;
           showView("breakdown");
           renderScenesTable();
           renderSceneEditor();
         });
 
-        // resize
+        // resize duration
         const handle = block.querySelector(".resize");
         handle.addEventListener("mousedown", (e)=>{
           e.preventDefault();
@@ -1478,6 +1579,38 @@
             snapMin
           };
           document.body.style.userSelect = "none";
+          hideHoverTip();
+        });
+
+        // ✅ drag move/reorder: mousedown en bloque (pero no en resize)
+        block.addEventListener("mousedown", (e)=>{
+          if(e.button !== 0) return;
+          if(e.target.classList.contains("resize")) return;
+          if(resizing) return;
+
+          e.preventDefault();
+          hideHoverTip();
+
+          const rect = block.getBoundingClientRect();
+          const ghost = document.createElement("div");
+          ghost.className = "dragGhost";
+          ghost.innerHTML = `<div style="font-weight:900;">#${esc(s.number||"")} — ${esc(s.slugline||"")}</div><div style="color:var(--muted);font-size:12px;margin-top:4px;">${esc(formatDayTitle(d.date))}</div>`;
+          document.body.appendChild(ghost);
+
+          schedDrag = {
+            sceneId: sid,
+            fromDayId: d.id,
+            pxPerMin,
+            snapMin,
+            ghostEl: ghost,
+            targetDayId: d.id,
+            targetIndex: (d.sceneIds||[]).indexOf(sid),
+            offsetX: e.clientX - rect.left,
+            offsetY: e.clientY - rect.top
+          };
+
+          block.classList.add("dragging");
+          document.body.style.userSelect = "none";
         });
 
         grid.appendChild(block);
@@ -1489,29 +1622,119 @@
   }
 
   window.addEventListener("mousemove", (e)=>{
-    if(!resizing) return;
-    const d = getDay(resizing.dayId);
-    if(!d) return;
+    // duration resize
+    if(resizing){
+      const d = getDay(resizing.dayId);
+      if(!d) return;
 
-    const deltaPx = e.clientY - resizing.startY;
-    const deltaMin = deltaPx / resizing.pxPerMin;
+      const deltaPx = e.clientY - resizing.startY;
+      const deltaMin = deltaPx / resizing.pxPerMin;
 
-    let newDur = resizing.startDur + deltaMin;
-    newDur = snap(newDur, resizing.snapMin);
-    newDur = Math.max(resizing.snapMin, Math.min(newDur, 6*60));
+      let newDur = resizing.startDur + deltaMin;
+      newDur = snap(newDur, resizing.snapMin);
+      newDur = Math.max(resizing.snapMin, Math.min(newDur, 6*60));
 
-    d.durations = d.durations || {};
-    d.durations[resizing.sceneId] = newDur;
+      d.durations = d.durations || {};
+      d.durations[resizing.sceneId] = newDur;
 
-    touch();
-    renderScheduleBoard();
-    renderReports();
+      touch();
+      renderScheduleBoard();
+      renderReports();
+      return;
+    }
+
+    // drag schedule
+    if(!schedDrag) return;
+
+    const g = schedDrag.ghostEl;
+    g.style.left = `${e.clientX - schedDrag.offsetX}px`;
+    g.style.top  = `${e.clientY - schedDrag.offsetY}px`;
+
+    // detect target day/grid
+    const under = document.elementFromPoint(e.clientX, e.clientY);
+    const grid = under ? under.closest(".schedGrid") : null;
+    const dayId = grid ? grid.dataset.dayid : schedDrag.fromDayId;
+
+    clearSchedDropTargets();
+    const dayCol = document.querySelector(`.schedDay[data-day-id="${CSS.escape(dayId)}"], .schedDay[data-dayid="${CSS.escape(dayId)}"], .schedDay[data-dayId="${CSS.escape(dayId)}"]`);
+    // (fallback) marcar por dataset en col:
+    const colByAttr = document.querySelector(`.schedDay[data-day-id="${CSS.escape(dayId)}"]`) || document.querySelector(`.schedDay[data-dayid="${CSS.escape(dayId)}"]`) || document.querySelector(`.schedDay[data-dayId="${CSS.escape(dayId)}"]`);
+    (colByAttr || (grid ? grid.closest(".schedDay") : null))?.classList.add("dropTarget");
+
+    const targetDay = getDay(dayId);
+    if(!targetDay){
+      schedDrag.targetDayId = schedDrag.fromDayId;
+      schedDrag.targetIndex = null;
+      return;
+    }
+
+    ensureDayDurations(targetDay);
+
+    // compute y (minutes from start)
+    let yMin = 0;
+    if(grid){
+      const r = grid.getBoundingClientRect();
+      const yPx = e.clientY - r.top - 10;
+      yMin = yPx / schedDrag.pxPerMin;
+      yMin = Math.max(0, yMin);
+    }
+    const idx = computeInsertIndexByY(targetDay, yMin);
+
+    schedDrag.targetDayId = dayId;
+    schedDrag.targetIndex = idx;
   });
 
   window.addEventListener("mouseup", ()=>{
-    if(!resizing) return;
-    resizing = null;
+    // end resize
+    if(resizing){
+      resizing = null;
+      document.body.style.userSelect = "";
+      return;
+    }
+
+    // end schedule drag
+    if(!schedDrag) return;
+
+    const { sceneId, fromDayId, targetDayId, targetIndex, ghostEl } = schedDrag;
+
+    ghostEl?.remove();
     document.body.style.userSelect = "";
+    clearSchedDropTargets();
+
+    // remove dragging class
+    document.querySelectorAll(".schedBlock.dragging").forEach(n=>n.classList.remove("dragging"));
+
+    // apply move + reorder
+    if(targetDayId){
+      // Si soltaste en el mismo día, acomodamos index con cuidado (porque al sacar cambia posiciones)
+      if(fromDayId === targetDayId){
+        const d = getDay(fromDayId);
+        if(d){
+          const oldIdx = (d.sceneIds||[]).indexOf(sceneId);
+          let newIdx = targetIndex ?? oldIdx;
+          // remover e insertar
+          d.sceneIds = (d.sceneIds||[]).filter(x=>x!==sceneId);
+          newIdx = Math.max(0, Math.min(newIdx, d.sceneIds.length));
+          d.sceneIds.splice(newIdx, 0, sceneId);
+          d.sceneIds = Array.from(new Set(d.sceneIds));
+        }
+      }else{
+        moveSceneToDayWithIndex(sceneId, targetDayId, targetIndex);
+      }
+
+      selectedDayId = targetDayId;
+      touch();
+      renderScheduleBoard();
+      renderDaysBoard();     // ✅ actualiza plan de rodaje
+      renderSceneBank();     // ✅ asignaciones
+      renderDayDetail();
+      renderReports();
+      renderElementsExplorer();
+      renderCallSheetCalendar();
+      renderCallSheet();
+    }
+
+    schedDrag = null;
   });
 
   function resetAllTimings1h(){
@@ -1611,7 +1834,6 @@
 
   // ----------- Wiring / hydrate -----------
   function bindEvents(){
-    // nav + force renders
     document.querySelectorAll(".navBtn").forEach(b=>{
       b.addEventListener("click", ()=>{
         const v = b.dataset.view;
@@ -1646,6 +1868,7 @@
         renderReports();
         renderElementsExplorer();
         renderScheduleBoard();
+        renderCallSheet();
       });
     });
 
@@ -1686,6 +1909,7 @@
         renderElementsExplorer();
         renderScheduleBoard();
         renderCallSheetCalendar();
+        renderCallSheet();
       });
     });
 
@@ -1702,9 +1926,9 @@
     el("btnTimingAll1h")?.addEventListener("click", resetAllTimings1h);
 
     // elements
-    el("elxCategory")?.addEventListener("change", ()=>{ selectedElementItem=null; renderElementsExplorer(); });
-    el("elxDay")?.addEventListener("change", ()=>{ selectedElementItem=null; renderElementsExplorer(); });
-    el("elxSearch")?.addEventListener("input", ()=>{ selectedElementItem=null; renderElementsExplorer(); });
+    el("elxCategory")?.addEventListener("change", ()=>{ selectedElementKey=null; renderElementsExplorer(); });
+    el("elxDay")?.addEventListener("change", ()=>{ selectedElementKey=null; renderElementsExplorer(); });
+    el("elxSearch")?.addEventListener("input", ()=>{ selectedElementKey=null; renderElementsExplorer(); });
 
     // crew
     el("btnAddCrew")?.addEventListener("click", addCrew);
