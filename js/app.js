@@ -1,11 +1,182 @@
 (function(){
   const el = (id)=>document.getElementById(id);
-  const views = ["breakdown","shooting","elements","crew","schedule","payments","reports","callsheet","settings"];
+  const views = ["breakdown","shooting","elements","crew","schedule","reports","callsheet","settings"];
 
   let state = null;
   let selectedSceneId = null;
   let selectedDayId = null;
   let callSheetDayId = null;
+let selectedElementItem = null;
+let calCursor = { year: new Date().getFullYear(), month: new Date().getMonth() }; // month 0-11
+
+let resizing = null;
+
+function hhmmFromMinutes(m){
+  const h = Math.floor(m/60);
+  const mm = String(m%60).padStart(2,"0");
+  return `${String(h).padStart(2,"0")}:${mm}`;
+}
+function minutesFromHHMM(hhmm){
+  if(!hhmm) return 8*60;
+  const [h,m] = hhmm.split(":").map(Number);
+  return (h*60 + (m||0));
+}
+function snap(value, step){
+  return Math.round(value/step)*step;
+}
+
+function ensureDayDurations(d){
+  d.durations = d.durations || {};
+  for(const sid of (d.sceneIds||[])){
+    if(!d.durations[sid]) d.durations[sid] = 60;
+  }
+}
+
+function renderScheduleBoard(){
+  const board = el("schedBoard");
+  if(!board) return;
+  board.innerHTML = "";
+
+  const pxPerHour = Number(el("schedZoom")?.value || 60);
+  const snapMin = Number(el("schedSnap")?.value || 15);
+  const pxPerMin = pxPerHour / 60;
+
+  for(const d of state.shootDays){
+    ensureDayDurations(d);
+
+    const dayStartMin = minutesFromHHMM(d.callTime || "08:00");
+
+    // duración total del día (mín 10h para que haya grid)
+    const totalMin = (d.sceneIds||[]).reduce((a,sid)=>a + (d.durations[sid]||60), 0);
+    const gridMin = Math.max(10*60, totalMin + 60);
+    const gridHeight = gridMin * pxPerMin;
+
+    const col = document.createElement("div");
+    col.className = "schedDay";
+
+    col.innerHTML = `
+      <div class="schedHead">
+        <div class="t">${esc(formatDayTitle(d.date))}</div>
+        <div class="m">Call ${esc(d.callTime||"")} · ${esc(d.location||"")}</div>
+      </div>
+      <div class="schedGrid" style="height:${gridHeight + 20}px;"></div>
+    `;
+
+    const grid = col.querySelector(".schedGrid");
+
+    // hour lines
+    for(let t=0; t<=gridMin; t+=60){
+      const y = t * pxPerMin + 10;
+      const line = document.createElement("div");
+      line.className = "hourLine";
+      line.style.top = `${y}px`;
+
+      const lbl = document.createElement("div");
+      lbl.className = "hourLabel";
+      lbl.style.top = `${y}px`;
+      lbl.textContent = hhmmFromMinutes(dayStartMin + t);
+
+      grid.appendChild(line);
+      grid.appendChild(lbl);
+    }
+
+    // blocks sequential
+    let cursor = 0; // minutes from dayStartMin
+    for(const sid of (d.sceneIds||[])){
+      const s = getScene(sid);
+      if(!s) continue;
+
+      const dur = d.durations[sid] || 60;
+      const top = cursor * pxPerMin + 10;
+      const height = dur * pxPerMin;
+
+      const start = dayStartMin + cursor;
+      const end = start + dur;
+
+      const block = document.createElement("div");
+      block.className = "schedBlock";
+      block.style.top = `${top}px`;
+      block.style.height = `${height}px`;
+      block.dataset.dayId = d.id;
+      block.dataset.sceneId = sid;
+
+      block.innerHTML = `
+        <div class="title">#${esc(s.number||"")} — ${esc(s.slugline||"")}</div>
+        <div class="meta">${hhmmFromMinutes(start)} → ${hhmmFromMinutes(end)} · ${dur} min</div>
+        <div class="resize" title="Arrastrá para cambiar duración"></div>
+      `;
+
+      // click abre escena
+      block.addEventListener("click", (e)=>{
+        if(e.target.classList.contains("resize")) return;
+        selectedSceneId = sid;
+        showView("breakdown");
+        renderScenesTable();
+        renderSceneEditor();
+      });
+
+      // resize drag
+      const handle = block.querySelector(".resize");
+      handle.addEventListener("mousedown", (e)=>{
+        e.preventDefault();
+        e.stopPropagation();
+        resizing = {
+          dayId: d.id,
+          sceneId: sid,
+          startY: e.clientY,
+          startDur: dur,
+          pxPerMin,
+          snapMin
+        };
+        document.body.style.userSelect = "none";
+      });
+
+      grid.appendChild(block);
+      cursor += dur;
+    }
+
+    board.appendChild(col);
+  }
+}
+
+window.addEventListener("mousemove", (e)=>{
+  if(!resizing) return;
+  const d = getDay(resizing.dayId);
+  if(!d) return;
+
+  const deltaPx = e.clientY - resizing.startY;
+  const deltaMin = deltaPx / resizing.pxPerMin;
+
+  let newDur = resizing.startDur + deltaMin;
+  newDur = snap(newDur, resizing.snapMin);
+  newDur = Math.max(resizing.snapMin, Math.min(newDur, 6*60)); // 6h máx, por salud mental
+
+  d.durations = d.durations || {};
+  d.durations[resizing.sceneId] = newDur;
+
+  // guardo y re-render
+  touch();
+  renderScheduleBoard();
+  renderReports();
+});
+
+window.addEventListener("mouseup", ()=>{
+  if(!resizing) return;
+  resizing = null;
+  document.body.style.userSelect = "";
+});
+
+function resetAllTimings1h(){
+  for(const d of state.shootDays){
+    d.durations = d.durations || {};
+    for(const sid of (d.sceneIds||[])){
+      d.durations[sid] = 60;
+    }
+  }
+  touch();
+  renderScheduleBoard();
+}
+
 
   const saveDebouncedRemote = window.U.debounce(async ()=>{
     const cfg = StorageLayer.loadCfg();
@@ -35,6 +206,222 @@
       payments: []
     };
   }
+
+function monthTitle(year, month){
+  const d = new Date(year, month, 1);
+  const m = new Intl.DateTimeFormat("es-AR",{month:"long"}).format(d);
+  return m.charAt(0).toUpperCase() + m.slice(1) + " " + year;
+}
+
+function ymd(d){
+  const y = d.getFullYear();
+  const m = String(d.getMonth()+1).padStart(2,"0");
+  const dd = String(d.getDate()).padStart(2,"0");
+  return `${y}-${m}-${dd}`;
+}
+
+function renderCallSheetCalendar(){
+  const grid = el("calGrid");
+  const title = el("calTitle");
+  if(!grid || !title) return;
+
+  title.textContent = monthTitle(calCursor.year, calCursor.month);
+  grid.innerHTML = "";
+
+  const dows = ["Lun","Mar","Mié","Jue","Vie","Sáb","Dom"];
+  dows.forEach(x=>{
+    const h = document.createElement("div");
+    h.className = "calDow";
+    h.textContent = x;
+    grid.appendChild(h);
+  });
+
+  const first = new Date(calCursor.year, calCursor.month, 1);
+  const last = new Date(calCursor.year, calCursor.month+1, 0);
+
+  // semana empieza lunes: JS getDay() => 0 domingo
+  const firstDow = (first.getDay() + 6) % 7; // lunes=0
+  const totalCells = 42; // 6 semanas * 7
+
+  const shootByDate = new Map();
+  for(const sd of state.shootDays){
+    if(sd.date) shootByDate.set(sd.date, sd);
+  }
+
+  for(let i=0; i<totalCells; i++){
+    const cellDate = new Date(first);
+    cellDate.setDate(1 - firstDow + i);
+
+    const inMonth = cellDate.getMonth() === calCursor.month;
+    const key = ymd(cellDate);
+    const sd = shootByDate.get(key);
+
+    const cell = document.createElement("div");
+    cell.className = "calCell" + (sd ? " hasShoot" : "") + (callSheetDayId===sd?.id ? " selected" : "");
+    cell.style.opacity = inMonth ? "1" : "0.35";
+    cell.innerHTML = `
+      <div class="d">${cellDate.getDate()}</div>
+      <div class="tag">${sd ? `${formatDayTitle(sd.date)} · ${sd.callTime||""}` : ""}</div>
+    `;
+
+    cell.addEventListener("click", ()=>{
+      if(!sd) return;
+      callSheetDayId = sd.id;
+      renderCallSheetCalendar();
+      renderCallSheet();
+    });
+
+    grid.appendChild(cell);
+  }
+}
+
+
+function formatDayTitle(dateStr){
+  if(!dateStr) return "Sin fecha";
+  const d = new Date(dateStr + "T00:00:00");
+  const weekday = new Intl.DateTimeFormat("es-AR",{weekday:"long"}).format(d);
+  const dd = String(d.getDate()).padStart(2,"0");
+  const mm = String(d.getMonth()+1).padStart(2,"0");
+  const cap = weekday.charAt(0).toUpperCase() + weekday.slice(1);
+  return `${cap} ${dd}/${mm}`;
+}
+
+function populateElementsFilters(){
+  const catSel = el("elxCategory");
+  const daySel = el("elxDay");
+
+  catSel.innerHTML = `
+    <option value="cast">Cast</option>
+    <option value="props">Props</option>
+    <option value="wardrobe">Vestuario</option>
+    <option value="makeup">Maquillaje</option>
+    <option value="sound">Sonido</option>
+    <option value="art">Arte</option>
+    <option value="sfx">SFX</option>
+    <option value="vfx">VFX</option>
+    <option value="vehicles">Vehículos</option>
+    <option value="animals">Animales</option>
+    <option value="extras">Extras</option>
+  `;
+
+  daySel.innerHTML = `<option value="all">Todos los días</option>
+    <option value="unassigned">No asignadas a día</option>
+    ${state.shootDays.map(d=>`<option value="${esc(d.id)}">${esc(formatDayTitle(d.date))}</option>`).join("")}
+  `;
+}
+
+function scenesForDayFilter(dayFilter){
+  if(dayFilter === "all") return state.scenes.slice();
+  if(dayFilter === "unassigned"){
+    const assigned = new Set(state.shootDays.flatMap(d=>d.sceneIds||[]));
+    return state.scenes.filter(s=>!assigned.has(s.id));
+  }
+  const d = getDay(dayFilter);
+  const ids = new Set(d?.sceneIds || []);
+  return state.scenes.filter(s=>ids.has(s.id));
+}
+
+function renderElementsExplorer(){
+  if(!el("elxCategory")) return;
+
+  populateElementsFilters();
+
+  const cat = el("elxCategory").value || "props";
+  const dayFilter = el("elxDay").value || "all";
+  const q = (el("elxSearch").value || "").toLowerCase();
+
+  const scenes = scenesForDayFilter(dayFilter);
+
+  // armar conteo
+  const counts = new Map(); // item -> {count, sceneIds:Set}
+  for(const s of scenes){
+    const items = s.elements?.[cat] || [];
+    for(const it of items){
+      const key = it.trim();
+      if(!key) continue;
+      if(q && !key.toLowerCase().includes(q)) continue;
+      if(!counts.has(key)) counts.set(key, {count:0, sceneIds:new Set()});
+      const obj = counts.get(key);
+      obj.count += 1;
+      obj.sceneIds.add(s.id);
+    }
+  }
+
+  // render lista
+  const listWrap = el("elxList");
+  const detailWrap = el("elxDetail");
+  listWrap.innerHTML = "";
+  detailWrap.innerHTML = "";
+
+  const items = Array.from(counts.entries()).sort((a,b)=>a[0].localeCompare(b[0]));
+
+  if(!items.length){
+    listWrap.innerHTML = `<div class="muted">No hay elementos para este filtro.</div>`;
+    return;
+  }
+
+  for(const [name, info] of items){
+    const row = document.createElement("div");
+    row.className = "listItem";
+    row.style.cursor = "pointer";
+    row.innerHTML = `
+      <div>
+        <div class="title">${esc(name)}</div>
+        <div class="meta">${info.sceneIds.size} escena(s)</div>
+      </div>
+      <div class="muted">${info.count}</div>
+    `;
+    row.addEventListener("click", ()=>{
+      selectedElementItem = name;
+      renderElementDetail(cat, dayFilter, name, info);
+    });
+    listWrap.appendChild(row);
+  }
+
+  // autoselección
+  if(!selectedElementItem || !counts.has(selectedElementItem)){
+    selectedElementItem = items[0][0];
+  }
+  renderElementDetail(cat, dayFilter, selectedElementItem, counts.get(selectedElementItem));
+}
+
+function renderElementDetail(cat, dayFilter, name, info){
+  const wrap = el("elxDetail");
+  wrap.innerHTML = "";
+
+  const scenes = Array.from(info.sceneIds).map(getScene).filter(Boolean);
+
+  const header = document.createElement("div");
+  header.className = "listItem";
+  header.style.flexDirection = "column";
+  header.innerHTML = `
+    <div class="title">${esc(name)}</div>
+    <div class="meta">${esc(catNames?.[cat] || cat)} · ${esc(dayFilter==="all"?"Todos los días":(dayFilter==="unassigned"?"No asignadas":formatDayTitle(getDay(dayFilter)?.date)))}</div>
+  `;
+  wrap.appendChild(header);
+
+  scenes.forEach(s=>{
+    const row = document.createElement("div");
+    row.className = "listItem";
+    row.innerHTML = `
+      <div>
+        <div class="title">#${esc(s.number||"")} — ${esc(s.slugline||"")}</div>
+        <div class="meta">${esc(s.location||"")} · ${esc(s.timeOfDay||"")}</div>
+      </div>
+      <div class="row gap">
+        <button class="btn">Abrir escena</button>
+      </div>
+    `;
+    row.querySelector("button").addEventListener("click", ()=>{
+      selectedSceneId = s.id;
+      showView("breakdown");
+      renderScenesTable();
+      renderSceneEditor();
+    });
+    wrap.appendChild(row);
+  });
+}
+
 
   function touch(){
     state.meta.updatedAt = new Date().toISOString();
@@ -418,6 +805,8 @@
       sceneIds:[],
       crewIds:[]
     };
+durations: {}
+
     state.shootDays.push(d);
     selectedDayId = d.id;
     touch();
@@ -564,6 +953,10 @@
         }else{
           targetDay.sceneIds.push(data.sceneId);
         }
+
+targetDay.durations = targetDay.durations || {};
+if(!targetDay.durations[data.sceneId]) targetDay.durations[data.sceneId] = 60;
+
 
         // de-dup
         targetDay.sceneIds = Array.from(new Set(targetDay.sceneIds));
@@ -810,83 +1203,67 @@
   }
 
   // ---------- Reports ----------
-  function renderReports(){
-    const wrap = el("reportsList");
-    if(!wrap) return;
-    wrap.innerHTML = "";
+function renderReports(){
+  const board = el("reportsBoard");
+  if(!board) return;
+  board.innerHTML = "";
 
-    if(!state.shootDays.length){
-      wrap.innerHTML = `<div class="muted">Todavía no creaste días de rodaje.</div>`;
-      return;
-    }
-
-    for(const d of state.shootDays){
-      const scenes = dayScenes(d);
-      const cast = union(scenes.flatMap(s=>s.elements?.cast || []));
-      const crew = (d.crewIds||[]).map(getCrew).filter(Boolean);
-
-      const needs = {};
-      for(const cat of cats){
-        const items = union(scenes.flatMap(s=>s.elements?.[cat] || []));
-        if(items.length) needs[cat] = items;
-      }
-
-      const card = document.createElement("div");
-      card.className = "listItem";
-      card.style.flexDirection="column";
-
-      const header = document.createElement("div");
-      header.innerHTML = `
-        <div class="title">${esc(d.label || "Día")} — ${esc(d.date||"(sin fecha)")}</div>
-        <div class="meta">${(scenes.length)} escenas · ${cast.length} cast · ${crew.length} crew</div>
-      `;
-
-      const details = document.createElement("details");
-      details.style.marginTop="8px";
-      details.innerHTML = `<summary class="muted">Ver detalle</summary>`;
-
-      const inner = document.createElement("div");
-      inner.style.marginTop="10px";
-
-      inner.innerHTML += `<div class="muted"><b>Escenas:</b> ${esc(scenes.map(s=>`#${s.number}`).join(", ") || "-")}</div>`;
-      inner.innerHTML += `<div class="muted" style="margin-top:6px;"><b>Cast:</b> ${esc(cast.join(", ") || "-")}</div>`;
-      inner.innerHTML += `<div class="muted" style="margin-top:6px;"><b>Crew:</b> ${esc(crew.map(c=>`${c.area||"Otros"} - ${c.role||""} - ${c.name||""}`).join(" | ") || "-")}</div>`;
-
-      // Needs grouped by dept-ish
-      const needsRows = [];
-      for(const cat of Object.keys(needs)){
-        for(const it of needs[cat]){
-          needsRows.push(`${catNames[cat]}: ${it}`);
-        }
-      }
-      inner.innerHTML += `<div class="muted" style="margin-top:6px;"><b>Necesidades:</b> ${esc(needsRows.join(" · ") || "-")}</div>`;
-
-      const actions = document.createElement("div");
-      actions.className = "row gap";
-      actions.style.marginTop="10px";
-      actions.innerHTML = `<button class="btn">Abrir día</button><button class="btn">Ver Call Sheet</button>`;
-      const [bOpen,bCS] = actions.querySelectorAll("button");
-      bOpen.addEventListener("click", ()=>{
-        selectedDayId = d.id;
-        showView("shooting");
-        renderDaysBoard();
-        renderDayDetail();
-      });
-      bCS.addEventListener("click", ()=>{
-        callSheetDayId = d.id;
-        showView("callsheet");
-        renderCallSheet();
-      });
-
-      details.appendChild(inner);
-      details.appendChild(actions);
-
-      card.appendChild(header);
-      card.appendChild(details);
-
-      wrap.appendChild(card);
-    }
+  if(!state.shootDays.length){
+    board.innerHTML = `<div class="muted">Todavía no hay días.</div>`;
+    return;
   }
+
+  for(const d of state.shootDays){
+    const scenes = (d.sceneIds||[]).map(getScene).filter(Boolean);
+    const cast = Array.from(new Set(scenes.flatMap(s=>s.elements?.cast || [])));
+    const crew = (d.crewIds||[]).map(getCrew).filter(Boolean);
+
+    const needs = [];
+    for(const cat of cats){
+      const items = Array.from(new Set(scenes.flatMap(s=>s.elements?.[cat] || [])));
+      if(items.length && cat !== "cast"){
+        needs.push(`${catNames[cat]}: ${items.join(", ")}`);
+      }
+    }
+
+    const col = document.createElement("div");
+    col.className = "reportCol";
+    col.innerHTML = `
+      <div class="title">${esc(formatDayTitle(d.date))}</div>
+      <div class="meta">${esc(d.callTime||"")} · ${esc(d.location||"")}</div>
+      <div class="hr"></div>
+
+      <div class="muted"><b>Escenas:</b> ${esc(scenes.map(s=>`#${s.number}`).join(", ") || "-")}</div>
+      <div class="muted" style="margin-top:6px;"><b>Cast:</b> ${esc(cast.join(", ") || "-")}</div>
+      <div class="muted" style="margin-top:6px;"><b>Crew:</b> ${esc(crew.map(c=>`${c.area} · ${c.role} · ${c.name}`).join(" | ") || "-")}</div>
+
+      <details style="margin-top:10px;">
+        <summary class="muted">Necesidades</summary>
+        <div class="muted" style="margin-top:8px;">${esc(needs.join(" · ") || "-")}</div>
+      </details>
+
+      <div class="row gap" style="margin-top:12px;">
+        <button class="btn">Abrir día</button>
+        <button class="btn">Call Sheet</button>
+      </div>
+    `;
+    const [bOpen,bCS] = col.querySelectorAll("button");
+    bOpen.addEventListener("click", ()=>{
+      selectedDayId = d.id;
+      showView("shooting");
+      renderDaysBoard();
+      renderDayDetail();
+    });
+    bCS.addEventListener("click", ()=>{
+      callSheetDayId = d.id;
+      showView("callsheet");
+      renderCallSheetCalendar(); // asegura calendario + detalle
+      renderCallSheet();
+    });
+
+    board.appendChild(col);
+  }
+}
 
   // ---------- Call Sheet ----------
   function renderCallSheet(){
@@ -999,45 +1376,53 @@
     renderReports();
   }
 
-  function renderCrew(){
-    const tbody = el("crewTable").querySelector("tbody");
-    tbody.innerHTML = "";
-    state.crew.forEach(c=>{
-      const tr = document.createElement("tr");
-      tr.innerHTML = `
-        <td><input class="input" value="${esc(c.area||"")}" /></td>
-        <td><input class="input" value="${esc(c.role||"")}" /></td>
-        <td><input class="input" value="${esc(c.name||"")}" /></td>
-        <td><input class="input" value="${esc(c.phone||"")}" /></td>
-        <td><input class="input" value="${esc(c.email||"")}" /></td>
-        <td><input class="input" value="${esc(c.notes||"")}" /></td>
-        <td><button class="btn danger">Borrar</button></td>
-      `;
-      const inputs = tr.querySelectorAll("input");
-      const keys = ["area","role","name","phone","email","notes"];
-      inputs.forEach((inp,i)=>{
-        inp.addEventListener("input", ()=>{
-          c[keys[i]] = inp.value;
-          touch();
-          renderDayDetail();
-          renderReports();
-        });
-      });
-      tr.querySelector("button").addEventListener("click", ()=>{
-        if(!confirm("Borrar integrante?")) return;
-        // remove from day crew selections
-        for(const d of state.shootDays){
-          d.crewIds = (d.crewIds||[]).filter(id=>id!==c.id);
-        }
-        state.crew = state.crew.filter(x=>x.id!==c.id);
-        touch();
-        renderCrew();
-        renderDayDetail();
-        renderReports();
-      });
-      tbody.appendChild(tr);
+const crewAreas = ["Producción","Dirección","Foto","Arte","Vestuario","Maquillaje","Sonido","Eléctrica/Grip","Post/VFX","Otros"];
+
+function renderCrew(){
+  const tbody = el("crewTable").querySelector("tbody");
+  tbody.innerHTML = "";
+
+  state.crew.forEach(c=>{
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td>
+        <select class="input">
+          ${crewAreas.map(a=>`<option value="${esc(a)}" ${c.area===a?"selected":""}>${esc(a)}</option>`).join("")}
+        </select>
+      </td>
+      <td><input class="input" value="${esc(c.role||"")}" /></td>
+      <td><input class="input" value="${esc(c.name||"")}" /></td>
+      <td><input class="input" value="${esc(c.phone||"")}" /></td>
+      <td><input class="input" value="${esc(c.email||"")}" /></td>
+      <td><input class="input" value="${esc(c.notes||"")}" /></td>
+      <td><button class="btn danger">Borrar</button></td>
+    `;
+
+    const [areaSel, role, name, phone, email, notes] = tr.querySelectorAll("select,input");
+
+    areaSel.addEventListener("change", ()=>{ c.area = areaSel.value; touch(); renderDayDetail(); renderReports(); });
+    role.addEventListener("input", ()=>{ c.role = role.value; touch(); renderDayDetail(); renderReports(); });
+    name.addEventListener("input", ()=>{ c.name = name.value; touch(); renderDayDetail(); renderReports(); });
+    phone.addEventListener("input", ()=>{ c.phone = phone.value; touch(); });
+    email.addEventListener("input", ()=>{ c.email = email.value; touch(); });
+    notes.addEventListener("input", ()=>{ c.notes = notes.value; touch(); });
+
+    tr.querySelector("button").addEventListener("click", ()=>{
+      if(!confirm("Borrar integrante?")) return;
+      for(const d of state.shootDays){
+        d.crewIds = (d.crewIds||[]).filter(id=>id!==c.id);
+      }
+      state.crew = state.crew.filter(x=>x.id!==c.id);
+      touch();
+      renderCrew();
+      renderDayDetail();
+      renderReports();
     });
-  }
+
+    tbody.appendChild(tr);
+  });
+}
+
 
   // ---------- Schedule / Payments (lo que ya tenías, sin tocar de más) ----------
   function addSchedule(){
@@ -1235,9 +1620,15 @@
     renderDayDetail();
     renderCrew();
     renderSchedule();
-    renderPayments();
     renderReports();
     renderCallSheet();
+renderElementsExplorer();
+renderCallSheetCalendar();
+renderCallSheet();
+renderScheduleBoard();
+
+
+
   }
 
   function bindEvents(){
@@ -1251,6 +1642,28 @@
 
     el("sceneSearch")?.addEventListener("input", renderScenesTable);
     el("sceneFilterTOD")?.addEventListener("change", renderScenesTable);
+el("elxCategory")?.addEventListener("change", ()=>{ selectedElementItem=null; renderElementsExplorer(); });
+el("elxDay")?.addEventListener("change", ()=>{ selectedElementItem=null; renderElementsExplorer(); });
+el("elxSearch")?.addEventListener("input", ()=>{ selectedElementItem=null; renderElementsExplorer(); });
+
+el("schedZoom")?.addEventListener("change", renderScheduleBoard);
+el("schedSnap")?.addEventListener("change", renderScheduleBoard);
+el("btnTimingAll1h")?.addEventListener("click", resetAllTimings1h);
+
+
+el("calPrev")?.addEventListener("click", ()=>{
+  calCursor.month--;
+  if(calCursor.month < 0){ calCursor.month = 11; calCursor.year--; }
+  renderCallSheetCalendar();
+});
+el("calNext")?.addEventListener("click", ()=>{
+  calCursor.month++;
+  if(calCursor.month > 11){ calCursor.month = 0; calCursor.year++; }
+  renderCallSheetCalendar();
+});
+el("btnPrintCallSheet")?.addEventListener("click", ()=>window.print());
+
+
 
     ["number","slugline","location","timeOfDay","pages","summary","notes"].forEach(k=>{
       const node = el(`scene_${k}`);

@@ -23,7 +23,6 @@
         <button class="navBtn" data-view="elements">Elementos</button>
         <button class="navBtn" data-view="crew">Equipo técnico</button>
         <button class="navBtn" data-view="schedule">Cronograma</button>
-<button class="navBtn" data-view="payments">Pagos</button>
 <button class="navBtn" data-view="reports">Reportes</button>
 <button class="navBtn" data-view="callsheet">Call Sheets</button>
 <button class="navBtn" data-view="settings">Sync / Ajustes</button>
@@ -287,42 +286,31 @@ Lucio entra...
 
 
       <!-- ELEMENTS -->
-      <section class="view hidden" id="view-elements">
-        <div class="card">
-          <div class="cardHeader">
-            <h2>Librería de elementos</h2>
-            <div class="row gap">
-              <select id="libCategory" class="input">
-                <option value="cast">Cast</option>
-                <option value="props">Props</option>
-                <option value="wardrobe">Vestuario</option>
-                <option value="makeup">Maquillaje</option>
-                <option value="sfx">SFX</option>
-                <option value="vfx">VFX</option>
-                <option value="vehicles">Vehículos</option>
-                <option value="animals">Animales</option>
-                <option value="extras">Extras</option>
-                <option value="art">Arte</option>
-                <option value="sound">Sonido</option>
-              </select>
-              <input id="libItem" class="input" placeholder="Nuevo ítem…" />
-              <button class="btn" id="btnAddLibItem">Agregar</button>
-            </div>
-          </div>
+<section class="view hidden" id="view-elements">
+  <div class="card">
+    <div class="cardHeader">
+      <h2>Elementos (desde Breakdown)</h2>
+    </div>
 
-          <div class="grid2">
-            <div>
-              <h3 class="h3">Items</h3>
-              <div id="libItems" class="chips"></div>
-            </div>
-            <div>
-              <h3 class="h3">Dónde aparece</h3>
-              <p class="muted">Seleccioná un item para ver escenas.</p>
-              <div id="libUsage" class="list"></div>
-            </div>
-          </div>
-        </div>
-      </section>
+    <div class="filters">
+      <select id="elxCategory" class="input"></select>
+      <select id="elxDay" class="input"></select>
+      <input id="elxSearch" class="input" placeholder="Buscar elemento…" />
+    </div>
+
+    <div class="grid2" style="grid-template-columns: 1fr 1fr;">
+      <div>
+        <h3 class="h3">Lista</h3>
+        <div id="elxList" class="list"></div>
+      </div>
+      <div>
+        <h3 class="h3">Detalle</h3>
+        <div id="elxDetail" class="list"></div>
+      </div>
+    </div>
+  </div>
+</section>
+
 
       <!-- CREW -->
       <section class="view hidden" id="view-crew">
@@ -334,16 +322,18 @@ Lucio entra...
 
           <div class="tableWrap">
             <table class="table" id="crewTable">
-              <thead>
-                <tr>
-                  <th>Nombre</th>
-                  <th>Rol</th>
-                  <th>Tel</th>
-                  <th>Email</th>
-                  <th>Notas</th>
-                  <th></th>
-                </tr>
-              </thead>
+<thead>
+  <tr>
+    <th>Área</th>
+    <th>Rol</th>
+    <th>Nombre</th>
+    <th>Tel</th>
+    <th>Email</th>
+    <th>Notas</th>
+    <th>Acciones</th>
+  </tr>
+</thead>
+
               <tbody></tbody>
             </table>
           </div>
@@ -351,97 +341,60 @@ Lucio entra...
       </section>
 
       <!-- SCHEDULE -->
-      <section class="view hidden" id="view-schedule">
-        <div class="card">
-          <div class="cardHeader">
-            <h2>Cronograma</h2>
-            <button class="btn" id="btnAddSchedule">+ Ítem</button>
-          </div>
+<section class="view hidden" id="view-schedule">
+  <div class="card">
+    <div class="cardHeader">
+      <h2>Cronograma (escenas por día)</h2>
+      <div class="row gap noPrint">
+        <select id="schedZoom" class="input" style="width:160px;">
+          <option value="60">Zoom normal</option>
+          <option value="90">Zoom grande</option>
+          <option value="120">Zoom enorme</option>
+        </select>
+        <select id="schedSnap" class="input" style="width:160px;">
+          <option value="15">Snap 15 min</option>
+          <option value="30">Snap 30 min</option>
+          <option value="5">Snap 5 min</option>
+        </select>
+        <button class="btn" id="btnTimingAll1h">Reset 1h</button>
+      </div>
+    </div>
 
-          <div class="tableWrap">
-            <table class="table" id="scheduleTable">
-              <thead>
-                <tr>
-                  <th>Ítem</th>
-                  <th>Inicio</th>
-                  <th>Fin</th>
-                  <th>Responsable</th>
-                  <th>Estado</th>
-                  <th>Notas</th>
-                  <th></th>
-                </tr>
-              </thead>
-              <tbody></tbody>
-            </table>
-          </div>
-        </div>
-      </section>
-
-      <!-- PAYMENTS -->
-      <section class="view hidden" id="view-payments">
-        <div class="card">
-          <div class="cardHeader">
-            <h2>Pagos / Comprobantes</h2>
-            <button class="btn" id="btnAddPayment">+ Pago</button>
-          </div>
-
-          <div class="statsRow">
-            <div class="stat">
-              <div class="statK">Pendiente</div>
-              <div class="statV" id="statPending">—</div>
-            </div>
-            <div class="stat">
-              <div class="statK">Pagado</div>
-              <div class="statV" id="statPaid">—</div>
-            </div>
-            <div class="stat">
-              <div class="statK">Total</div>
-              <div class="statV" id="statTotal">—</div>
-            </div>
-          </div>
-
-          <div class="tableWrap">
-            <table class="table" id="paymentsTable">
-              <thead>
-                <tr>
-                  <th>Proveedor</th>
-                  <th>Concepto</th>
-                  <th>Monto</th>
-                  <th>Vence</th>
-                  <th>Estado</th>
-                  <th>Comprobante (link)</th>
-                  <th>Notas</th>
-                  <th></th>
-                </tr>
-              </thead>
-              <tbody></tbody>
-            </table>
-          </div>
-        </div>
-      </section>
+    <div id="schedBoard" class="schedBoard"></div>
+    <p class="muted">Arrastrá el handle inferior para cambiar duración. Por defecto: 1 hora. El resto se reacomoda solo.</p>
+  </div>
+</section>
 
       <!-- SETTINGS -->
 
 <section class="view hidden" id="view-reports">
   <div class="card">
     <div class="cardHeader">
-      <h2>Reportes por día</h2>
+      <h2>Reportes (por día)</h2>
       <div class="row gap">
         <button class="btn" id="btnRefreshReports">Actualizar</button>
       </div>
     </div>
-    <div id="reportsList" class="list"></div>
+    <div id="reportsBoard" class="reportsBoard"></div>
   </div>
 </section>
+
 
 <section class="view hidden" id="view-callsheet">
   <div class="card">
     <div class="cardHeader">
-      <h2>Call Sheet</h2>
+      <h2>Call Sheets</h2>
       <div class="row gap noPrint">
+        <button class="btn" id="calPrev">‹</button>
+        <div id="calTitle" class="pill">—</div>
+        <button class="btn" id="calNext">›</button>
         <button class="btn" id="btnPrintCallSheet">Imprimir</button>
       </div>
     </div>
+
+    <div id="calGrid" class="calGrid"></div>
+
+    <div class="hr"></div>
     <div id="callSheetWrap"></div>
   </div>
 </section>
