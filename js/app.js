@@ -32,7 +32,7 @@
     extras:"var(--cat-extras)"
   };
 
-  // ✅ Cast ahora es un Área más para cargar gente
+  // Cast now is an Area too
   const crewAreas = ["Producción","Dirección","Foto","Arte","Vestuario","Maquillaje","Sonido","Eléctrica/Grip","Post/VFX","Cast","Otros"];
 
   let state = null;
@@ -40,13 +40,15 @@
   let selectedDayId = null;
   let callSheetDayId = null;
 
-  let selectedElementKey = null; // key, no solo nombre
+  let selectedElementKey = null;
 
-  let resizing = null; // schedule resize
+  // schedule resize
+  let resizing = null;
+
+  // schedule drag move
+  let schedDrag = null; // {sceneId, fromDayId, dur, pxPerMin, snapMin, ghostEl, targetDayId, targetStartMin, offsetY}
+
   let calCursor = { year: new Date().getFullYear(), month: new Date().getMonth() };
-
-  // drag schedule
-  let schedDrag = null; // {sceneId, fromDayId, pxPerMin, snapMin, ghostEl, targetDayId, targetIndex}
 
   const saveDebouncedRemote = window.U.debounce(async ()=>{
     const cfg = StorageLayer.loadCfg();
@@ -81,10 +83,11 @@
 
   function defaultState(){
     return {
-      meta: { version: 2, title:"Proyecto", updatedAt: new Date().toISOString() },
+      meta: { version: 3, title:"Proyecto", updatedAt: new Date().toISOString() },
       scenes: [],
-      shootDays: [], // {id,date,callTime,location,label,notes,sceneIds[],crewIds[],durations:{}}
-      crew: [],      // {id,area,role,name,phone,email,notes}  (incluye Cast si querés)
+      // shootDays:
+      // {id,date,callTime,location,label,notes,sceneIds[],crewIds[],durations:{}, times:{}}
+      crew: [],
       scheduleItems: []
     };
   }
@@ -149,7 +152,7 @@
 
   function union(arr){ return Array.from(new Set((arr||[]).filter(Boolean))); }
 
-  // ✅ Cast roster desde Crew (Área "Cast")
+  // Cast roster from crew
   function getCastRoster(){
     return union(
       state.crew
@@ -397,6 +400,7 @@
     for(const d of state.shootDays){
       d.sceneIds = (d.sceneIds||[]).filter(id=>id!==s.id);
       if(d.durations) delete d.durations[s.id];
+      if(d.times) delete d.times[s.id];
     }
     state.scenes = state.scenes.filter(x=>x.id!==s.id);
     selectedSceneId = state.scenes[0]?.id || null;
@@ -439,15 +443,13 @@
     const item = (el("elItem").value||"").trim();
     if(!item) return;
 
-    // ✅ Cast solo puede ser alguien del roster (si hay roster)
     if(cat === "cast"){
       const roster = getCastRoster();
       if(!roster.length){
         toast("No hay Cast cargado. Cargalo en Equipo técnico (Área Cast).");
         return;
       }
-      const ok = roster.includes(item);
-      if(!ok){
+      if(!roster.includes(item)){
         toast("Ese nombre no está en Cast (Equipo técnico). Cargalo ahí primero.");
         return;
       }
@@ -524,7 +526,7 @@
     renderElementsExplorer();
   }
 
-  // ----------- Shooting plan (drag drop) -----------
+  // ----------- Shooting plan -----------
   function addShootDay(){
     const d = {
       id: uid("day"),
@@ -535,7 +537,8 @@
       notes:"",
       sceneIds:[],
       crewIds:[],
-      durations:{}
+      durations:{},
+      times:{} // ✅ start offsets (minutes after callTime)
     };
     state.shootDays.push(d);
     sortShootDaysInPlace();
@@ -645,6 +648,139 @@
     return (d.sceneIds||[]).map(getScene).filter(Boolean);
   }
 
+  // ✅ schedule helpers (new timeline model)
+  function minutesFromHHMM(hhmm){
+    if(!hhmm) return 8*60;
+    const [h,m] = hhmm.split(":").map(Number);
+    return (h*60 + (m||0));
+  }
+  function hhmmFromMinutes(m){
+    const h = Math.floor(m/60);
+    const mm = String(m%60).padStart(2,"0");
+    return `${String(h).padStart(2,"0")}:${mm}`;
+  }
+  function snap(value, step){ return Math.round(value/step)*step; }
+
+  function ensureDayTimingMaps(d){
+    d.durations = d.durations || {};
+    d.times = d.times || {};
+    d.sceneIds = d.sceneIds || [];
+
+    // default durations
+    for(const sid of d.sceneIds){
+      if(typeof d.durations[sid] !== "number") d.durations[sid] = 60;
+    }
+
+    const hasAny = Object.keys(d.times).some(k => typeof d.times[k] === "number");
+    if(!hasAny){
+      // migrate old behavior: sequential
+      let cursor = 0;
+      for(const sid of d.sceneIds){
+        d.times[sid] = cursor;
+        cursor += d.durations[sid] || 60;
+      }
+      return;
+    }
+
+    // fill missing at end
+    let end = 0;
+    for(const sid of d.sceneIds){
+      const st = d.times[sid];
+      const dur = d.durations[sid] || 60;
+      if(typeof st === "number") end = Math.max(end, st + dur);
+    }
+    for(const sid of d.sceneIds){
+      if(typeof d.times[sid] !== "number"){
+        d.times[sid] = end;
+        end += d.durations[sid] || 60;
+      }
+    }
+  }
+
+  function sortDaySceneIdsByTime(d){
+    ensureDayTimingMaps(d);
+    d.sceneIds.sort((a,b)=>{
+      const ta = (typeof d.times[a] === "number") ? d.times[a] : Number.POSITIVE_INFINITY;
+      const tb = (typeof d.times[b] === "number") ? d.times[b] : Number.POSITIVE_INFINITY;
+      if(ta !== tb) return ta - tb;
+      return String(a).localeCompare(String(b));
+    });
+  }
+
+  function computeDayGridMin(d){
+    ensureDayTimingMaps(d);
+    let maxEnd = 0;
+    for(const sid of d.sceneIds){
+      const st = d.times[sid] || 0;
+      const dur = d.durations[sid] || 60;
+      maxEnd = Math.max(maxEnd, st + dur);
+    }
+    // at least 10 hours, and some padding after last scene
+    return Math.max(10*60, maxEnd + 120);
+  }
+
+  function findNonOverlappingStart(d, sceneId, startMin, durMin, snapMin){
+    ensureDayTimingMaps(d);
+    let start = Math.max(0, startMin);
+
+    // try to push forward to avoid overlaps (without moving others)
+    for(let guard=0; guard<200; guard++){
+      let clashEnd = null;
+      for(const sid of d.sceneIds){
+        if(sid === sceneId) continue;
+        const st = d.times[sid] ?? 0;
+        const du = d.durations[sid] ?? 60;
+        const a0 = start;
+        const a1 = start + durMin;
+        const b0 = st;
+        const b1 = st + du;
+        const overlap = (a0 < b1) && (a1 > b0);
+        if(overlap){
+          clashEnd = Math.max(clashEnd ?? 0, b1);
+        }
+      }
+      if(clashEnd === null) break;
+      start = snap(clashEnd, snapMin);
+    }
+    return start;
+  }
+
+  // Drop from scene bank into a day (plan board)
+  function moveSceneToDayAtEnd(sceneId, targetDayId){
+    let fromDay = null;
+    for(const d of state.shootDays){
+      if((d.sceneIds||[]).includes(sceneId)) fromDay = d;
+      d.sceneIds = (d.sceneIds||[]).filter(x=>x!==sceneId);
+      if(d.durations) delete d.durations[sceneId];
+      if(d.times) delete d.times[sceneId];
+    }
+
+    const targetDay = getDay(targetDayId);
+    if(!targetDay) return;
+
+    ensureDayTimingMaps(targetDay);
+
+    // keep duration if existed
+    let dur = 60;
+    if(fromDay && fromDay.durations && typeof fromDay.durations[sceneId] === "number") dur = fromDay.durations[sceneId];
+
+    targetDay.durations[sceneId] = dur;
+
+    // place at end
+    let end = 0;
+    for(const sid of targetDay.sceneIds){
+      const st = targetDay.times[sid] ?? 0;
+      const du = targetDay.durations[sid] ?? 60;
+      end = Math.max(end, st + du);
+    }
+
+    targetDay.sceneIds.push(sceneId);
+    targetDay.sceneIds = Array.from(new Set(targetDay.sceneIds));
+    targetDay.times[sceneId] = end;
+
+    sortDaySceneIdsByTime(targetDay);
+  }
+
   function renderDaysBoard(){
     const board = el("daysBoard");
     if(!board) return;
@@ -653,6 +789,9 @@
     sortShootDaysInPlace();
 
     for(const d of state.shootDays){
+      ensureDayTimingMaps(d);
+      sortDaySceneIdsByTime(d);
+
       const col = document.createElement("div");
       col.className = "dayCol";
       col.dataset.dayId = d.id;
@@ -686,7 +825,7 @@
         const data = JSON.parse(raw);
         if(data.type !== "scene") return;
 
-        moveSceneToDayWithIndex(data.sceneId, d.id, null);
+        moveSceneToDayAtEnd(data.sceneId, d.id);
 
         selectedDayId = d.id;
         touch();
@@ -707,7 +846,18 @@
         for(const sid of ids){
           const s = getScene(sid);
           if(!s) continue;
-          zone.appendChild(sceneCardNode(s, d.id));
+
+          const st = d.times[sid] ?? 0;
+          const dur = d.durations[sid] ?? 60;
+
+          const card = sceneCardNode(s, d.id);
+          // extra hint time
+          const meta = card.querySelector(".meta");
+          if(meta){
+            const base = minutesFromHHMM(d.callTime || "08:00");
+            meta.textContent = `${meta.textContent} · ${hhmmFromMinutes(base + st)} (${dur}m)`;
+          }
+          zone.appendChild(card);
         }
       }
 
@@ -742,7 +892,6 @@
     });
   }
 
-  // ✅ No mostramos Cast en picker de “Equipo técnico” del día (porque el cast ya se cita auto)
   function renderDayCrewPicker(){
     const wrap = el("dayCrewPicker");
     wrap.innerHTML = "";
@@ -912,7 +1061,7 @@
     renderDaySchedule();
   }
 
-  // ----------- Elements explorer (all categories) -----------
+  // ----------- Elements explorer (unchanged) -----------
   function populateElementsFilters(){
     const catSel = el("elxCategory");
     const daySel = el("elxDay");
@@ -962,7 +1111,6 @@
     const scenes = scenesForDayFilter(dayFilter);
 
     const counts = new Map();
-
     const pushItem = (cat, item, sceneId)=>{
       const key = `${cat}::${item}`;
       if(q && !item.toLowerCase().includes(q)) return;
@@ -1001,7 +1149,6 @@
     detailWrap.innerHTML = "";
 
     let entries = Array.from(counts.entries());
-
     entries.sort((a,b)=>{
       const A = a[1], B = b[1];
       const ia = cats.indexOf(A.cat);
@@ -1147,9 +1294,7 @@
     });
   }
 
-  // ----------- Reports / CallSheets / Schedule
-  // (desde acá para abajo es igual a tu versión anterior, no lo recorto para evitar errores)
-
+  // ----------- Reports (unchanged except uses day.sceneIds order) -----------
   function renderReports(){
     const board = el("reportsBoard");
     if(!board) return;
@@ -1163,6 +1308,9 @@
     }
 
     for(const d of state.shootDays){
+      ensureDayTimingMaps(d);
+      sortDaySceneIdsByTime(d);
+
       const scenes = (d.sceneIds||[]).map(getScene).filter(Boolean);
       const cast = union(scenes.flatMap(s=>s.elements?.cast || []));
       const crew = (d.crewIds||[]).map(getCrew).filter(Boolean);
@@ -1233,6 +1381,7 @@
     }
   }
 
+  // ----------- Call sheet calendar / sheet (unchanged) -----------
   function monthTitle(year, month){
     const d = new Date(year, month, 1);
     const m = new Intl.DateTimeFormat("es-AR",{month:"long"}).format(d);
@@ -1305,6 +1454,9 @@
       wrap.innerHTML = `<div class="muted">Seleccioná un día en el calendario.</div>`;
       return;
     }
+
+    ensureDayTimingMaps(d);
+    sortDaySceneIdsByTime(d);
 
     const scenes = dayScenes(d);
     const cast = union(scenes.flatMap(s=>s.elements?.cast || []));
@@ -1401,26 +1553,7 @@
     `;
   }
 
-  // ----------- Schedule drag helpers (igual que tu versión anterior)
-  function hhmmFromMinutes(m){
-    const h = Math.floor(m/60);
-    const mm = String(m%60).padStart(2,"0");
-    return `${String(h).padStart(2,"0")}:${mm}`;
-  }
-  function minutesFromHHMM(hhmm){
-    if(!hhmm) return 8*60;
-    const [h,m] = hhmm.split(":").map(Number);
-    return (h*60 + (m||0));
-  }
-  function snap(value, step){ return Math.round(value/step)*step; }
-
-  function ensureDayDurations(d){
-    d.durations = d.durations || {};
-    for(const sid of (d.sceneIds||[])){
-      if(!d.durations[sid]) d.durations[sid] = 60;
-    }
-  }
-
+  // ----------- Schedule timeline (NEW) -----------
   function buildSceneTooltipHTML(scene){
     const parts = [];
     parts.push(`<div class="t">#${esc(scene.number||"")} — ${esc(scene.slugline||"")}</div>`);
@@ -1473,50 +1606,6 @@
     document.querySelectorAll(".schedDay.dropTarget").forEach(n=>n.classList.remove("dropTarget"));
   }
 
-  function computeInsertIndexByY(day, yMin){
-    ensureDayDurations(day);
-    const ids = day.sceneIds || [];
-    let cursor = 0;
-    for(let i=0;i<ids.length;i++){
-      const sid = ids[i];
-      const dur = day.durations[sid] || 60;
-      const mid = cursor + dur/2;
-      if(yMin < mid) return i;
-      cursor += dur;
-    }
-    return ids.length;
-  }
-
-  function moveSceneToDayWithIndex(sceneId, targetDayId, targetIndex){
-    let fromDay = null;
-    for(const d of state.shootDays){
-      const had = (d.sceneIds||[]).includes(sceneId);
-      if(had) fromDay = d;
-      d.sceneIds = (d.sceneIds||[]).filter(x=>x!==sceneId);
-    }
-
-    const targetDay = getDay(targetDayId);
-    if(!targetDay) return;
-
-    targetDay.sceneIds = targetDay.sceneIds || [];
-    ensureDayDurations(targetDay);
-
-    let dur = 60;
-    if(fromDay && fromDay.durations && fromDay.durations[sceneId]) dur = fromDay.durations[sceneId];
-    targetDay.durations[sceneId] = targetDay.durations[sceneId] || dur;
-
-    if(fromDay && fromDay.durations) delete fromDay.durations[sceneId];
-
-    if(targetIndex === null || targetIndex === undefined){
-      targetDay.sceneIds.push(sceneId);
-    }else{
-      const idx = Math.max(0, Math.min(targetIndex, targetDay.sceneIds.length));
-      targetDay.sceneIds.splice(idx, 0, sceneId);
-    }
-
-    targetDay.sceneIds = Array.from(new Set(targetDay.sceneIds));
-  }
-
   function renderScheduleBoard(){
     const board = el("schedBoard");
     if(!board) return;
@@ -1529,16 +1618,16 @@
       return;
     }
 
-    const pxPerHour = Number(el("schedZoom")?.value || 60);
+    const pxPerHour = Number(el("schedZoom")?.value || 90);
     const snapMin = Number(el("schedSnap")?.value || 15);
     const pxPerMin = pxPerHour / 60;
 
     for(const d of state.shootDays){
-      ensureDayDurations(d);
-      const dayStartMin = minutesFromHHMM(d.callTime || "08:00");
+      ensureDayTimingMaps(d);
+      sortDaySceneIdsByTime(d);
 
-      const totalMin = (d.sceneIds||[]).reduce((a,sid)=>a + (d.durations[sid]||60), 0);
-      const gridMin = Math.max(10*60, totalMin + 60);
+      const dayStartMin = minutesFromHHMM(d.callTime || "08:00");
+      const gridMin = computeDayGridMin(d);
       const gridHeight = gridMin * pxPerMin;
 
       const col = document.createElement("div");
@@ -1569,16 +1658,17 @@
         grid.appendChild(lbl);
       }
 
-      let cursor = 0;
       for(const sid of (d.sceneIds||[])){
         const s = getScene(sid);
         if(!s) continue;
 
         const dur = d.durations[sid] || 60;
-        const top = cursor * pxPerMin + 10;
+        const startOffset = d.times[sid] || 0;
+
+        const top = startOffset * pxPerMin + 10;
         const height = dur * pxPerMin;
 
-        const start = dayStartMin + cursor;
+        const start = dayStartMin + startOffset;
         const end = start + dur;
 
         const block = document.createElement("div");
@@ -1602,9 +1692,7 @@
         block.addEventListener("mousemove", (e)=>{
           if(el("hoverTip").style.display === "block") moveHoverTip(e.clientX, e.clientY);
         });
-        block.addEventListener("mouseleave", ()=>{
-          hideHoverTip();
-        });
+        block.addEventListener("mouseleave", ()=>hideHoverTip());
 
         block.addEventListener("click", (e)=>{
           if(e.target.classList.contains("resize")) return;
@@ -1631,6 +1719,7 @@
           hideHoverTip();
         });
 
+        // ✅ drag to change start time (timeline)
         block.addEventListener("mousedown", (e)=>{
           if(e.button !== 0) return;
           if(e.target.classList.contains("resize")) return;
@@ -1648,12 +1737,12 @@
           schedDrag = {
             sceneId: sid,
             fromDayId: d.id,
+            dur,
             pxPerMin,
             snapMin,
             ghostEl: ghost,
             targetDayId: d.id,
-            targetIndex: (d.sceneIds||[]).indexOf(sid),
-            offsetX: e.clientX - rect.left,
+            targetStartMin: startOffset,
             offsetY: e.clientY - rect.top
           };
 
@@ -1662,7 +1751,6 @@
         });
 
         grid.appendChild(block);
-        cursor += dur;
       }
 
       board.appendChild(col);
@@ -1670,9 +1758,12 @@
   }
 
   window.addEventListener("mousemove", (e)=>{
+    // resize duration
     if(resizing){
       const d = getDay(resizing.dayId);
       if(!d) return;
+
+      ensureDayTimingMaps(d);
 
       const deltaPx = e.clientY - resizing.startY;
       const deltaMin = deltaPx / resizing.pxPerMin;
@@ -1684,17 +1775,20 @@
       d.durations = d.durations || {};
       d.durations[resizing.sceneId] = newDur;
 
+      // keep start time, only duration changes (timeline-friendly)
       touch();
       renderScheduleBoard();
+      renderDaysBoard();
       renderReports();
+      renderCallSheet();
       return;
     }
 
     if(!schedDrag) return;
 
     const g = schedDrag.ghostEl;
-    g.style.left = `${e.clientX - schedDrag.offsetX}px`;
-    g.style.top  = `${e.clientY - schedDrag.offsetY}px`;
+    g.style.left = `${e.clientX - 10}px`;
+    g.style.top  = `${e.clientY - 10}px`;
 
     const under = document.elementFromPoint(e.clientX, e.clientY);
     const grid = under ? under.closest(".schedGrid") : null;
@@ -1706,23 +1800,26 @@
     const targetDay = getDay(dayId);
     if(!targetDay){
       schedDrag.targetDayId = schedDrag.fromDayId;
-      schedDrag.targetIndex = null;
+      schedDrag.targetStartMin = 0;
       return;
     }
 
-    ensureDayDurations(targetDay);
+    ensureDayTimingMaps(targetDay);
 
-    let yMin = 0;
+    let startMin = 0;
     if(grid){
       const r = grid.getBoundingClientRect();
-      const yPx = e.clientY - r.top - 10;
-      yMin = yPx / schedDrag.pxPerMin;
-      yMin = Math.max(0, yMin);
+      const yPx = (e.clientY - r.top - 10 - schedDrag.offsetY);
+      startMin = yPx / schedDrag.pxPerMin;
+      startMin = snap(startMin, schedDrag.snapMin);
+      startMin = Math.max(0, startMin);
     }
-    const idx = computeInsertIndexByY(targetDay, yMin);
+
+    // avoid overlaps by pushing forward
+    startMin = findNonOverlappingStart(targetDay, schedDrag.sceneId, startMin, schedDrag.dur, schedDrag.snapMin);
 
     schedDrag.targetDayId = dayId;
-    schedDrag.targetIndex = idx;
+    schedDrag.targetStartMin = startMin;
   });
 
   window.addEventListener("mouseup", ()=>{
@@ -1734,27 +1831,44 @@
 
     if(!schedDrag) return;
 
-    const { sceneId, fromDayId, targetDayId, targetIndex, ghostEl } = schedDrag;
+    const { sceneId, fromDayId, targetDayId, targetStartMin, dur, ghostEl } = schedDrag;
 
     ghostEl?.remove();
     document.body.style.userSelect = "";
     clearSchedDropTargets();
-
     document.querySelectorAll(".schedBlock.dragging").forEach(n=>n.classList.remove("dragging"));
 
-    if(targetDayId){
+    const fromDay = getDay(fromDayId);
+    const toDay = getDay(targetDayId);
+
+    if(fromDay && toDay){
+      ensureDayTimingMaps(fromDay);
+      ensureDayTimingMaps(toDay);
+
       if(fromDayId === targetDayId){
-        const d = getDay(fromDayId);
-        if(d){
-          const oldIdx = (d.sceneIds||[]).indexOf(sceneId);
-          let newIdx = targetIndex ?? oldIdx;
-          d.sceneIds = (d.sceneIds||[]).filter(x=>x!==sceneId);
-          newIdx = Math.max(0, Math.min(newIdx, d.sceneIds.length));
-          d.sceneIds.splice(newIdx, 0, sceneId);
-          d.sceneIds = Array.from(new Set(d.sceneIds));
-        }
+        // move within day: just update start time
+        toDay.times[sceneId] = Math.max(0, targetStartMin);
+        sortDaySceneIdsByTime(toDay);
       }else{
-        moveSceneToDayWithIndex(sceneId, targetDayId, targetIndex);
+        // move across days
+        fromDay.sceneIds = (fromDay.sceneIds||[]).filter(x=>x!==sceneId);
+        if(fromDay.durations) delete fromDay.durations[sceneId];
+        if(fromDay.times) delete fromDay.times[sceneId];
+
+        toDay.sceneIds = toDay.sceneIds || [];
+        toDay.durations = toDay.durations || {};
+        toDay.times = toDay.times || {};
+
+        toDay.sceneIds.push(sceneId);
+        toDay.sceneIds = Array.from(new Set(toDay.sceneIds));
+
+        toDay.durations[sceneId] = dur || 60;
+        toDay.times[sceneId] = Math.max(0, targetStartMin);
+
+        // avoid overlap final
+        toDay.times[sceneId] = findNonOverlappingStart(toDay, sceneId, toDay.times[sceneId], toDay.durations[sceneId], schedDrag.snapMin);
+
+        sortDaySceneIdsByTime(toDay);
       }
 
       selectedDayId = targetDayId;
@@ -1774,13 +1888,14 @@
 
   function resetAllTimings1h(){
     for(const d of state.shootDays){
-      d.durations = d.durations || {};
+      ensureDayTimingMaps(d);
       for(const sid of (d.sceneIds||[])){
         d.durations[sid] = 60;
       }
     }
     touch();
     renderScheduleBoard();
+    renderDaysBoard();
   }
 
   // ----------- Settings / JSONBin -----------
@@ -1909,10 +2024,7 @@
 
     el("btnAddSceneElement")?.addEventListener("click", addSceneElement);
 
-    // ✅ UI switch para input de Cast
-    el("elCategory")?.addEventListener("change", ()=>{
-      updateAddElementUI();
-    });
+    el("elCategory")?.addEventListener("change", ()=>updateAddElementUI());
 
     el("btnImportScenes")?.addEventListener("click", importScenesTable);
     el("btnClearImport")?.addEventListener("click", ()=>{ el("sceneImportText").value=""; });
@@ -2039,6 +2151,17 @@
     const local = StorageLayer.loadLocal();
     state = (local && local.meta) ? local : defaultState();
 
+    // migrate older days missing fields
+    state.shootDays = state.shootDays || [];
+    for(const d of state.shootDays){
+      d.sceneIds = d.sceneIds || [];
+      d.crewIds = d.crewIds || [];
+      d.durations = d.durations || {};
+      d.times = d.times || {};
+      ensureDayTimingMaps(d);
+      sortDaySceneIdsByTime(d);
+    }
+
     if(!state.scenes.length){
       state.scenes.push({
         id: uid("scene"),
@@ -2062,7 +2185,8 @@
         notes:"",
         sceneIds:[],
         crewIds:[],
-        durations:{}
+        durations:{},
+        times:{}
       });
     }
 

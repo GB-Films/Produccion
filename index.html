@@ -145,7 +145,6 @@
                 <div class="row gap">
                   <select id="elCategory" class="input"></select>
 
-                  <!-- ✅ cuando categoría = Cast, este input usa datalist con el cast cargado -->
                   <input id="elItem" class="input" placeholder="Ej: Lucio / Pistola / Saco…" />
                   <datalist id="castDatalist"></datalist>
 
@@ -180,7 +179,7 @@
               </div>
 
               <div id="sceneBankList" class="list"></div>
-              <p class="muted small">Arrastrá escenas a un día. Reordená dentro del día arrastrando.</p>
+              <p class="muted small">Arrastrá escenas a un día. El orden por defecto se basa en el cronograma (hora de inicio).</p>
             </div>
 
             <div class="card" style="flex:1;">
@@ -248,11 +247,11 @@
         <section class="view hidden" id="view-schedule">
           <div class="card">
             <div class="cardHeader">
-              <h2>Cronograma (escenas por día)</h2>
+              <h2>Cronograma (timeline por día)</h2>
               <div class="row gap noPrint">
                 <select id="schedZoom" class="input" style="width:160px;">
                   <option value="60">Zoom normal</option>
-                  <option value="90">Zoom grande</option>
+                  <option value="90" selected>Zoom grande</option>
                   <option value="120">Zoom enorme</option>
                 </select>
                 <select id="schedSnap" class="input" style="width:160px;">
@@ -265,7 +264,10 @@
             </div>
 
             <div id="schedBoard" class="schedBoard"></div>
-            <p class="muted">Arrastrá el handle inferior para cambiar duración. Ahora también podés arrastrar bloques para reordenar o mover entre días.</p>
+            <p class="muted">
+              Tip: arrastrá el bloque para mover la hora de inicio. El call time es solo el inicio del día.
+              Arrastrá el handle inferior para cambiar la duración.
+            </p>
           </div>
         </section>
 
@@ -322,7 +324,7 @@
               </table>
             </div>
 
-            <p class="muted small">Ahora “Cast” es un Área más. Si cargás Cast acá, después lo elegís desde Breakdown.</p>
+            <p class="muted small">“Cast” es un Área más. Si cargás Cast acá, después lo elegís desde Breakdown.</p>
           </div>
         </section>
 
@@ -352,7 +354,6 @@
               </div>
             </div>
 
-            <!-- ✅ TODO el calendario queda como noPrint -->
             <div class="noPrint">
               <div id="calGrid" class="calGrid"></div>
               <div class="hr"></div>
