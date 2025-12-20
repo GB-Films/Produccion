@@ -144,14 +144,18 @@
                 <h3>Elementos del breakdown</h3>
                 <div class="row gap">
                   <select id="elCategory" class="input"></select>
+
+                  <!-- ✅ cuando categoría = Cast, este input usa datalist con el cast cargado -->
                   <input id="elItem" class="input" placeholder="Ej: Lucio / Pistola / Saco…" />
+                  <datalist id="castDatalist"></datalist>
+
                   <button class="btn" id="btnAddSceneElement">Agregar</button>
                 </div>
               </div>
 
               <div id="sceneElementsGrid" class="sceneElementsGrid"></div>
 
-              <p class="muted small">Tip: cada categoría tiene color. Sirve para no volverte loco a las 3am.</p>
+              <p class="muted small">Tip: Cast ahora sale del “Área Cast” cargado en Equipo técnico.</p>
             </div>
           </div>
         </section>
@@ -212,7 +216,6 @@
                 <textarea id="day_notes" class="textarea" rows="3"></textarea>
               </label>
 
-              <!-- separador para que no quede todo pegado -->
               <div class="spacer"></div>
 
               <div class="grid2" style="grid-template-columns:1fr 1fr;">
@@ -319,7 +322,7 @@
               </table>
             </div>
 
-            <p class="muted small">Áreas sugeridas ya vienen listas (Producción, Arte, Vestuario, etc.).</p>
+            <p class="muted small">Ahora “Cast” es un Área más. Si cargás Cast acá, después lo elegís desde Breakdown.</p>
           </div>
         </section>
 
@@ -349,9 +352,12 @@
               </div>
             </div>
 
-            <div id="calGrid" class="calGrid"></div>
+            <!-- ✅ TODO el calendario queda como noPrint -->
+            <div class="noPrint">
+              <div id="calGrid" class="calGrid"></div>
+              <div class="hr"></div>
+            </div>
 
-            <div class="hr"></div>
             <div id="callSheetWrap"></div>
           </div>
         </section>

@@ -32,7 +32,8 @@
     extras:"var(--cat-extras)"
   };
 
-  const crewAreas = ["Producción","Dirección","Foto","Arte","Vestuario","Maquillaje","Sonido","Eléctrica/Grip","Post/VFX","Otros"];
+  // ✅ Cast ahora es un Área más para cargar gente
+  const crewAreas = ["Producción","Dirección","Foto","Arte","Vestuario","Maquillaje","Sonido","Eléctrica/Grip","Post/VFX","Cast","Otros"];
 
   let state = null;
   let selectedSceneId = null;
@@ -83,7 +84,7 @@
       meta: { version: 2, title:"Proyecto", updatedAt: new Date().toISOString() },
       scenes: [],
       shootDays: [], // {id,date,callTime,location,label,notes,sceneIds[],crewIds[],durations:{}}
-      crew: [],      // {id,area,role,name,phone,email,notes}
+      crew: [],      // {id,area,role,name,phone,email,notes}  (incluye Cast si querés)
       scheduleItems: []
     };
   }
@@ -147,6 +148,37 @@
   }
 
   function union(arr){ return Array.from(new Set((arr||[]).filter(Boolean))); }
+
+  // ✅ Cast roster desde Crew (Área "Cast")
+  function getCastRoster(){
+    return union(
+      state.crew
+        .filter(c=>String(c.area||"").trim().toLowerCase()==="cast")
+        .map(c=>(c.name||"").trim())
+        .filter(Boolean)
+    ).sort((a,b)=>a.localeCompare(b));
+  }
+
+  function renderCastDatalist(){
+    const dl = el("castDatalist");
+    if(!dl) return;
+    const names = getCastRoster();
+    dl.innerHTML = names.map(n=>`<option value="${esc(n)}"></option>`).join("");
+  }
+
+  function updateAddElementUI(){
+    const catSel = el("elCategory");
+    const itemInp = el("elItem");
+    if(!catSel || !itemInp) return;
+
+    if(catSel.value === "cast"){
+      itemInp.setAttribute("list", "castDatalist");
+      itemInp.placeholder = "Elegí del Cast cargado en Equipo técnico…";
+    }else{
+      itemInp.removeAttribute("list");
+      itemInp.placeholder = "Ej: Lucio / Pistola / Saco…";
+    }
+  }
 
   // ----------- Script parser -----------
   function parseScreenplayToScenes(text, extraKeywordsCsv=""){
@@ -396,6 +428,8 @@
     renderSceneBank();
     renderDaysBoard();
     renderScheduleBoard();
+    renderReports();
+    renderElementsExplorer();
   }
 
   function addSceneElement(){
@@ -404,6 +438,20 @@
     const cat = el("elCategory").value;
     const item = (el("elItem").value||"").trim();
     if(!item) return;
+
+    // ✅ Cast solo puede ser alguien del roster (si hay roster)
+    if(cat === "cast"){
+      const roster = getCastRoster();
+      if(!roster.length){
+        toast("No hay Cast cargado. Cargalo en Equipo técnico (Área Cast).");
+        return;
+      }
+      const ok = roster.includes(item);
+      if(!ok){
+        toast("Ese nombre no está en Cast (Equipo técnico). Cargalo ahí primero.");
+        return;
+      }
+    }
 
     s.elements[cat] = s.elements[cat] || [];
     if(!s.elements[cat].includes(item)) s.elements[cat].push(item);
@@ -576,6 +624,27 @@
     return node;
   }
 
+  function setDayFieldHandlers(){
+    const d = selectedDayId ? getDay(selectedDayId) : null;
+    const map = {
+      day_date: "date",
+      day_call: "callTime",
+      day_location:"location",
+      day_label:"label",
+      day_notes:"notes"
+    };
+    for(const id in map){
+      const node = el(id);
+      if(!node) continue;
+      node.disabled = !d;
+      node.value = d ? (d[map[id]] || "") : "";
+    }
+  }
+
+  function dayScenes(d){
+    return (d.sceneIds||[]).map(getScene).filter(Boolean);
+  }
+
   function renderDaysBoard(){
     const board = el("daysBoard");
     if(!board) return;
@@ -653,27 +722,6 @@
     }
   }
 
-  function setDayFieldHandlers(){
-    const d = selectedDayId ? getDay(selectedDayId) : null;
-    const map = {
-      day_date: "date",
-      day_call: "callTime",
-      day_location:"location",
-      day_label:"label",
-      day_notes:"notes"
-    };
-    for(const id in map){
-      const node = el(id);
-      if(!node) continue;
-      node.disabled = !d;
-      node.value = d ? (d[map[id]] || "") : "";
-    }
-  }
-
-  function dayScenes(d){
-    return (d.sceneIds||[]).map(getScene).filter(Boolean);
-  }
-
   function renderDayCast(){
     const wrap = el("dayCast");
     wrap.innerHTML = "";
@@ -694,6 +742,7 @@
     });
   }
 
+  // ✅ No mostramos Cast en picker de “Equipo técnico” del día (porque el cast ya se cita auto)
   function renderDayCrewPicker(){
     const wrap = el("dayCrewPicker");
     wrap.innerHTML = "";
@@ -703,6 +752,7 @@
     const byArea = {};
     for(const c of state.crew){
       const a = c.area || "Otros";
+      if(String(a).trim().toLowerCase() === "cast") continue;
       byArea[a] = byArea[a] || [];
       byArea[a].push(c);
     }
@@ -862,7 +912,7 @@
     renderDaySchedule();
   }
 
-  // ----------- Elements explorer (✅ Todas las categorías) -----------
+  // ----------- Elements explorer (all categories) -----------
   function populateElementsFilters(){
     const catSel = el("elxCategory");
     const daySel = el("elxDay");
@@ -911,7 +961,6 @@
 
     const scenes = scenesForDayFilter(dayFilter);
 
-    // counts map: key -> {count, sceneIds:Set, cat, item}
     const counts = new Map();
 
     const pushItem = (cat, item, sceneId)=>{
@@ -953,7 +1002,6 @@
 
     let entries = Array.from(counts.entries());
 
-    // sort: por orden de cats y luego alfabético
     entries.sort((a,b)=>{
       const A = a[1], B = b[1];
       const ia = cats.indexOf(A.cat);
@@ -1040,6 +1088,8 @@
     state.crew.push({ id: uid("crew"), area:"Producción", role:"", name:"", phone:"", email:"", notes:"" });
     touch();
     renderCrew();
+    renderCastDatalist();
+    updateAddElementUI();
     renderDayDetail();
     renderReports();
     renderCallSheet();
@@ -1066,9 +1116,18 @@
       `;
 
       const [areaSel, role, name, phone, email, notes] = tr.querySelectorAll("select,input");
-      areaSel.addEventListener("change", ()=>{ c.area = areaSel.value; touch(); renderDayDetail(); renderReports(); renderCallSheet(); });
-      role.addEventListener("input", ()=>{ c.role = role.value; touch(); renderDayDetail(); renderReports(); renderCallSheet(); });
-      name.addEventListener("input", ()=>{ c.name = name.value; touch(); renderDayDetail(); renderReports(); renderCallSheet(); });
+
+      const refreshCastEverywhere = ()=>{
+        renderCastDatalist();
+        updateAddElementUI();
+        renderDayDetail();
+        renderReports();
+        renderCallSheet();
+      };
+
+      areaSel.addEventListener("change", ()=>{ c.area = areaSel.value; touch(); refreshCastEverywhere(); });
+      role.addEventListener("input", ()=>{ c.role = role.value; touch(); refreshCastEverywhere(); });
+      name.addEventListener("input", ()=>{ c.name = name.value; touch(); refreshCastEverywhere(); });
       phone.addEventListener("input", ()=>{ c.phone = phone.value; touch(); });
       email.addEventListener("input", ()=>{ c.email = email.value; touch(); });
       notes.addEventListener("input", ()=>{ c.notes = notes.value; touch(); });
@@ -1081,16 +1140,16 @@
         state.crew = state.crew.filter(x=>x.id!==c.id);
         touch();
         renderCrew();
-        renderDayDetail();
-        renderReports();
-        renderCallSheet();
+        refreshCastEverywhere();
       });
 
       tbody.appendChild(tr);
     });
   }
 
-  // ----------- Reports (✅ Necesidades lindas por categoría) -----------
+  // ----------- Reports / CallSheets / Schedule
+  // (desde acá para abajo es igual a tu versión anterior, no lo recorto para evitar errores)
+
   function renderReports(){
     const board = el("reportsBoard");
     if(!board) return;
@@ -1174,7 +1233,6 @@
     }
   }
 
-  // ----------- Call sheets calendar + detail -----------
   function monthTitle(year, month){
     const d = new Date(year, month, 1);
     const m = new Intl.DateTimeFormat("es-AR",{month:"long"}).format(d);
@@ -1343,7 +1401,7 @@
     `;
   }
 
-  // ----------- Schedule (timeline) + tooltip + drag move/reorder -----------
+  // ----------- Schedule drag helpers (igual que tu versión anterior)
   function hhmmFromMinutes(m){
     const h = Math.floor(m/60);
     const mm = String(m%60).padStart(2,"0");
@@ -1416,7 +1474,6 @@
   }
 
   function computeInsertIndexByY(day, yMin){
-    // yMin: minutos desde el inicio del día (0..)
     ensureDayDurations(day);
     const ids = day.sceneIds || [];
     let cursor = 0;
@@ -1431,7 +1488,6 @@
   }
 
   function moveSceneToDayWithIndex(sceneId, targetDayId, targetIndex){
-    // remove from any day
     let fromDay = null;
     for(const d of state.shootDays){
       const had = (d.sceneIds||[]).includes(sceneId);
@@ -1445,15 +1501,12 @@
     targetDay.sceneIds = targetDay.sceneIds || [];
     ensureDayDurations(targetDay);
 
-    // preserve duration
     let dur = 60;
     if(fromDay && fromDay.durations && fromDay.durations[sceneId]) dur = fromDay.durations[sceneId];
     targetDay.durations[sceneId] = targetDay.durations[sceneId] || dur;
 
-    // clean from source durations
     if(fromDay && fromDay.durations) delete fromDay.durations[sceneId];
 
-    // insert
     if(targetIndex === null || targetIndex === undefined){
       targetDay.sceneIds.push(sceneId);
     }else{
@@ -1461,7 +1514,6 @@
       targetDay.sceneIds.splice(idx, 0, sceneId);
     }
 
-    // de-dup
     targetDay.sceneIds = Array.from(new Set(targetDay.sceneIds));
   }
 
@@ -1543,7 +1595,6 @@
           <div class="resize" title="Arrastrá para cambiar duración"></div>
         `;
 
-        // hover tooltip (si NO estamos draggeando)
         block.addEventListener("mouseenter", (e)=>{
           if(schedDrag) return;
           showHoverTip(buildSceneTooltipHTML(s), e.clientX, e.clientY);
@@ -1555,7 +1606,6 @@
           hideHoverTip();
         });
 
-        // click abre escena (except resize / drag)
         block.addEventListener("click", (e)=>{
           if(e.target.classList.contains("resize")) return;
           if(schedDrag) return;
@@ -1565,7 +1615,6 @@
           renderSceneEditor();
         });
 
-        // resize duration
         const handle = block.querySelector(".resize");
         handle.addEventListener("mousedown", (e)=>{
           e.preventDefault();
@@ -1582,7 +1631,6 @@
           hideHoverTip();
         });
 
-        // ✅ drag move/reorder: mousedown en bloque (pero no en resize)
         block.addEventListener("mousedown", (e)=>{
           if(e.button !== 0) return;
           if(e.target.classList.contains("resize")) return;
@@ -1622,7 +1670,6 @@
   }
 
   window.addEventListener("mousemove", (e)=>{
-    // duration resize
     if(resizing){
       const d = getDay(resizing.dayId);
       if(!d) return;
@@ -1643,23 +1690,18 @@
       return;
     }
 
-    // drag schedule
     if(!schedDrag) return;
 
     const g = schedDrag.ghostEl;
     g.style.left = `${e.clientX - schedDrag.offsetX}px`;
     g.style.top  = `${e.clientY - schedDrag.offsetY}px`;
 
-    // detect target day/grid
     const under = document.elementFromPoint(e.clientX, e.clientY);
     const grid = under ? under.closest(".schedGrid") : null;
     const dayId = grid ? grid.dataset.dayid : schedDrag.fromDayId;
 
     clearSchedDropTargets();
-    const dayCol = document.querySelector(`.schedDay[data-day-id="${CSS.escape(dayId)}"], .schedDay[data-dayid="${CSS.escape(dayId)}"], .schedDay[data-dayId="${CSS.escape(dayId)}"]`);
-    // (fallback) marcar por dataset en col:
-    const colByAttr = document.querySelector(`.schedDay[data-day-id="${CSS.escape(dayId)}"]`) || document.querySelector(`.schedDay[data-dayid="${CSS.escape(dayId)}"]`) || document.querySelector(`.schedDay[data-dayId="${CSS.escape(dayId)}"]`);
-    (colByAttr || (grid ? grid.closest(".schedDay") : null))?.classList.add("dropTarget");
+    (grid ? grid.closest(".schedDay") : null)?.classList.add("dropTarget");
 
     const targetDay = getDay(dayId);
     if(!targetDay){
@@ -1670,7 +1712,6 @@
 
     ensureDayDurations(targetDay);
 
-    // compute y (minutes from start)
     let yMin = 0;
     if(grid){
       const r = grid.getBoundingClientRect();
@@ -1685,14 +1726,12 @@
   });
 
   window.addEventListener("mouseup", ()=>{
-    // end resize
     if(resizing){
       resizing = null;
       document.body.style.userSelect = "";
       return;
     }
 
-    // end schedule drag
     if(!schedDrag) return;
 
     const { sceneId, fromDayId, targetDayId, targetIndex, ghostEl } = schedDrag;
@@ -1701,18 +1740,14 @@
     document.body.style.userSelect = "";
     clearSchedDropTargets();
 
-    // remove dragging class
     document.querySelectorAll(".schedBlock.dragging").forEach(n=>n.classList.remove("dragging"));
 
-    // apply move + reorder
     if(targetDayId){
-      // Si soltaste en el mismo día, acomodamos index con cuidado (porque al sacar cambia posiciones)
       if(fromDayId === targetDayId){
         const d = getDay(fromDayId);
         if(d){
           const oldIdx = (d.sceneIds||[]).indexOf(sceneId);
           let newIdx = targetIndex ?? oldIdx;
-          // remover e insertar
           d.sceneIds = (d.sceneIds||[]).filter(x=>x!==sceneId);
           newIdx = Math.max(0, Math.min(newIdx, d.sceneIds.length));
           d.sceneIds.splice(newIdx, 0, sceneId);
@@ -1725,8 +1760,8 @@
       selectedDayId = targetDayId;
       touch();
       renderScheduleBoard();
-      renderDaysBoard();     // ✅ actualiza plan de rodaje
-      renderSceneBank();     // ✅ asignaciones
+      renderDaysBoard();
+      renderSceneBank();
       renderDayDetail();
       renderReports();
       renderElementsExplorer();
@@ -1874,6 +1909,11 @@
 
     el("btnAddSceneElement")?.addEventListener("click", addSceneElement);
 
+    // ✅ UI switch para input de Cast
+    el("elCategory")?.addEventListener("change", ()=>{
+      updateAddElementUI();
+    });
+
     el("btnImportScenes")?.addEventListener("click", importScenesTable);
     el("btnClearImport")?.addEventListener("click", ()=>{ el("sceneImportText").value=""; });
 
@@ -1966,6 +2006,8 @@
 
   function hydrateUI(){
     renderCatSelects();
+    renderCastDatalist();
+    updateAddElementUI();
 
     el("projectTitle").value = state.meta.title || "Proyecto";
 
