@@ -33,7 +33,7 @@ body{
              var(--bg);
   color:var(--text);
   font-family:ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial;
-  overflow-x:hidden; /* evita scroll horizontal fantasma */
+  overflow-x:hidden;
 }
 
 a{color:inherit}
@@ -82,7 +82,16 @@ a{color:inherit}
   background:rgba(110,231,255,.10);
 }
 
-.sideFoot{margin-top:auto; display:flex; flex-direction:column; gap:8px}
+.sideFoot{
+  margin-top:auto;
+  display:flex;
+  flex-direction:column;
+  gap:8px;
+}
+.sideSettingsBtn{
+  margin-top:2px;
+}
+
 .pill{
   display:inline-flex; align-items:center; gap:8px;
   border:1px solid var(--stroke);
@@ -313,7 +322,7 @@ select option{
   display:flex;
   gap:14px;
   align-items:stretch;
-  overflow-x:hidden; /* clave: no deja que el scroll se vaya a toda la página */
+  overflow-x:hidden;
 }
 
 .sceneBank{width:360px; flex:0 0 360px}
@@ -335,14 +344,14 @@ select option{
   background:rgba(255,255,255,.02);
   border-radius:14px;
   padding:10px;
-  overflow-x:auto;  /* ✅ el scroll vive acá */
+  overflow-x:auto;
   overflow-y:hidden;
   max-width:100%;
 }
 .daysBoard{
   display:flex;
   gap:12px;
-  width:max-content; /* hace que el scroll sea interno */
+  width:max-content;
 }
 .dayCol{
   width:280px;
@@ -504,35 +513,6 @@ select option{
   overflow:auto;
   padding-bottom:10px;
 }
-.reportCol{
-  width:360px;
-  flex:0 0 360px;
-  border:1px solid var(--stroke);
-  border-radius:14px;
-  background:rgba(255,255,255,.02);
-  padding:12px;
-}
-.reportCol .title{font-weight:900}
-.reportCol .meta{color:var(--muted); font-size:12px; margin-top:4px}
-
-.sectionTitle{
-  margin-top:12px;
-  font-weight:900;
-  color:var(--muted);
-  font-size:12px;
-  letter-spacing:.4px;
-  text-transform:uppercase;
-}
-
-.needsStack{display:flex; flex-direction:column; gap:10px; margin-top:10px}
-.needCatBlock{
-  border:1px solid rgba(255,255,255,.10);
-  background:rgba(255,255,255,.02);
-  border-radius:14px;
-  padding:10px 10px;
-}
-.needCatHead{display:flex; align-items:center; justify-content:space-between; margin-bottom:8px}
-.needItems{display:flex; flex-wrap:wrap; gap:8px}
 
 .calGrid{
   display:grid;
@@ -590,7 +570,6 @@ select option{
 .tooltip .grp{margin-top:10px}
 .tooltip .grpTitle{margin-bottom:4px}
 
-.noPrint{}
 @media print{
   .sidebar,.topbar,.noPrint, .toast, .tooltip{display:none !important}
   body{background:#fff; color:#000}

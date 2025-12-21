@@ -25,10 +25,15 @@
         <button class="navBtn" data-view="crew">Equipo técnico</button>
         <button class="navBtn" data-view="reports">Reportes</button>
         <button class="navBtn" data-view="callsheet">Call Sheets</button>
-        <button class="navBtn" data-view="settings">Sync / Ajustes</button>
       </nav>
 
       <div class="sideFoot">
+        <div class="hr" style="margin:8px 0;"></div>
+
+        <!-- Sync abajo a la izquierda -->
+        <button class="navBtn sideSettingsBtn" data-view="settings">Sync / Ajustes</button>
+
+        <div style="height:8px;"></div>
         <div class="pill" id="syncPill">Local</div>
         <div class="muted small">Guardado: <span id="savedAtText">—</span></div>
       </div>
@@ -103,7 +108,7 @@
                 <summary>Importar guion (texto) y detectar escenas</summary>
                 <p class="muted">
                   Detecta encabezados tipo <code>INT.</code> <code>EXT.</code> <code>INT/EXT.</code>.
-                  Podés sumar keywords extra si tu formato es especial.
+                  Si tu formato usa otra palabra (ej: ESCENA), agregala como keyword extra.
                 </p>
                 <input id="scriptKeywords" class="input" placeholder="Keywords extra (coma). Ej: ESCENA, SCENE"/>
                 <textarea id="scriptImportText" class="textarea" rows="10" placeholder="INT. CASA - NOCHE&#10;Lucio entra..."></textarea>
@@ -172,7 +177,7 @@
           <div class="boardWrap">
             <div class="card sceneBank">
               <div class="cardHeader">
-                <h2>Scene Bank</h2>
+                <h2>Banco de Escenas</h2>
                 <div class="row gap">
                   <button class="btn" id="btnAddShootDay">+ Día</button>
                 </div>
@@ -187,7 +192,7 @@
               </div>
 
               <div id="sceneBankList" class="list"></div>
-              <p class="muted small">Arrastrá escenas a un día. El orden por defecto se basa en hora de inicio del cronograma.</p>
+              <p class="muted small">Arrastrá escenas a un día.</p>
             </div>
 
             <div class="card dayBoardCard" style="flex:1;">
@@ -240,15 +245,6 @@
                 <div>
                   <h3 class="h3">Necesidades por área</h3>
                   <div id="dayNeeds" class="list"></div>
-
-                  <div class="hr"></div>
-
-                  <h3 class="h3">Hitos / Rangos (opcional)</h3>
-                  <div class="hint muted small">
-                    Para tareas con rango de fechas (ej: Permiso locación, Casting, Entrega vestuario, Post).
-                    Se cargan en “Sync / Ajustes → Cronograma general”.
-                  </div>
-                  <div id="daySchedule" class="list"></div>
                 </div>
               </div>
 
@@ -278,7 +274,7 @@
 
             <div id="schedBoard" class="schedBoard"></div>
             <p class="muted">
-              Arrastrá el bloque para mover la hora de inicio. Doble click abre el Breakdown de esa escena.
+              Arrastrá el bloque para mover la hora de inicio. <b>Doble click</b> abre el Breakdown de esa escena.
               Arrastrá el handle inferior para cambiar la duración.
             </p>
           </div>
@@ -404,23 +400,6 @@
               <button class="btn" id="btnSaveCfg">Guardar config</button>
               <button class="btn" id="btnTestCfg">Probar conexión</button>
             </div>
-
-            <div class="hr"></div>
-
-            <div class="cardSubHeader">
-              <h3>Cronograma general (rangos)</h3>
-              <div class="muted small">Permisos, casting, entregas, post, etc. (con fecha inicio/fin).</div>
-            </div>
-
-            <div class="row gap" style="margin:10px 0;">
-              <input id="range_name" class="input" placeholder="Nombre (ej: Permiso locación)" style="flex:1;"/>
-              <input id="range_start" class="input" type="date" style="width:170px;"/>
-              <input id="range_end" class="input" type="date" style="width:170px;"/>
-              <input id="range_status" class="input" placeholder="Estado (opcional)" style="width:180px;"/>
-              <button class="btn" id="btnAddRange">Agregar</button>
-            </div>
-
-            <div id="rangeList" class="list"></div>
 
             <div class="hr"></div>
 

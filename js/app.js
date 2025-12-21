@@ -41,7 +41,9 @@
 
   // schedule resize
   let resizing = null;
-  // schedule drag move
+
+  // ✅ Nuevo: no arrancamos drag en el primer click
+  let pendingDrag = null;
   let schedDrag = null;
 
   let calCursor = { year: new Date().getFullYear(), month: new Date().getMonth() };
@@ -79,11 +81,10 @@
 
   function defaultState(){
     return {
-      meta: { version: 4, title:"Proyecto", updatedAt: new Date().toISOString() },
+      meta: { version: 5, title:"Proyecto", updatedAt: new Date().toISOString() },
       scenes: [],
       shootDays: [],
-      crew: [],
-      scheduleItems: [] // rangos generales
+      crew: []
     };
   }
 
@@ -214,36 +215,67 @@
     dl.innerHTML = options.map(v=>`<option value="${esc(v)}"></option>`).join("");
   }
 
-  // ----------- Script parser -----------
+  // ----------- Script parser (FIX fuerte) -----------
   function parseScreenplayToScenes(text, extraKeywordsCsv=""){
-    const lines = (text||"").split(/\r?\n/).map(l=>l.replace(/\s+$/,"")).filter(l=>l.trim()!=="");
+    const rawLines = (text||"").split(/\r?\n/);
+    const lines = rawLines
+      .map(l => String(l ?? "").replace(/\s+$/,""))
+      .filter(l => l.trim() !== "");
+
     if(!lines.length) return [];
 
-    const extras = (extraKeywordsCsv||"")
+    const extra = (extraKeywordsCsv||"")
       .split(",")
-      .map(x=>x.trim())
+      .map(s=>s.trim())
       .filter(Boolean)
-      .map(x=>x.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
+      .map(s=>s.toUpperCase());
 
-    const baseHeads = ["INT\\.", "EXT\\.", "INT\\/EXT\\.", "I\\/E\\.", "INT\\.\\/EXT\\.", "INTERIOR", "EXTERIOR"];
-    const headRe = new RegExp("^\\s*(?:\\d+\\s*[\\).:-]\\s*)?(?:" + baseHeads.concat(extras).join("|") + ")\\b","i");
+    function stripSceneNumber(line){
+      // acepta: "12. ", "12) ", "(12) ", "12 - ", "12:"
+      return line
+        .replace(/^\s*\(?\s*\d+\s*\)?\s*[.)-:]\s*/,"")
+        .replace(/^\s*\(?\s*\d+\s*\)?\s+/,"");
+    }
 
     function isHeading(line){
-      const up = line.trim().toUpperCase();
-      if(up.endsWith("TO:") && up.length < 18) return false;
-      return headRe.test(line);
+      const cleaned = stripSceneNumber(line).trimStart();
+      const up = cleaned.toUpperCase();
+
+      // keywords extra al inicio
+      for(const k of extra){
+        if(up.startsWith(k)) return true;
+      }
+
+      // INT / EXT robusto (con o sin punto)
+      // ejemplos válidos:
+      // INT. CASA - NOCHE
+      // INT CASA - NOCHE
+      // EXT. CALLE - DÍA
+      // INT/EXT. AUTO - NOCHE
+      // I/E. CASA - DÍA
+      if(up.startsWith("INT/EXT.") || up.startsWith("INT/EXT ")) return true;
+      if(up.startsWith("INT./EXT.") || up.startsWith("INT./EXT ")) return true;
+      if(up.startsWith("I/E.") || up.startsWith("I/E ")) return true;
+
+      if(up.startsWith("INT.") || up.startsWith("INT ")) return true;
+      if(up.startsWith("EXT.") || up.startsWith("EXT ")) return true;
+
+      if(up.startsWith("INTERIOR")) return true;
+      if(up.startsWith("EXTERIOR")) return true;
+
+      return false;
     }
 
     const out = [];
     let current = null;
-    let n=1;
+    let autoN = 1;
 
     for(const line of lines){
       if(isHeading(line)){
         if(current) out.push(finalize(current));
-        current = { rawHeading: line.trim(), body:[], autoNumber:n++ };
+        current = { rawHeading: line.trim(), body:[], autoNumber:autoN++ };
       }else{
-        if(!current) current = { rawHeading:"ESCENA", body:[], autoNumber:n++ };
+        if(!current) current = { rawHeading:"ESCENA", body:[], autoNumber:autoN++ };
         current.body.push(line);
       }
     }
@@ -268,19 +300,29 @@
       const mNum = heading.match(/^\s*(\d+)\s*[.)-:]\s*/);
       if(mNum) num = Number(mNum[1]);
 
-      const slugline = heading.replace(/^\s*\d+\s*[.)-:]\s*/,"").trim();
-      const parts = slugline.split(" - ").map(p=>p.trim()).filter(Boolean);
+      const slugline = stripSceneNumber(heading).trim();
+
+      // split por guiones comunes (incluye en-dash/em-dash)
+      const parts = slugline
+        .split(/\s[-–—]\s/g)
+        .map(p=>p.trim())
+        .filter(Boolean);
 
       let location = "";
       let tod = "";
 
       if(parts.length >= 2){
-        const last = parts[parts.length-1];
-        tod = normalizeTOD(last);
+        tod = normalizeTOD(parts[parts.length-1]);
         const mid = parts.slice(0, parts.length-1).join(" - ");
-        location = mid.replace(/^(INT\.|EXT\.|INT\/EXT\.|I\/E\.|INT\.\/EXT\.|INTERIOR|EXTERIOR)\s*/i,"").trim();
+        location = mid
+          .replace(/^(INT\/EXT\.?|INT\.\/EXT\.?|I\/E\.?|INT\.?|EXT\.?)\s*/i,"")
+          .replace(/^(INTERIOR|EXTERIOR)\s*/i,"")
+          .trim();
       }else{
-        location = slugline.replace(/^(INT\.|EXT\.|INT\/EXT\.|I\/E\.|INT\.\/EXT\.|INTERIOR|EXTERIOR)\s*/i,"").trim();
+        location = slugline
+          .replace(/^(INT\/EXT\.?|INT\.\/EXT\.?|I\/E\.?|INT\.?|EXT\.?)\s*/i,"")
+          .replace(/^(INTERIOR|EXTERIOR)\s*/i,"")
+          .trim();
       }
 
       const bodyText = (s.body||[]).join(" ");
@@ -290,7 +332,7 @@
     }
   }
 
-  // ----------- schedule helpers (timeline) -----------
+  // ----------- schedule helpers -----------
   function minutesFromHHMM(hhmm){
     if(!hhmm) return 8*60;
     const [h,m] = hhmm.split(":").map(Number);
@@ -581,7 +623,6 @@
         toast("No hay Cast cargado. Cargalo en Equipo técnico (Área Cast).");
         return;
       }
-      // permitir fuzzy cast (pero no inventar)
       const nIn = normName(item);
       const exact = roster.find(r => normName(r) === nIn);
       if(exact) item = exact;
@@ -680,7 +721,7 @@
     const txt = el("scriptImportText").value || "";
     const keys = el("scriptKeywords").value || "";
     const scenes = parseScreenplayToScenes(txt, keys);
-    if(!scenes.length) return toast("No detecté escenas. Revisá headings/keywords.");
+    if(!scenes.length) return toast("No detecté escenas. Revisá que cada INT./EXT. esté en su propia línea.");
 
     state.scenes.push(...scenes);
     selectedSceneId = state.scenes[state.scenes.length-1].id;
@@ -964,7 +1005,6 @@
     const d = selectedDayId ? getDay(selectedDayId) : null;
     if(!d){ wrap.innerHTML = `<div class="muted">Seleccioná un día</div>`; return; }
 
-    // crew (sin Cast)
     const crew = state.crew
       .filter(c=>String(c.area||"").trim().toLowerCase()!=="cast");
 
@@ -973,7 +1013,6 @@
       return;
     }
 
-    // Orden por área (y luego rol/nombre)
     const areaIndex = new Map(crewAreas.map((a,i)=>[a,i]));
     const sorted = crew.slice().sort((a,b)=>{
       const ia = areaIndex.get(a.area)||999;
@@ -1084,50 +1123,14 @@
     }
   }
 
-  function renderDaySchedule(){
-    const wrap = el("daySchedule");
-    wrap.innerHTML = "";
-    const d = selectedDayId ? getDay(selectedDayId) : null;
-    if(!d || !d.date){
-      wrap.innerHTML = `<div class="muted">Poné fecha al día para mostrar ítems de rango que caen en este día.</div>`;
-      return;
-    }
-    const day = d.date;
-
-    const hits = (state.scheduleItems||[]).filter(it=>{
-      if(!it.startDate && !it.endDate) return false;
-      const a = it.startDate || it.endDate;
-      const b = it.endDate || it.startDate;
-      return (a <= day && day <= b);
-    });
-
-    if(!hits.length){
-      wrap.innerHTML = `<div class="muted">No hay rangos que caigan en este día.</div>`;
-      return;
-    }
-
-    hits.forEach(it=>{
-      const row = document.createElement("div");
-      row.className = "listItem";
-      row.innerHTML = `
-        <div>
-          <div class="title">${esc(it.name||"")}</div>
-          <div class="meta">${esc(it.startDate||"")} → ${esc(it.endDate||"")} ${it.status? " · "+esc(it.status):""}</div>
-        </div>
-      `;
-      wrap.appendChild(row);
-    });
-  }
-
   function renderDayDetail(){
     setDayFieldHandlers();
     renderDayCast();
     renderDayCrewPicker();
     renderDayNeeds();
-    renderDaySchedule();
   }
 
-  // ----------- Elements explorer (sin cambios relevantes) -----------
+  // ----------- Elements explorer -----------
   function populateElementsFilters(){
     const catSel = el("elxCategory");
     const daySel = el("elxDay");
@@ -1396,7 +1399,7 @@
     }
   }
 
-  // ----------- Reports (más claro cast/crew) -----------
+  // ----------- Reports -----------
   function renderReports(){
     const board = el("reportsBoard");
     if(!board) return;
@@ -1430,28 +1433,26 @@
         <div class="title">${esc(formatDayTitle(d.date))}</div>
         <div class="meta">Call ${esc(d.callTime||"")} · ${esc(d.location||"")}</div>
 
-        <div class="sectionTitle">Escenas</div>
+        <div style="margin-top:10px;color:rgba(233,240,255,.65);font-size:12px;font-weight:900;letter-spacing:.4px;text-transform:uppercase;">Escenas</div>
         <div class="muted">${esc(scenes.map(s=>`#${s.number}`).join(", ") || "-")}</div>
 
-        <div class="sectionTitle">Cast citado</div>
+        <div style="margin-top:10px;color:rgba(233,240,255,.65);font-size:12px;font-weight:900;letter-spacing:.4px;text-transform:uppercase;">Cast citado</div>
         <div class="chips" style="margin-top:8px;">
           ${cast.length ? cast.map(n=>`
             <div class="chip"><span class="catBadge"><span class="dot" style="background:${catColors.cast}"></span>${esc(n)}</span></div>
           `).join("") : `<span class="muted">-</span>`}
         </div>
 
-        <div class="sectionTitle">Crew citado</div>
+        <div style="margin-top:10px;color:rgba(233,240,255,.65);font-size:12px;font-weight:900;letter-spacing:.4px;text-transform:uppercase;">Crew citado</div>
         <div style="margin-top:8px;">
           ${Object.keys(crewByArea).length ? Object.keys(crewByArea).sort().map(area=>`
-            <div class="needCatBlock" style="margin-bottom:10px;">
-              <div class="needCatHead">
-                <div class="name"><b>${esc(area)}</b></div>
+            <div style="border:1px solid rgba(255,255,255,.10);background:rgba(255,255,255,.02);border-radius:14px;padding:10px;margin-bottom:10px;">
+              <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+                <div><b>${esc(area)}</b></div>
                 <div class="muted small">${crewByArea[area].length}</div>
               </div>
-              <div class="needItems">
-                ${crewByArea[area].map(c=>`
-                  <div class="chip"><span>${esc(`${c.role||""} — ${c.name||""}`)}</span></div>
-                `).join("")}
+              <div class="chips">
+                ${crewByArea[area].map(c=>`<div class="chip"><span>${esc(`${c.role||""} — ${c.name||""}`)}</span></div>`).join("")}
               </div>
             </div>
           `).join("") : `<span class="muted">-</span>`}
@@ -1481,7 +1482,7 @@
     }
   }
 
-  // ----------- Call sheets (igual a tu versión previa, sin cambios críticos) -----------
+  // ----------- Call sheets -----------
   function monthTitle(year, month){
     const d = new Date(year, month, 1);
     const m = new Intl.DateTimeFormat("es-AR",{month:"long"}).format(d);
@@ -1614,12 +1615,12 @@
 
       <h3>Equipo técnico (por área)</h3>
       ${Object.keys(crewByArea).length ? Object.keys(crewByArea).sort().map(area=>`
-        <div class="needCatBlock" style="margin:10px 0;">
-          <div class="needCatHead">
-            <div class="name"><b>${esc(area)}</b></div>
+        <div style="border:1px solid rgba(255,255,255,.10);background:rgba(255,255,255,.02);border-radius:14px;padding:10px;margin:10px 0;">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+            <div><b>${esc(area)}</b></div>
             <div class="muted small">${crewByArea[area].length}</div>
           </div>
-          <div class="needItems">
+          <div class="chips">
             ${crewByArea[area].map(c=>`<div class="chip"><span>${esc(`${c.role||""} — ${c.name||""}`)}</span></div>`).join("")}
           </div>
         </div>
@@ -1765,7 +1766,7 @@
         `;
 
         block.addEventListener("mouseenter", (e)=>{
-          if(schedDrag) return;
+          if(schedDrag || pendingDrag) return;
           showHoverTip(buildSceneTooltipHTML(s), e.clientX, e.clientY);
         });
         block.addEventListener("mousemove", (e)=>{
@@ -1773,7 +1774,7 @@
         });
         block.addEventListener("mouseleave", ()=>hideHoverTip());
 
-        // ✅ doble click abre breakdown
+        // ✅ doble click abre breakdown (ahora sí, no lo pisa el drag)
         block.addEventListener("dblclick", (e)=>{
           e.preventDefault();
           selectedSceneId = sid;
@@ -1798,7 +1799,7 @@
           hideHoverTip();
         });
 
-        // drag to change start time
+        // ✅ mousedown: SOLO marca intención. El drag real arranca cuando movés.
         block.addEventListener("mousedown", (e)=>{
           if(e.button !== 0) return;
           if(e.target.classList.contains("resize")) return;
@@ -1808,25 +1809,17 @@
           hideHoverTip();
 
           const rect = block.getBoundingClientRect();
-          const ghost = document.createElement("div");
-          ghost.className = "dragGhost";
-          ghost.innerHTML = `<div style="font-weight:900;">#${esc(s.number||"")} — ${esc(s.slugline||"")}</div><div style="color:rgba(233,240,255,.65);font-size:12px;margin-top:4px;">${esc(formatDayTitle(d.date))}</div>`;
-          document.body.appendChild(ghost);
-
-          schedDrag = {
+          pendingDrag = {
             sceneId: sid,
             fromDayId: d.id,
             dur,
             pxPerMin,
             snapMin,
-            ghostEl: ghost,
-            targetDayId: d.id,
-            targetStartMin: startOffset,
-            offsetY: e.clientY - rect.top
+            startX: e.clientX,
+            startY: e.clientY,
+            offsetY: e.clientY - rect.top,
+            blockEl: block
           };
-
-          block.classList.add("dragging");
-          document.body.style.userSelect = "none";
         });
 
         grid.appendChild(block);
@@ -1860,6 +1853,38 @@
       renderReports();
       renderCallSheet();
       return;
+    }
+
+    // ✅ si hay intención de drag, recién lo activamos cuando el usuario mueve “un poco”
+    if(pendingDrag && !schedDrag){
+      const dx = e.clientX - pendingDrag.startX;
+      const dy = e.clientY - pendingDrag.startY;
+      const dist = Math.sqrt(dx*dx + dy*dy);
+      if(dist >= 6){
+        const s = getScene(pendingDrag.sceneId);
+
+        const ghost = document.createElement("div");
+        ghost.className = "dragGhost";
+        ghost.innerHTML = `<div style="font-weight:900;">#${esc(s?.number||"")} — ${esc(s?.slugline||"")}</div>`;
+        document.body.appendChild(ghost);
+
+        schedDrag = {
+          sceneId: pendingDrag.sceneId,
+          fromDayId: pendingDrag.fromDayId,
+          dur: pendingDrag.dur,
+          pxPerMin: pendingDrag.pxPerMin,
+          snapMin: pendingDrag.snapMin,
+          ghostEl: ghost,
+          targetDayId: pendingDrag.fromDayId,
+          targetStartMin: 0,
+          offsetY: pendingDrag.offsetY
+        };
+
+        pendingDrag.blockEl.classList.add("dragging");
+        document.body.style.userSelect = "none";
+      }else{
+        return;
+      }
     }
 
     if(!schedDrag) return;
@@ -1903,6 +1928,12 @@
     if(resizing){
       resizing = null;
       document.body.style.userSelect = "";
+      return;
+    }
+
+    // si nunca arrancó el drag, era un click normal -> no hacemos nada
+    if(pendingDrag && !schedDrag){
+      pendingDrag = null;
       return;
     }
 
@@ -1955,6 +1986,7 @@
     }
 
     schedDrag = null;
+    pendingDrag = null;
   });
 
   function resetAllTimings1h(){
@@ -1969,7 +2001,7 @@
     renderDaysBoard();
   }
 
-  // ----------- Settings / JSONBin / Rangos -----------
+  // ----------- Settings / JSONBin -----------
   async function doPull(){
     const cfg = StorageLayer.loadCfg();
     if(!cfg.binId || !cfg.accessKey){ toast("Config JSONBin incompleta"); showView("settings"); return; }
@@ -2029,62 +2061,6 @@
     updateSyncPill(cfg.binId && cfg.accessKey ? "JSONBin" : "Local");
   }
 
-  function renderRanges(){
-    const wrap = el("rangeList");
-    if(!wrap) return;
-    wrap.innerHTML = "";
-
-    const list = (state.scheduleItems||[]).slice().sort((a,b)=>{
-      const ta = a.startDate ? Date.parse(a.startDate+"T00:00:00") : 0;
-      const tb = b.startDate ? Date.parse(b.startDate+"T00:00:00") : 0;
-      return ta - tb;
-    });
-
-    if(!list.length){
-      wrap.innerHTML = `<div class="muted">No hay ítems todavía.</div>`;
-      return;
-    }
-
-    list.forEach(it=>{
-      const row = document.createElement("div");
-      row.className = "listItem";
-      row.innerHTML = `
-        <div>
-          <div class="title">${esc(it.name||"")}</div>
-          <div class="meta">${esc(it.startDate||"")} → ${esc(it.endDate||"")} ${it.status? " · "+esc(it.status):""}</div>
-        </div>
-        <div class="row gap">
-          <button class="btn danger">Borrar</button>
-        </div>
-      `;
-      row.querySelector("button").addEventListener("click", ()=>{
-        if(!confirm("Borrar ítem?")) return;
-        state.scheduleItems = (state.scheduleItems||[]).filter(x=>x.id!==it.id);
-        touch();
-        renderRanges();
-        renderDaySchedule();
-      });
-      wrap.appendChild(row);
-    });
-  }
-
-  function addRangeFromUI(){
-    const name = (el("range_name").value||"").trim();
-    const start = (el("range_start").value||"").trim();
-    const end = (el("range_end").value||"").trim();
-    const status = (el("range_status").value||"").trim();
-    if(!name || !start || !end){
-      toast("Nombre + fecha inicio + fecha fin");
-      return;
-    }
-    state.scheduleItems = state.scheduleItems || [];
-    state.scheduleItems.push({ id: uid("rng"), name, startDate:start, endDate:end, status });
-    el("range_name").value=""; el("range_start").value=""; el("range_end").value=""; el("range_status").value="";
-    touch();
-    renderRanges();
-    renderDaySchedule();
-  }
-
   function setResetKeyFromUI(){
     const a = el("cfg_resetKey").value || "";
     const b = el("cfg_resetKeyConfirm").value || "";
@@ -2114,6 +2090,7 @@
     document.querySelectorAll(".navBtn").forEach(b=>{
       b.addEventListener("click", ()=>{
         const v = b.dataset.view;
+        if(!v) return;
         showView(v);
 
         if(v === "elements") renderElementsExplorer();
@@ -2121,7 +2098,6 @@
         if(v === "schedule") renderScheduleBoard();
         if(v === "reports") renderReports();
         if(v === "callsheet"){ renderCallSheetCalendar(); renderCallSheet(); }
-        if(v === "settings") renderRanges();
       });
     });
 
@@ -2152,9 +2128,7 @@
     });
 
     el("btnAddSceneElement")?.addEventListener("click", addSceneElement);
-    el("elCategory")?.addEventListener("change", ()=>{
-      refreshElementSuggestions();
-    });
+    el("elCategory")?.addEventListener("change", ()=>{ refreshElementSuggestions(); });
     el("elItem")?.addEventListener("input", ()=>refreshElementSuggestions());
 
     el("btnImportScenes")?.addEventListener("click", importScenesTable);
@@ -2238,7 +2212,6 @@
     el("btnPush")?.addEventListener("click", doPush);
     el("btnSaveCfg")?.addEventListener("click", saveCfgFromUI);
     el("btnTestCfg")?.addEventListener("click", testCfg);
-    el("btnAddRange")?.addEventListener("click", addRangeFromUI);
     el("btnSetResetKey")?.addEventListener("click", setResetKeyFromUI);
     el("btnReset")?.addEventListener("click", doReset);
 
@@ -2277,7 +2250,6 @@
     renderCallSheetCalendar();
     renderCallSheet();
     renderScheduleBoard();
-    renderRanges();
   }
 
   function init(){
@@ -2287,7 +2259,6 @@
     // migrate
     state.shootDays = state.shootDays || [];
     state.crew = state.crew || [];
-    state.scheduleItems = state.scheduleItems || [];
     state.scenes = state.scenes || [];
 
     for(const d of state.shootDays){
