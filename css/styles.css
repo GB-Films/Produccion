@@ -38,11 +38,7 @@ body{
 
 a{color:inherit}
 
-.appShell{
-  display:flex;
-  height:100%;
-  width:100%;
-}
+.appShell{display:flex;height:100%;width:100%}
 
 .sidebar{
   width:260px;
@@ -82,12 +78,7 @@ a{color:inherit}
   background:rgba(110,231,255,.10);
 }
 
-.sideFoot{
-  margin-top:auto;
-  display:flex;
-  flex-direction:column;
-  gap:8px;
-}
+.sideFoot{margin-top:auto;display:flex;flex-direction:column;gap:8px}
 .sideSettingsBtn{ margin-top:2px; }
 
 .pill{
@@ -109,7 +100,6 @@ a{color:inherit}
   gap:12px;
 }
 .viewWrap{flex:1; padding:16px; overflow:auto}
-
 .view.hidden{display:none}
 
 .card{
@@ -134,6 +124,7 @@ a{color:inherit}
   gap:10px;
   margin:10px 0 8px;
 }
+
 h2{margin:0; font-size:18px}
 .h3{margin:0 0 8px; font-size:15px}
 .muted{color:var(--muted)}
@@ -168,11 +159,7 @@ h2{margin:0; font-size:18px}
   border-color:rgba(110,231,255,.35);
   box-shadow:0 0 0 3px rgba(110,231,255,.12);
 }
-select option{
-  background:#0f1a2e;
-  color:var(--text);
-}
-
+select option{background:#0f1a2e;color:var(--text)}
 .textarea{resize:vertical}
 
 .btn{
@@ -189,8 +176,26 @@ select option{
 .btn.danger{border-color:rgba(255,77,109,.35); background:rgba(255,77,109,.10)}
 .btn.danger:hover{background:rgba(255,77,109,.16)}
 
-.filters{display:flex; gap:10px; margin:10px 0}
+.iconBtn{
+  border:1px solid var(--stroke);
+  background:rgba(255,255,255,.05);
+  color:var(--text);
+  border-radius:12px;
+  padding:8px 10px;
+  cursor:pointer;
+  font-weight:900;
+  min-width:42px;
+}
+.iconBtn:hover{background:rgba(255,255,255,.08)}
 
+.timeStepper{
+  display:flex;
+  gap:8px;
+  align-items:center;
+}
+.timeStepper .input{flex:1}
+
+.filters{display:flex; gap:10px; margin:10px 0}
 .hr{height:1px; background:var(--stroke); margin:12px 0}
 .spacer{height:8px}
 
@@ -199,16 +204,8 @@ select option{
   border-radius:12px;
   border:1px solid var(--stroke);
 }
-.table{
-  width:100%;
-  border-collapse:collapse;
-  min-width:650px;
-}
-.table th,.table td{
-  padding:10px 10px;
-  border-bottom:1px solid var(--stroke);
-  vertical-align:top;
-}
+.table{width:100%;border-collapse:collapse;min-width:650px}
+.table th,.table td{padding:10px 10px;border-bottom:1px solid var(--stroke);vertical-align:top}
 .table th{
   color:var(--muted);
   font-size:12px;
@@ -239,19 +236,6 @@ select option{
 
 .list{display:flex; flex-direction:column; gap:10px}
 
-.listItem{
-  border:1px solid var(--stroke);
-  background:rgba(255,255,255,.03);
-  border-radius:14px;
-  padding:10px 12px;
-  display:flex;
-  align-items:center;
-  justify-content:space-between;
-  gap:10px;
-}
-.listItem .title{font-weight:900}
-.listItem .meta{color:var(--muted); font-size:12px; margin-top:4px}
-
 .chips{display:flex; flex-wrap:wrap; gap:8px}
 .chip{
   display:inline-flex;
@@ -263,27 +247,14 @@ select option{
   border-radius:999px;
 }
 .chip button{
-  border:none;
-  background:transparent;
-  color:var(--muted);
-  cursor:pointer;
-  font-size:16px;
-  line-height:1;
-  padding:0 2px;
+  border:none;background:transparent;color:var(--muted);
+  cursor:pointer;font-size:16px;line-height:1;padding:0 2px;
 }
 .chip button:hover{color:var(--text)}
 
-.dot{
-  width:10px;height:10px;border-radius:999px;
-  display:inline-block;
-}
+.dot{width:10px;height:10px;border-radius:999px;display:inline-block}
 
-.catBadge{
-  display:inline-flex;
-  align-items:center;
-  gap:8px;
-  font-weight:800;
-}
+.catBadge{display:inline-flex;align-items:center;gap:8px;font-weight:800}
 
 .sceneElementsGrid{
   display:flex;
@@ -317,21 +288,11 @@ select option{
   color:var(--muted);
 }
 
-.boardWrap{
-  display:flex;
-  gap:14px;
-  align-items:stretch;
-  overflow-x:hidden;
-}
-
+.boardWrap{display:flex;gap:14px;align-items:stretch;overflow-x:hidden}
 .sceneBank{width:360px; flex:0 0 360px}
+#sceneBankList{overflow:auto;padding-right:6px}
 
-/* el JS le pone max-height dinámico para alinear hasta "Cast citado" */
-#sceneBankList{
-  overflow:auto;
-  padding-right:6px;
-}
-
+/* Scene cards */
 .sceneCard{
   border:1px solid var(--stroke);
   background:rgba(255,255,255,.03);
@@ -342,17 +303,17 @@ select option{
   justify-content:space-between;
   gap:10px;
 }
-.sceneCard.dragging{opacity:.5}
+.sceneCard.dragging{opacity:.55}
 .dragHandle{cursor:grab; color:var(--muted); font-size:18px}
 
-/* 🔴🟢 borde por asignación */
+/* Borde asignación (más notorio) */
 .sceneCard.assigned{
-  border-color: rgba(46,229,157,.42);
-  box-shadow: 0 0 0 3px rgba(46,229,157,.08) inset;
+  border-color: rgba(46,229,157,.55);
+  box-shadow: 0 0 0 3px rgba(46,229,157,.10) inset;
 }
 .sceneCard.unassigned{
-  border-color: rgba(255,77,109,.42);
-  box-shadow: 0 0 0 3px rgba(255,77,109,.08) inset;
+  border-color: rgba(255,77,109,.55);
+  box-shadow: 0 0 0 3px rgba(255,77,109,.10) inset;
 }
 
 .daysPanel{
@@ -364,11 +325,7 @@ select option{
   overflow-y:hidden;
   max-width:100%;
 }
-.daysBoard{
-  display:flex;
-  gap:12px;
-  width:max-content;
-}
+.daysBoard{display:flex;gap:12px;width:max-content}
 .dayCol{
   width:280px;
   flex:0 0 280px;
@@ -402,13 +359,7 @@ select option{
   background:rgba(110,231,255,.06);
 }
 
-/* Crew picker: SIN scroll interno + headers por área */
-.crewPicker{
-  display:flex;
-  flex-direction:column;
-  gap:10px;
-  padding-right:0;
-}
+.crewPicker{display:flex;flex-direction:column;gap:10px}
 .crewAreaHeader{
   margin-top:10px;
   padding:8px 10px;
@@ -431,7 +382,7 @@ select option{
   opacity:.92;
 }
 .crewPickItem:hover{background:rgba(255,255,255,.04)}
-.crewPickItem .left{display:flex; align-items:center; gap:10px}
+.crewPickItem .left{display:flex;align-items:center;gap:10px}
 .crewPickItem .statusDot{
   width:10px;height:10px;border-radius:999px;
   background:var(--danger);
@@ -449,15 +400,11 @@ select option{
 .crewPickItem .title{font-weight:900}
 .crewPickItem .meta{color:var(--muted); font-size:12px; margin-top:4px}
 
-.schedBoard{
-  display:flex;
-  gap:12px;
-  overflow:auto;
-  padding-bottom:10px;
-}
+/* Schedule */
+.schedBoard{display:flex;gap:12px;overflow:auto;padding-bottom:10px}
 .schedDay{
-  width:360px;
-  flex:0 0 360px;
+  width:380px;
+  flex:0 0 380px;
   border:1px solid var(--stroke);
   border-radius:14px;
   background:rgba(255,255,255,.02);
@@ -467,24 +414,15 @@ select option{
   outline:2px solid rgba(110,231,255,.35);
   outline-offset:-2px;
 }
-.schedHead{
-  padding:10px 12px;
-  border-bottom:1px solid var(--stroke);
-  background:rgba(255,255,255,.02);
-}
+.schedHead{padding:10px 12px;border-bottom:1px solid var(--stroke);background:rgba(255,255,255,.02)}
 .schedHead .t{font-weight:900}
-.schedHead .m{color:var(--muted); font-size:12px; margin-top:4px}
-.schedGrid{
-  position:relative;
-  background:linear-gradient(180deg, rgba(255,255,255,.02), transparent);
-}
-.hourLine{
-  position:absolute; left:0; right:0;
-  height:1px;
-  background:rgba(255,255,255,.06);
-}
+.schedHead .m{color:var(--muted);font-size:12px;margin-top:4px}
+.schedGrid{position:relative;background:linear-gradient(180deg, rgba(255,255,255,.02), transparent)}
+
+.hourLine{position:absolute;left:0;right:0;height:1px;background:rgba(255,255,255,.06)}
 .hourLabel{
-  position:absolute; left:10px;
+  position:absolute;
+  left:10px;
   transform:translateY(-50%);
   color:rgba(233,240,255,.45);
   font-size:11px;
@@ -492,7 +430,7 @@ select option{
 
 .schedBlock{
   position:absolute;
-  left:70px;
+  left:72px;
   right:12px;
   border:1px solid rgba(255,255,255,.12);
   background:rgba(15,26,46,.92);
@@ -502,14 +440,10 @@ select option{
   cursor:grab;
   user-select:none;
 }
-.schedBlock.dragging{opacity:.6}
-.schedBlock .bar{
-  width:28px;height:6px;border-radius:999px;
-  margin-bottom:8px;
-  background:var(--cat-cast);
-}
-.schedBlock .title{font-weight:900; font-size:13px}
-.schedBlock .meta{color:var(--muted); font-size:12px; margin-top:4px}
+.schedBlock.dragging{opacity:.65}
+.schedBlock .bar{width:28px;height:6px;border-radius:999px;margin-bottom:8px;background:var(--cat-cast)}
+.schedBlock .title{font-weight:900;font-size:13px}
+.schedBlock .meta{color:var(--muted);font-size:12px;margin-top:4px}
 .schedBlock .resize{
   position:absolute;
   left:10px; right:10px; bottom:6px;
@@ -519,31 +453,31 @@ select option{
   cursor:ns-resize;
 }
 
-.dragGhost{
-  position:fixed;
-  z-index:9999;
-  pointer-events:none;
-  border:1px solid rgba(110,231,255,.22);
-  background:rgba(15,26,46,.92);
+/* Reports */
+.reportsBoard{display:flex;gap:12px;overflow:auto;padding-bottom:10px}
+.reportCol{
+  width:360px;
+  flex:0 0 360px;
+  border:1px solid var(--stroke);
+  border-radius:14px;
+  background:rgba(255,255,255,.02);
+  overflow:hidden;
+}
+.reportHead{padding:10px 12px;border-bottom:1px solid var(--stroke);background:rgba(255,255,255,.02)}
+.reportHead .t{font-weight:900}
+.reportHead .m{color:var(--muted);font-size:12px;margin-top:4px}
+.reportBody{padding:10px 12px;display:flex;flex-direction:column;gap:10px}
+.catBlock{
+  border:1px solid rgba(255,255,255,.10);
+  background:rgba(255,255,255,.02);
   border-radius:14px;
   padding:10px 12px;
-  min-width:220px;
-  box-shadow:0 18px 40px rgba(0,0,0,.45);
 }
+.catBlock .hdr{display:flex;align-items:center;gap:10px;font-weight:900;margin-bottom:6px}
+.catBlock .items{color:var(--muted);font-size:12px;line-height:1.45}
 
-.reportsBoard{
-  display:flex;
-  gap:12px;
-  overflow:auto;
-  padding-bottom:10px;
-}
-
-.calGrid{
-  display:grid;
-  grid-template-columns:repeat(7, 1fr);
-  gap:10px;
-}
-.calDow{color:var(--muted); font-size:12px; padding:0 6px}
+/* Calendar */
+.calGrid{display:grid;grid-template-columns:repeat(7,1fr);gap:10px}
 .calCell{
   border:1px solid var(--stroke);
   background:rgba(255,255,255,.02);
@@ -555,9 +489,9 @@ select option{
 }
 .calCell:hover{background:rgba(255,255,255,.04)}
 .calCell.hasShoot{border-color:rgba(110,231,255,.22)}
-.calCell.selected{outline:2px solid rgba(110,231,255,.35); outline-offset:-2px}
+.calCell.selected{outline:2px solid rgba(110,231,255,.35);outline-offset:-2px}
 .calCell .d{font-weight:900}
-.calCell .tag{color:var(--muted); font-size:11px; margin-top:6px}
+.calCell .tag{color:var(--muted);font-size:11px;margin-top:6px}
 
 .toast{
   position:fixed;

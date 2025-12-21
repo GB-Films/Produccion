@@ -107,7 +107,6 @@
                 <summary>Importar guion (texto) y detectar escenas</summary>
                 <p class="muted">
                   Detecta encabezados tipo <code>INT.</code> <code>EXT.</code> <code>INT/EXT.</code>.
-                  Si tu formato usa otra palabra (ej: ESCENA), agregala como keyword extra.
                 </p>
                 <input id="scriptKeywords" class="input" placeholder="Keywords extra (coma). Ej: ESCENA, SCENE"/>
                 <textarea id="scriptImportText" class="textarea" rows="10" placeholder="INT. CASA - NOCHE&#10;Lucio entra..."></textarea>
@@ -211,14 +210,23 @@
               <div class="cardSubHeader">
                 <h3>Detalle del día</h3>
                 <div class="row gap noPrint">
-                  <button class="btn" id="btnOpenCallSheet">Generar Call Sheet</button>
+                  <button class="btn" id="btnOpenCallSheet">Ver Call Sheet</button>
                 </div>
               </div>
 
               <div class="pairs">
                 <label class="field"><span>Fecha</span><input id="day_date" class="input" type="date"/></label>
-                <!-- step 900 = 15 minutos -->
-                <label class="field"><span>Call time</span><input id="day_call" class="input" type="time" step="900"/></label>
+
+                <label class="field">
+                  <span>Call time</span>
+                  <div class="timeStepper">
+                    <button class="iconBtn" id="day_call_minus" type="button" title="-15 min">−</button>
+                    <input id="day_call" class="input" type="time" step="900"/>
+                    <button class="iconBtn" id="day_call_plus" type="button" title="+15 min">+</button>
+                  </div>
+                  <div class="hint muted small">Ajuste de a 15 min.</div>
+                </label>
+
                 <label class="field"><span>Locación</span><input id="day_location" class="input"/></label>
                 <label class="field"><span>Nombre (opcional)</span><input id="day_label" class="input" placeholder="Ej: Día 3 - Casa"/></label>
               </div>
@@ -264,7 +272,7 @@
                   <option value="120">Zoom enorme</option>
                 </select>
                 <select id="schedSnap" class="input" style="width:160px;">
-                  <option value="15">Snap 15 min</option>
+                  <option value="15" selected>Snap 15 min</option>
                   <option value="30">Snap 30 min</option>
                   <option value="5">Snap 5 min</option>
                 </select>
@@ -274,8 +282,8 @@
 
             <div id="schedBoard" class="schedBoard"></div>
             <p class="muted">
-              Arrastrá el bloque para mover la hora de inicio. <b>Doble click</b> abre el Breakdown de esa escena.
-              Arrastrá el handle inferior para cambiar la duración.
+              Arrastrá el bloque para mover hora (dentro del día o a otro día). Handle inferior = duración.
+              <b>Doble click</b> abre Breakdown.
             </p>
           </div>
         </section>
@@ -334,7 +342,7 @@
               </table>
             </div>
 
-            <p class="muted small">“Cast” es un Área más. Se usa para que luego puedas seleccionarlo desde Breakdown.</p>
+            <p class="muted small">“Cast” es un Área más. Se usa para seleccionarlo desde Breakdown.</p>
           </div>
         </section>
 
@@ -414,7 +422,7 @@
             </div>
 
             <p class="muted small">
-              No subas tu Access Key al repo. Si ya la pegaste en algún lado público: rota la key.
+              No subas tu Access Key al repo. Si ya la pegaste en algún lado público: rotala.
             </p>
           </div>
         </section>
