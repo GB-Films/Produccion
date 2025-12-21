@@ -82,7 +82,7 @@
                       <th>Slugline</th>
                       <th>Locación</th>
                       <th>Horario</th>
-                      <th>Pág</th>
+                      <th>Pág.</th>
                     </tr>
                   </thead>
                   <tbody></tbody>
@@ -123,9 +123,15 @@
               <div class="pairs">
                 <label class="field"><span>Número</span><input id="scene_number" class="input"/></label>
                 <label class="field"><span>Horario</span><input id="scene_timeOfDay" class="input" placeholder="Día / Noche…"/></label>
+
                 <label class="field"><span>Slugline</span><input id="scene_slugline" class="input"/></label>
                 <label class="field"><span>Locación</span><input id="scene_location" class="input"/></label>
-                <label class="field"><span>Páginas</span><input id="scene_pages" class="input" type="number" min="0" step="0.1"/></label>
+
+                <label class="field">
+                  <span>Páginas (guion)</span>
+                  <input id="scene_pages" class="input" type="number" min="0" step="0.1" placeholder="Ej: 1.5"/>
+                </label>
+                <div class="hint muted small">Cantidad aproximada de páginas del guion que ocupa esta escena.</div>
               </div>
 
               <label class="field">
@@ -145,8 +151,8 @@
                 <div class="row gap">
                   <select id="elCategory" class="input"></select>
 
-                  <input id="elItem" class="input" placeholder="Ej: Lucio / Pistola / Saco…" />
-                  <datalist id="castDatalist"></datalist>
+                  <input id="elItem" class="input" list="elSuggestDatalist" placeholder="Ej: Lucio / Pistola / Saco…"/>
+                  <datalist id="elSuggestDatalist"></datalist>
 
                   <button class="btn" id="btnAddSceneElement">Agregar</button>
                 </div>
@@ -154,7 +160,9 @@
 
               <div id="sceneElementsGrid" class="sceneElementsGrid"></div>
 
-              <p class="muted small">Tip: Cast ahora sale del “Área Cast” cargado en Equipo técnico.</p>
+              <p class="muted small">
+                Tip: Cast se carga como Área “Cast” en Equipo técnico, y después se elige acá.
+              </p>
             </div>
           </div>
         </section>
@@ -179,10 +187,10 @@
               </div>
 
               <div id="sceneBankList" class="list"></div>
-              <p class="muted small">Arrastrá escenas a un día. El orden por defecto se basa en el cronograma (hora de inicio).</p>
+              <p class="muted small">Arrastrá escenas a un día. El orden por defecto se basa en hora de inicio del cronograma.</p>
             </div>
 
-            <div class="card" style="flex:1;">
+            <div class="card dayBoardCard" style="flex:1;">
               <div class="cardHeader">
                 <h2>Tablero de días</h2>
                 <div class="row gap noPrint">
@@ -224,8 +232,9 @@
 
                   <div class="hr"></div>
 
-                  <h3 class="h3">Equipo técnico (seleccioná)</h3>
-                  <div id="dayCrewPicker" class="list"></div>
+                  <h3 class="h3">Equipo técnico (clic para seleccionar)</h3>
+                  <div class="hint muted small">Rojo = no citado · Verde = citado.</div>
+                  <div id="dayCrewPicker" class="crewPicker"></div>
                 </div>
 
                 <div>
@@ -234,7 +243,11 @@
 
                   <div class="hr"></div>
 
-                  <h3 class="h3">Cronograma (rango)</h3>
+                  <h3 class="h3">Hitos / Rangos (opcional)</h3>
+                  <div class="hint muted small">
+                    Para tareas con rango de fechas (ej: Permiso locación, Casting, Entrega vestuario, Post).
+                    Se cargan en “Sync / Ajustes → Cronograma general”.
+                  </div>
                   <div id="daySchedule" class="list"></div>
                 </div>
               </div>
@@ -265,7 +278,7 @@
 
             <div id="schedBoard" class="schedBoard"></div>
             <p class="muted">
-              Tip: arrastrá el bloque para mover la hora de inicio. El call time es solo el inicio del día.
+              Arrastrá el bloque para mover la hora de inicio. Doble click abre el Breakdown de esa escena.
               Arrastrá el handle inferior para cambiar la duración.
             </p>
           </div>
@@ -303,6 +316,7 @@
             <div class="cardHeader">
               <h2>Equipo técnico</h2>
               <div class="row gap">
+                <input id="crewSearch" class="input" placeholder="Buscar (área / rol / nombre / tel / mail)…" style="width:340px;"/>
                 <button class="btn" id="btnAddCrew">+ Integrante</button>
               </div>
             </div>
@@ -324,7 +338,7 @@
               </table>
             </div>
 
-            <p class="muted small">“Cast” es un Área más. Si cargás Cast acá, después lo elegís desde Breakdown.</p>
+            <p class="muted small">“Cast” es un Área más. Se usa para que luego puedas seleccionarlo desde Breakdown.</p>
           </div>
         </section>
 
@@ -390,6 +404,23 @@
               <button class="btn" id="btnSaveCfg">Guardar config</button>
               <button class="btn" id="btnTestCfg">Probar conexión</button>
             </div>
+
+            <div class="hr"></div>
+
+            <div class="cardSubHeader">
+              <h3>Cronograma general (rangos)</h3>
+              <div class="muted small">Permisos, casting, entregas, post, etc. (con fecha inicio/fin).</div>
+            </div>
+
+            <div class="row gap" style="margin:10px 0;">
+              <input id="range_name" class="input" placeholder="Nombre (ej: Permiso locación)" style="flex:1;"/>
+              <input id="range_start" class="input" type="date" style="width:170px;"/>
+              <input id="range_end" class="input" type="date" style="width:170px;"/>
+              <input id="range_status" class="input" placeholder="Estado (opcional)" style="width:180px;"/>
+              <button class="btn" id="btnAddRange">Agregar</button>
+            </div>
+
+            <div id="rangeList" class="list"></div>
 
             <div class="hr"></div>
 

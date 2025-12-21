@@ -3,7 +3,6 @@
 
   const views = ["breakdown","shooting","schedule","elements","crew","reports","callsheet","settings"];
 
-  // Category order requested
   const cats = ["cast","props","wardrobe","art","makeup","sound","sfx","vfx","vehicles","animals","extras"];
   const catNames = {
     cast:"Cast",
@@ -32,21 +31,18 @@
     extras:"var(--cat-extras)"
   };
 
-  // Cast now is an Area too
   const crewAreas = ["Producción","Dirección","Foto","Arte","Vestuario","Maquillaje","Sonido","Eléctrica/Grip","Post/VFX","Cast","Otros"];
 
   let state = null;
   let selectedSceneId = null;
   let selectedDayId = null;
   let callSheetDayId = null;
-
   let selectedElementKey = null;
 
   // schedule resize
   let resizing = null;
-
   // schedule drag move
-  let schedDrag = null; // {sceneId, fromDayId, dur, pxPerMin, snapMin, ghostEl, targetDayId, targetStartMin, offsetY}
+  let schedDrag = null;
 
   let calCursor = { year: new Date().getFullYear(), month: new Date().getMonth() };
 
@@ -78,17 +74,16 @@
     t.textContent = msg;
     t.style.display="block";
     clearTimeout(toast._t);
-    toast._t = setTimeout(()=>t.style.display="none", 2200);
+    toast._t = setTimeout(()=>t.style.display="none", 2400);
   }
 
   function defaultState(){
     return {
-      meta: { version: 3, title:"Proyecto", updatedAt: new Date().toISOString() },
+      meta: { version: 4, title:"Proyecto", updatedAt: new Date().toISOString() },
       scenes: [],
-      // shootDays:
-      // {id,date,callTime,location,label,notes,sceneIds[],crewIds[],durations:{}, times:{}}
+      shootDays: [],
       crew: [],
-      scheduleItems: []
+      scheduleItems: [] // rangos generales
     };
   }
 
@@ -152,6 +147,38 @@
 
   function union(arr){ return Array.from(new Set((arr||[]).filter(Boolean))); }
 
+  // ---------- string utils for element matching ----------
+  function normName(s){
+    return String(s||"")
+      .trim()
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g,"")
+      .replace(/[^\p{L}\p{N}]+/gu," ")
+      .replace(/\s+/g," ")
+      .trim();
+  }
+  function levenshtein(a,b){
+    a = String(a); b = String(b);
+    const n=a.length, m=b.length;
+    if(!n) return m;
+    if(!m) return n;
+    const dp = Array.from({length:n+1}, ()=>Array(m+1).fill(0));
+    for(let i=0;i<=n;i++) dp[i][0]=i;
+    for(let j=0;j<=m;j++) dp[0][j]=j;
+    for(let i=1;i<=n;i++){
+      for(let j=1;j<=m;j++){
+        const cost = a[i-1]===b[j-1]?0:1;
+        dp[i][j] = Math.min(
+          dp[i-1][j]+1,
+          dp[i][j-1]+1,
+          dp[i-1][j-1]+cost
+        );
+      }
+    }
+    return dp[n][m];
+  }
+
   // Cast roster from crew
   function getCastRoster(){
     return union(
@@ -162,25 +189,29 @@
     ).sort((a,b)=>a.localeCompare(b));
   }
 
-  function renderCastDatalist(){
-    const dl = el("castDatalist");
-    if(!dl) return;
-    const names = getCastRoster();
-    dl.innerHTML = names.map(n=>`<option value="${esc(n)}"></option>`).join("");
+  function getExistingElementsByCat(cat){
+    const set = new Set();
+    for(const s of state.scenes){
+      const arr = s.elements?.[cat] || [];
+      for(const it of arr){
+        const v = (it||"").trim();
+        if(v) set.add(v);
+      }
+    }
+    return Array.from(set).sort((a,b)=>a.localeCompare(b));
   }
 
-  function updateAddElementUI(){
+  function refreshElementSuggestions(){
     const catSel = el("elCategory");
-    const itemInp = el("elItem");
-    if(!catSel || !itemInp) return;
+    const dl = el("elSuggestDatalist");
+    if(!catSel || !dl) return;
 
-    if(catSel.value === "cast"){
-      itemInp.setAttribute("list", "castDatalist");
-      itemInp.placeholder = "Elegí del Cast cargado en Equipo técnico…";
-    }else{
-      itemInp.removeAttribute("list");
-      itemInp.placeholder = "Ej: Lucio / Pistola / Saco…";
-    }
+    const cat = catSel.value;
+    let options = [];
+    if(cat === "cast") options = getCastRoster();
+    else options = getExistingElementsByCat(cat);
+
+    dl.innerHTML = options.map(v=>`<option value="${esc(v)}"></option>`).join("");
   }
 
   // ----------- Script parser -----------
@@ -259,6 +290,98 @@
     }
   }
 
+  // ----------- schedule helpers (timeline) -----------
+  function minutesFromHHMM(hhmm){
+    if(!hhmm) return 8*60;
+    const [h,m] = hhmm.split(":").map(Number);
+    return (h*60 + (m||0));
+  }
+  function hhmmFromMinutes(m){
+    const h = Math.floor(m/60);
+    const mm = String(m%60).padStart(2,"0");
+    return `${String(h).padStart(2,"0")}:${mm}`;
+  }
+  function snap(value, step){ return Math.round(value/step)*step; }
+
+  function ensureDayTimingMaps(d){
+    d.durations = d.durations || {};
+    d.times = d.times || {};
+    d.sceneIds = d.sceneIds || [];
+
+    for(const sid of d.sceneIds){
+      if(typeof d.durations[sid] !== "number") d.durations[sid] = 60;
+    }
+
+    const hasAny = Object.keys(d.times).some(k => typeof d.times[k] === "number");
+    if(!hasAny){
+      let cursor = 0;
+      for(const sid of d.sceneIds){
+        d.times[sid] = cursor;
+        cursor += d.durations[sid] || 60;
+      }
+      return;
+    }
+
+    let end = 0;
+    for(const sid of d.sceneIds){
+      const st = d.times[sid];
+      const dur = d.durations[sid] || 60;
+      if(typeof st === "number") end = Math.max(end, st + dur);
+    }
+    for(const sid of d.sceneIds){
+      if(typeof d.times[sid] !== "number"){
+        d.times[sid] = end;
+        end += d.durations[sid] || 60;
+      }
+    }
+  }
+
+  function sortDaySceneIdsByTime(d){
+    ensureDayTimingMaps(d);
+    d.sceneIds.sort((a,b)=>{
+      const ta = (typeof d.times[a] === "number") ? d.times[a] : Number.POSITIVE_INFINITY;
+      const tb = (typeof d.times[b] === "number") ? d.times[b] : Number.POSITIVE_INFINITY;
+      if(ta !== tb) return ta - tb;
+      return String(a).localeCompare(String(b));
+    });
+  }
+
+  function computeDayGridMin(d){
+    ensureDayTimingMaps(d);
+    let maxEnd = 0;
+    for(const sid of d.sceneIds){
+      const st = d.times[sid] || 0;
+      const dur = d.durations[sid] || 60;
+      maxEnd = Math.max(maxEnd, st + dur);
+    }
+    return Math.max(10*60, maxEnd + 120);
+  }
+
+  function findNonOverlappingStart(d, sceneId, startMin, durMin, snapMin){
+    ensureDayTimingMaps(d);
+    let start = Math.max(0, startMin);
+
+    for(let guard=0; guard<200; guard++){
+      let clashEnd = null;
+      for(const sid of d.sceneIds){
+        if(sid === sceneId) continue;
+        const st = d.times[sid] ?? 0;
+        const du = d.durations[sid] ?? 60;
+        const a0 = start;
+        const a1 = start + durMin;
+        const b0 = st;
+        const b1 = st + du;
+        const overlap = (a0 < b1) && (a1 > b0);
+        if(overlap){
+          clashEnd = Math.max(clashEnd ?? 0, b1);
+        }
+      }
+      if(clashEnd === null) break;
+      start = snap(clashEnd, snapMin);
+    }
+    return start;
+  }
+
   // ----------- Breakdown render -----------
   function renderCatSelects(){
     const sel = el("elCategory");
@@ -310,6 +433,8 @@
       node.disabled = !s;
       node.value = s ? (s[f] ?? "") : "";
     }
+
+    refreshElementSuggestions();
     renderSceneElementsGrid();
   }
 
@@ -319,7 +444,19 @@
     const s = selectedSceneId ? getScene(selectedSceneId) : null;
     if(!s) return;
 
-    for(const cat of cats){
+    const nonEmptyCats = cats.filter(cat => (s.elements?.[cat] || []).length > 0);
+
+    if(nonEmptyCats.length === 0){
+      wrap.innerHTML = `
+        <div class="emptyBox">
+          No hay elementos cargados todavía.<br/>
+          <b>Tip:</b> elegí una categoría arriba y agregá necesidades de la escena (cast, props, vestuario, etc.).
+        </div>
+      `;
+      return;
+    }
+
+    for(const cat of nonEmptyCats){
       const items = s.elements?.[cat] || [];
 
       const row = document.createElement("div");
@@ -336,32 +473,25 @@
       `;
 
       const chipsWrap = row.querySelector(`#chips_${cat}`);
-      if(!items.length){
-        const empty = document.createElement("div");
-        empty.className = "muted small";
-        empty.textContent = "—";
-        chipsWrap.appendChild(empty);
-      }else{
-        items.forEach(it=>{
-          const chip = document.createElement("div");
-          chip.className = "chip";
-          chip.innerHTML = `<span>${esc(it)}</span><button title="Quitar">×</button>`;
-          chip.querySelector("button").addEventListener("click", ()=>{
-            s.elements[cat] = (s.elements[cat]||[]).filter(x=>x!==it);
-            touch();
-            renderSceneElementsGrid();
-            renderDayDetail();
-            renderReports();
-            renderElementsExplorer();
-            renderScheduleBoard();
-            renderDaysBoard();
-            renderSceneBank();
-            renderCallSheetCalendar();
-            renderCallSheet();
-          });
-          chipsWrap.appendChild(chip);
+      items.forEach(it=>{
+        const chip = document.createElement("div");
+        chip.className = "chip";
+        chip.innerHTML = `<span>${esc(it)}</span><button title="Quitar">×</button>`;
+        chip.querySelector("button").addEventListener("click", ()=>{
+          s.elements[cat] = (s.elements[cat]||[]).filter(x=>x!==it);
+          touch();
+          renderSceneElementsGrid();
+          renderDayDetail();
+          renderReports();
+          renderElementsExplorer();
+          renderScheduleBoard();
+          renderDaysBoard();
+          renderSceneBank();
+          renderCallSheetCalendar();
+          renderCallSheet();
         });
-      }
+        chipsWrap.appendChild(chip);
+      });
 
       wrap.appendChild(row);
     }
@@ -439,19 +569,57 @@
   function addSceneElement(){
     const s = selectedSceneId ? getScene(selectedSceneId) : null;
     if(!s) return;
+
     const cat = el("elCategory").value;
-    const item = (el("elItem").value||"").trim();
+    let item = (el("elItem").value||"").trim();
     if(!item) return;
 
+    // Cast: validar contra roster
     if(cat === "cast"){
       const roster = getCastRoster();
       if(!roster.length){
         toast("No hay Cast cargado. Cargalo en Equipo técnico (Área Cast).");
         return;
       }
-      if(!roster.includes(item)){
-        toast("Ese nombre no está en Cast (Equipo técnico). Cargalo ahí primero.");
-        return;
+      // permitir fuzzy cast (pero no inventar)
+      const nIn = normName(item);
+      const exact = roster.find(r => normName(r) === nIn);
+      if(exact) item = exact;
+      else{
+        const close = roster.map(r=>({r, d: levenshtein(normName(r), nIn)}))
+          .sort((a,b)=>a.d-b.d)[0];
+        if(close && close.d <= 2){
+          item = close.r;
+          toast(`Usé Cast existente: ${item}`);
+        }else{
+          toast("Ese nombre no está en Cast (Equipo técnico). Cargalo ahí primero.");
+          return;
+        }
+      }
+    }else{
+      // Deduplicación fuzzy por categoría
+      const existing = getExistingElementsByCat(cat);
+      const nIn = normName(item);
+      const exact = existing.find(v => normName(v) === nIn);
+      if(exact){
+        item = exact;
+        toast(`Ya existía. Usé: ${item}`);
+      }else if(existing.length){
+        let best = null;
+        for(const v of existing){
+          const nv = normName(v);
+          if(!nv) continue;
+          const contains = (nv.includes(nIn) && nIn.length>=4) || (nIn.includes(nv) && nv.length>=4);
+          const d = levenshtein(nv, nIn);
+          const thr = nIn.length <= 10 ? 2 : 3;
+          if(contains || d <= thr){
+            if(!best || d < best.d) best = {v, d};
+          }
+        }
+        if(best){
+          item = best.v;
+          toast(`Nombre similar detectado. Usé: ${item}`);
+        }
       }
     }
 
@@ -460,6 +628,7 @@
 
     el("elItem").value="";
     touch();
+    refreshElementSuggestions();
     renderSceneElementsGrid();
     renderDayDetail();
     renderReports();
@@ -531,14 +700,14 @@
     const d = {
       id: uid("day"),
       date:"",
-      callTime:"",
+      callTime:"08:00",
       location:"",
       label:"",
       notes:"",
       sceneIds:[],
       crewIds:[],
       durations:{},
-      times:{} // ✅ start offsets (minutes after callTime)
+      times:{}
     };
     state.shootDays.push(d);
     sortShootDaysInPlace();
@@ -577,31 +746,6 @@
     return null;
   }
 
-  function renderSceneBank(){
-    const wrap = el("sceneBankList");
-    if(!wrap) return;
-    wrap.innerHTML = "";
-
-    const q = (el("bankSearch")?.value||"").toLowerCase();
-    const filter = el("bankFilter")?.value || "all";
-
-    let list = state.scenes.slice();
-    if(filter === "unassigned"){
-      list = list.filter(s=>!sceneAssignedDayId(s.id));
-    }
-    if(q){
-      list = list.filter(s=>{
-        const hay = `${s.number} ${s.slugline} ${s.location} ${s.summary}`.toLowerCase();
-        return hay.includes(q);
-      });
-    }
-
-    for(const s of list){
-      const fromDay = sceneAssignedDayId(s.id);
-      wrap.appendChild(sceneCardNode(s, fromDay));
-    }
-  }
-
   function sceneCardNode(s, fromDayId){
     const node = document.createElement("div");
     node.className = "sceneCard";
@@ -627,132 +771,36 @@
     return node;
   }
 
-  function setDayFieldHandlers(){
-    const d = selectedDayId ? getDay(selectedDayId) : null;
-    const map = {
-      day_date: "date",
-      day_call: "callTime",
-      day_location:"location",
-      day_label:"label",
-      day_notes:"notes"
-    };
-    for(const id in map){
-      const node = el(id);
-      if(!node) continue;
-      node.disabled = !d;
-      node.value = d ? (d[map[id]] || "") : "";
+  function renderSceneBank(){
+    const wrap = el("sceneBankList");
+    if(!wrap) return;
+    wrap.innerHTML = "";
+
+    const q = (el("bankSearch")?.value||"").toLowerCase();
+    const filter = el("bankFilter")?.value || "all";
+
+    let list = state.scenes.slice();
+    if(filter === "unassigned"){
+      list = list.filter(s=>!sceneAssignedDayId(s.id));
+    }
+    if(q){
+      list = list.filter(s=>{
+        const hay = `${s.number} ${s.slugline} ${s.location} ${s.summary}`.toLowerCase();
+        return hay.includes(q);
+      });
+    }
+
+    for(const s of list){
+      const fromDay = sceneAssignedDayId(s.id);
+      wrap.appendChild(sceneCardNode(s, fromDay));
     }
   }
 
-  function dayScenes(d){
-    return (d.sceneIds||[]).map(getScene).filter(Boolean);
-  }
-
-  // ✅ schedule helpers (new timeline model)
-  function minutesFromHHMM(hhmm){
-    if(!hhmm) return 8*60;
-    const [h,m] = hhmm.split(":").map(Number);
-    return (h*60 + (m||0));
-  }
-  function hhmmFromMinutes(m){
-    const h = Math.floor(m/60);
-    const mm = String(m%60).padStart(2,"0");
-    return `${String(h).padStart(2,"0")}:${mm}`;
-  }
-  function snap(value, step){ return Math.round(value/step)*step; }
-
-  function ensureDayTimingMaps(d){
-    d.durations = d.durations || {};
-    d.times = d.times || {};
-    d.sceneIds = d.sceneIds || [];
-
-    // default durations
-    for(const sid of d.sceneIds){
-      if(typeof d.durations[sid] !== "number") d.durations[sid] = 60;
-    }
-
-    const hasAny = Object.keys(d.times).some(k => typeof d.times[k] === "number");
-    if(!hasAny){
-      // migrate old behavior: sequential
-      let cursor = 0;
-      for(const sid of d.sceneIds){
-        d.times[sid] = cursor;
-        cursor += d.durations[sid] || 60;
-      }
-      return;
-    }
-
-    // fill missing at end
-    let end = 0;
-    for(const sid of d.sceneIds){
-      const st = d.times[sid];
-      const dur = d.durations[sid] || 60;
-      if(typeof st === "number") end = Math.max(end, st + dur);
-    }
-    for(const sid of d.sceneIds){
-      if(typeof d.times[sid] !== "number"){
-        d.times[sid] = end;
-        end += d.durations[sid] || 60;
-      }
-    }
-  }
-
-  function sortDaySceneIdsByTime(d){
-    ensureDayTimingMaps(d);
-    d.sceneIds.sort((a,b)=>{
-      const ta = (typeof d.times[a] === "number") ? d.times[a] : Number.POSITIVE_INFINITY;
-      const tb = (typeof d.times[b] === "number") ? d.times[b] : Number.POSITIVE_INFINITY;
-      if(ta !== tb) return ta - tb;
-      return String(a).localeCompare(String(b));
-    });
-  }
-
-  function computeDayGridMin(d){
-    ensureDayTimingMaps(d);
-    let maxEnd = 0;
-    for(const sid of d.sceneIds){
-      const st = d.times[sid] || 0;
-      const dur = d.durations[sid] || 60;
-      maxEnd = Math.max(maxEnd, st + dur);
-    }
-    // at least 10 hours, and some padding after last scene
-    return Math.max(10*60, maxEnd + 120);
-  }
-
-  function findNonOverlappingStart(d, sceneId, startMin, durMin, snapMin){
-    ensureDayTimingMaps(d);
-    let start = Math.max(0, startMin);
-
-    // try to push forward to avoid overlaps (without moving others)
-    for(let guard=0; guard<200; guard++){
-      let clashEnd = null;
-      for(const sid of d.sceneIds){
-        if(sid === sceneId) continue;
-        const st = d.times[sid] ?? 0;
-        const du = d.durations[sid] ?? 60;
-        const a0 = start;
-        const a1 = start + durMin;
-        const b0 = st;
-        const b1 = st + du;
-        const overlap = (a0 < b1) && (a1 > b0);
-        if(overlap){
-          clashEnd = Math.max(clashEnd ?? 0, b1);
-        }
-      }
-      if(clashEnd === null) break;
-      start = snap(clashEnd, snapMin);
-    }
-    return start;
-  }
-
-  // Drop from scene bank into a day (plan board)
   function moveSceneToDayAtEnd(sceneId, targetDayId){
     let fromDay = null;
     for(const d of state.shootDays){
       if((d.sceneIds||[]).includes(sceneId)) fromDay = d;
       d.sceneIds = (d.sceneIds||[]).filter(x=>x!==sceneId);
-      if(d.durations) delete d.durations[sceneId];
-      if(d.times) delete d.times[sceneId];
     }
 
     const targetDay = getDay(targetDayId);
@@ -760,13 +808,11 @@
 
     ensureDayTimingMaps(targetDay);
 
-    // keep duration if existed
     let dur = 60;
     if(fromDay && fromDay.durations && typeof fromDay.durations[sceneId] === "number") dur = fromDay.durations[sceneId];
 
     targetDay.durations[sceneId] = dur;
 
-    // place at end
     let end = 0;
     for(const sid of targetDay.sceneIds){
       const st = targetDay.times[sid] ?? 0;
@@ -849,13 +895,12 @@
 
           const st = d.times[sid] ?? 0;
           const dur = d.durations[sid] ?? 60;
+          const base = minutesFromHHMM(d.callTime || "08:00");
 
           const card = sceneCardNode(s, d.id);
-          // extra hint time
           const meta = card.querySelector(".meta");
           if(meta){
-            const base = minutesFromHHMM(d.callTime || "08:00");
-            meta.textContent = `${meta.textContent} · ${hhmmFromMinutes(base + st)} (${dur}m)`;
+            meta.textContent = `${esc(s.location||"")} · ${esc(s.timeOfDay||"")} · ${hhmmFromMinutes(base + st)} (${dur}m)`;
           }
           zone.appendChild(card);
         }
@@ -870,6 +915,27 @@
 
       board.appendChild(col);
     }
+  }
+
+  function setDayFieldHandlers(){
+    const d = selectedDayId ? getDay(selectedDayId) : null;
+    const map = {
+      day_date: "date",
+      day_call: "callTime",
+      day_location:"location",
+      day_label:"label",
+      day_notes:"notes"
+    };
+    for(const id in map){
+      const node = el(id);
+      if(!node) continue;
+      node.disabled = !d;
+      node.value = d ? (d[map[id]] || "") : "";
+    }
+  }
+
+  function dayScenes(d){
+    return (d.sceneIds||[]).map(getScene).filter(Boolean);
   }
 
   function renderDayCast(){
@@ -898,57 +964,55 @@
     const d = selectedDayId ? getDay(selectedDayId) : null;
     if(!d){ wrap.innerHTML = `<div class="muted">Seleccioná un día</div>`; return; }
 
-    const byArea = {};
-    for(const c of state.crew){
-      const a = c.area || "Otros";
-      if(String(a).trim().toLowerCase() === "cast") continue;
-      byArea[a] = byArea[a] || [];
-      byArea[a].push(c);
-    }
-    const areas = Object.keys(byArea).sort((a,b)=>a.localeCompare(b));
+    // crew (sin Cast)
+    const crew = state.crew
+      .filter(c=>String(c.area||"").trim().toLowerCase()!=="cast");
 
-    if(!areas.length){
+    if(!crew.length){
       wrap.innerHTML = `<div class="muted">No cargaste equipo técnico todavía.</div>`;
       return;
     }
 
-    for(const area of areas){
-      const box = document.createElement("div");
-      box.className = "listItem";
-      box.style.flexDirection = "column";
-      box.innerHTML = `<div class="title">${esc(area)}</div>`;
-      const inner = document.createElement("div");
-      inner.className = "list";
-      inner.style.marginTop = "8px";
+    // Orden por área (y luego rol/nombre)
+    const areaIndex = new Map(crewAreas.map((a,i)=>[a,i]));
+    const sorted = crew.slice().sort((a,b)=>{
+      const ia = areaIndex.get(a.area)||999;
+      const ib = areaIndex.get(b.area)||999;
+      if(ia!==ib) return ia-ib;
+      const ra = (a.role||"").toLowerCase();
+      const rb = (b.role||"").toLowerCase();
+      if(ra!==rb) return ra.localeCompare(rb);
+      return (a.name||"").localeCompare(b.name||"");
+    });
 
-      byArea[area].forEach(c=>{
-        const row = document.createElement("div");
-        row.className = "listItem";
-        row.style.alignItems = "center";
-        row.innerHTML = `
-          <div style="display:flex;gap:10px;align-items:center;">
-            <input type="checkbox" ${ (d.crewIds||[]).includes(c.id) ? "checked":"" } />
-            <div>
-              <div class="title">${esc(c.name||"(sin nombre)")}</div>
-              <div class="meta">${esc(c.role||"")} · ${esc(c.phone||"")}</div>
-            </div>
+    const selected = new Set(d.crewIds||[]);
+
+    for(const c of sorted){
+      const isSel = selected.has(c.id);
+      const item = document.createElement("div");
+      item.className = "crewPickItem" + (isSel ? " selected" : "");
+      item.innerHTML = `
+        <div class="left">
+          <span class="statusDot"></span>
+          <div>
+            <div class="title">${esc(c.name||"(sin nombre)")}</div>
+            <div class="meta">${esc(c.area||"")} · ${esc(c.role||"")} ${c.phone? " · "+esc(c.phone):""}</div>
           </div>
-        `;
-        const cb = row.querySelector("input");
-        cb.addEventListener("change", ()=>{
-          d.crewIds = d.crewIds || [];
-          if(cb.checked) d.crewIds.push(c.id);
-          else d.crewIds = d.crewIds.filter(x=>x!==c.id);
-          d.crewIds = Array.from(new Set(d.crewIds));
-          touch();
-          renderReports();
-          renderCallSheet();
-        });
-        inner.appendChild(row);
+        </div>
+        <div class="muted small">${isSel ? "Citado" : "No citado"}</div>
+      `;
+      item.addEventListener("click", ()=>{
+        d.crewIds = d.crewIds || [];
+        const idx = d.crewIds.indexOf(c.id);
+        if(idx>=0) d.crewIds.splice(idx,1);
+        else d.crewIds.push(c.id);
+        d.crewIds = Array.from(new Set(d.crewIds));
+        touch();
+        renderDayCrewPicker();
+        renderReports();
+        renderCallSheet();
       });
-
-      box.appendChild(inner);
-      wrap.appendChild(box);
+      wrap.appendChild(item);
     }
   }
 
@@ -1000,8 +1064,10 @@
       chips.className = "chips";
       chips.style.marginTop="8px";
 
-      for(const cat of Object.keys(needsByDept[dept])){
-        needsByDept[dept][cat].forEach(it=>{
+      for(const cat of cats){
+        const arr = needsByDept[dept][cat];
+        if(!arr) continue;
+        arr.forEach(it=>{
           const chip = document.createElement("div");
           chip.className = "chip";
           chip.innerHTML = `
@@ -1023,12 +1089,12 @@
     wrap.innerHTML = "";
     const d = selectedDayId ? getDay(selectedDayId) : null;
     if(!d || !d.date){
-      wrap.innerHTML = `<div class="muted">Poné fecha al día para filtrar cronograma (rangos).</div>`;
+      wrap.innerHTML = `<div class="muted">Poné fecha al día para mostrar ítems de rango que caen en este día.</div>`;
       return;
     }
     const day = d.date;
 
-    const hits = state.scheduleItems.filter(it=>{
+    const hits = (state.scheduleItems||[]).filter(it=>{
       if(!it.startDate && !it.endDate) return false;
       const a = it.startDate || it.endDate;
       const b = it.endDate || it.startDate;
@@ -1036,7 +1102,7 @@
     });
 
     if(!hits.length){
-      wrap.innerHTML = `<div class="muted">No hay ítems del cronograma para este día.</div>`;
+      wrap.innerHTML = `<div class="muted">No hay rangos que caigan en este día.</div>`;
       return;
     }
 
@@ -1046,7 +1112,7 @@
       row.innerHTML = `
         <div>
           <div class="title">${esc(it.name||"")}</div>
-          <div class="meta">${esc(it.startDate||"")} → ${esc(it.endDate||"")} · ${esc(it.status||"")}</div>
+          <div class="meta">${esc(it.startDate||"")} → ${esc(it.endDate||"")} ${it.status? " · "+esc(it.status):""}</div>
         </div>
       `;
       wrap.appendChild(row);
@@ -1061,7 +1127,7 @@
     renderDaySchedule();
   }
 
-  // ----------- Elements explorer (unchanged) -----------
+  // ----------- Elements explorer (sin cambios relevantes) -----------
   function populateElementsFilters(){
     const catSel = el("elxCategory");
     const daySel = el("elxDay");
@@ -1204,7 +1270,7 @@
       <div class="title">
         <span class="catBadge"><span class="dot" style="background:${catColors[info.cat]}"></span>${esc(info.item)}</span>
       </div>
-      <div class="meta">${esc(catNames[info.cat])} · ${esc(dayFilter==="all"?"Todos los días":(dayFilter==="unassigned"?"No asignadas":formatDayTitle(getDay(dayFilter)?.date)))}</div>
+      <div class="meta">${esc(catNames[info.cat])}</div>
     `;
     wrap.appendChild(header);
 
@@ -1235,8 +1301,7 @@
     state.crew.push({ id: uid("crew"), area:"Producción", role:"", name:"", phone:"", email:"", notes:"" });
     touch();
     renderCrew();
-    renderCastDatalist();
-    updateAddElementUI();
+    refreshElementSuggestions();
     renderDayDetail();
     renderReports();
     renderCallSheet();
@@ -1244,9 +1309,41 @@
 
   function renderCrew(){
     const tbody = el("crewTable").querySelector("tbody");
+    const q = (el("crewSearch")?.value || "").trim().toLowerCase();
     tbody.innerHTML = "";
 
-    state.crew.forEach(c=>{
+    const areaIndex = new Map(crewAreas.map((a,i)=>[a,i]));
+
+    let list = state.crew.slice();
+
+    if(q){
+      list = list.filter(c=>{
+        const hay = `${c.area} ${c.role} ${c.name} ${c.phone} ${c.email} ${c.notes}`.toLowerCase();
+        return hay.includes(q);
+      });
+    }
+
+    list.sort((a,b)=>{
+      const ia = areaIndex.get(a.area)||999;
+      const ib = areaIndex.get(b.area)||999;
+      if(ia!==ib) return ia-ib;
+      const ra = (a.role||"").toLowerCase();
+      const rb = (b.role||"").toLowerCase();
+      if(ra!==rb) return ra.localeCompare(rb);
+      return (a.name||"").localeCompare(b.name||"");
+    });
+
+    let lastArea = null;
+
+    list.forEach(c=>{
+      if(c.area !== lastArea){
+        const trG = document.createElement("tr");
+        trG.className = "groupRow";
+        trG.innerHTML = `<td colspan="7">${esc(c.area||"Otros")}</td>`;
+        tbody.appendChild(trG);
+        lastArea = c.area;
+      }
+
       const tr = document.createElement("tr");
       tr.innerHTML = `
         <td>
@@ -1264,17 +1361,16 @@
 
       const [areaSel, role, name, phone, email, notes] = tr.querySelectorAll("select,input");
 
-      const refreshCastEverywhere = ()=>{
-        renderCastDatalist();
-        updateAddElementUI();
+      const refreshEverywhere = ()=>{
+        refreshElementSuggestions();
         renderDayDetail();
         renderReports();
         renderCallSheet();
       };
 
-      areaSel.addEventListener("change", ()=>{ c.area = areaSel.value; touch(); refreshCastEverywhere(); });
-      role.addEventListener("input", ()=>{ c.role = role.value; touch(); refreshCastEverywhere(); });
-      name.addEventListener("input", ()=>{ c.name = name.value; touch(); refreshCastEverywhere(); });
+      areaSel.addEventListener("change", ()=>{ c.area = areaSel.value; touch(); renderCrew(); refreshEverywhere(); });
+      role.addEventListener("input", ()=>{ c.role = role.value; touch(); refreshEverywhere(); });
+      name.addEventListener("input", ()=>{ c.name = name.value; touch(); refreshEverywhere(); });
       phone.addEventListener("input", ()=>{ c.phone = phone.value; touch(); });
       email.addEventListener("input", ()=>{ c.email = email.value; touch(); });
       notes.addEventListener("input", ()=>{ c.notes = notes.value; touch(); });
@@ -1287,14 +1383,20 @@
         state.crew = state.crew.filter(x=>x.id!==c.id);
         touch();
         renderCrew();
-        refreshCastEverywhere();
+        refreshEverywhere();
       });
 
       tbody.appendChild(tr);
     });
+
+    if(!list.length){
+      const tr = document.createElement("tr");
+      tr.innerHTML = `<td colspan="7" class="muted">No hay resultados.</td>`;
+      tbody.appendChild(tr);
+    }
   }
 
-  // ----------- Reports (unchanged except uses day.sceneIds order) -----------
+  // ----------- Reports (más claro cast/crew) -----------
   function renderReports(){
     const board = el("reportsBoard");
     if(!board) return;
@@ -1315,54 +1417,52 @@
       const cast = union(scenes.flatMap(s=>s.elements?.cast || []));
       const crew = (d.crewIds||[]).map(getCrew).filter(Boolean);
 
-      const needsByCat = {};
-      for(const cat of cats){
-        if(cat === "cast") continue;
-        const items = union(scenes.flatMap(s=>s.elements?.[cat] || []));
-        if(items.length) needsByCat[cat] = items;
+      const crewByArea = {};
+      for(const c of crew){
+        const a = c.area || "Otros";
+        crewByArea[a] = crewByArea[a] || [];
+        crewByArea[a].push(c);
       }
-
-      const needsHtml = Object.keys(needsByCat).length ? `
-        <div class="needsStack">
-          ${cats.filter(c=>needsByCat[c]).map(cat=>`
-            <div class="needCatBlock">
-              <div class="needCatHead">
-                <div class="name">
-                  <span class="catBadge"><span class="dot" style="background:${catColors[cat]}"></span>${esc(catNames[cat])}</span>
-                </div>
-                <div class="muted small">${needsByCat[cat].length}</div>
-              </div>
-              <div class="needItems">
-                ${needsByCat[cat].map(it=>`
-                  <div class="chip"><span>${esc(it)}</span></div>
-                `).join("")}
-              </div>
-            </div>
-          `).join("")}
-        </div>
-      ` : `<div class="muted">-</div>`;
 
       const col = document.createElement("div");
       col.className = "reportCol";
       col.innerHTML = `
         <div class="title">${esc(formatDayTitle(d.date))}</div>
         <div class="meta">Call ${esc(d.callTime||"")} · ${esc(d.location||"")}</div>
-        <div class="hr"></div>
 
-        <div class="muted"><b>Escenas:</b> ${esc(scenes.map(s=>`#${s.number}`).join(", ") || "-")}</div>
-        <div class="muted" style="margin-top:6px;"><b>Cast:</b> ${esc(cast.join(", ") || "-")}</div>
-        <div class="muted" style="margin-top:6px;"><b>Crew:</b> ${esc(crew.map(c=>`${c.area} · ${c.role} · ${c.name}`).join(" | ") || "-")}</div>
+        <div class="sectionTitle">Escenas</div>
+        <div class="muted">${esc(scenes.map(s=>`#${s.number}`).join(", ") || "-")}</div>
 
-        <details style="margin-top:10px;">
-          <summary class="muted">Necesidades</summary>
-          ${needsHtml}
-        </details>
+        <div class="sectionTitle">Cast citado</div>
+        <div class="chips" style="margin-top:8px;">
+          ${cast.length ? cast.map(n=>`
+            <div class="chip"><span class="catBadge"><span class="dot" style="background:${catColors.cast}"></span>${esc(n)}</span></div>
+          `).join("") : `<span class="muted">-</span>`}
+        </div>
+
+        <div class="sectionTitle">Crew citado</div>
+        <div style="margin-top:8px;">
+          ${Object.keys(crewByArea).length ? Object.keys(crewByArea).sort().map(area=>`
+            <div class="needCatBlock" style="margin-bottom:10px;">
+              <div class="needCatHead">
+                <div class="name"><b>${esc(area)}</b></div>
+                <div class="muted small">${crewByArea[area].length}</div>
+              </div>
+              <div class="needItems">
+                ${crewByArea[area].map(c=>`
+                  <div class="chip"><span>${esc(`${c.role||""} — ${c.name||""}`)}</span></div>
+                `).join("")}
+              </div>
+            </div>
+          `).join("") : `<span class="muted">-</span>`}
+        </div>
 
         <div class="row gap" style="margin-top:12px;">
           <button class="btn">Abrir día</button>
           <button class="btn">Call Sheet</button>
         </div>
       `;
+
       const [bOpen,bCS] = col.querySelectorAll("button");
       bOpen.addEventListener("click", ()=>{
         selectedDayId = d.id;
@@ -1381,7 +1481,7 @@
     }
   }
 
-  // ----------- Call sheet calendar / sheet (unchanged) -----------
+  // ----------- Call sheets (igual a tu versión previa, sin cambios críticos) -----------
   function monthTitle(year, month){
     const d = new Date(year, month, 1);
     const m = new Intl.DateTimeFormat("es-AR",{month:"long"}).format(d);
@@ -1411,7 +1511,7 @@
     });
 
     const first = new Date(calCursor.year, calCursor.month, 1);
-    const firstDow = (first.getDay() + 6) % 7; // monday=0
+    const firstDow = (first.getDay() + 6) % 7;
 
     const shootByDate = new Map();
     for(const sd of state.shootDays){
@@ -1458,7 +1558,7 @@
     ensureDayTimingMaps(d);
     sortDaySceneIdsByTime(d);
 
-    const scenes = dayScenes(d);
+    const scenes = (d.sceneIds||[]).map(getScene).filter(Boolean);
     const cast = union(scenes.flatMap(s=>s.elements?.cast || []));
     const crew = (d.crewIds||[]).map(getCrew).filter(Boolean);
 
@@ -1467,12 +1567,6 @@
       const a = c.area || "Otros";
       crewByArea[a] = crewByArea[a] || [];
       crewByArea[a].push(c);
-    }
-
-    const needsByCat = {};
-    for(const cat of cats){
-      const items = union(scenes.flatMap(s=>s.elements?.[cat] || []));
-      if(items.length) needsByCat[cat] = items;
     }
 
     wrap.innerHTML = `
@@ -1520,40 +1614,25 @@
 
       <h3>Equipo técnico (por área)</h3>
       ${Object.keys(crewByArea).length ? Object.keys(crewByArea).sort().map(area=>`
-        <div class="listItem" style="flex-direction:column; margin:10px 0;">
-          <div class="title">${esc(area)}</div>
-          <div class="meta">
-            ${crewByArea[area].map(c=>esc(`${c.role||""} — ${c.name||""} ${c.phone? "("+c.phone+")":""}`)).join("<br/>")}
+        <div class="needCatBlock" style="margin:10px 0;">
+          <div class="needCatHead">
+            <div class="name"><b>${esc(area)}</b></div>
+            <div class="muted small">${crewByArea[area].length}</div>
+          </div>
+          <div class="needItems">
+            ${crewByArea[area].map(c=>`<div class="chip"><span>${esc(`${c.role||""} — ${c.name||""}`)}</span></div>`).join("")}
           </div>
         </div>
       `).join("") : `<div class="muted">-</div>`}
 
       <div class="hr"></div>
 
-      <h3>Necesidades (por categoría)</h3>
-      ${cats.filter(c=>needsByCat[c] && needsByCat[c].length).length ? `
-        <div class="needsStack">
-          ${cats.filter(c=>needsByCat[c] && needsByCat[c].length).map(cat=>`
-            <div class="needCatBlock">
-              <div class="needCatHead">
-                <div class="name"><span class="catBadge"><span class="dot" style="background:${catColors[cat]}"></span>${esc(catNames[cat])}</span></div>
-                <div class="muted small">${needsByCat[cat].length}</div>
-              </div>
-              <div class="needItems">
-                ${needsByCat[cat].map(it=>`<div class="chip"><span>${esc(it)}</span></div>`).join("")}
-              </div>
-            </div>
-          `).join("")}
-        </div>
-      ` : `<div class="muted">-</div>`}
-
-      <div class="hr"></div>
       <h3>Notas</h3>
       <div class="muted">${esc(d.notes||"-")}</div>
     `;
   }
 
-  // ----------- Schedule timeline (NEW) -----------
+  // ----------- Schedule timeline -----------
   function buildSceneTooltipHTML(scene){
     const parts = [];
     parts.push(`<div class="t">#${esc(scene.number||"")} — ${esc(scene.slugline||"")}</div>`);
@@ -1694,9 +1773,9 @@
         });
         block.addEventListener("mouseleave", ()=>hideHoverTip());
 
-        block.addEventListener("click", (e)=>{
-          if(e.target.classList.contains("resize")) return;
-          if(schedDrag) return;
+        // ✅ doble click abre breakdown
+        block.addEventListener("dblclick", (e)=>{
+          e.preventDefault();
           selectedSceneId = sid;
           showView("breakdown");
           renderScenesTable();
@@ -1719,7 +1798,7 @@
           hideHoverTip();
         });
 
-        // ✅ drag to change start time (timeline)
+        // drag to change start time
         block.addEventListener("mousedown", (e)=>{
           if(e.button !== 0) return;
           if(e.target.classList.contains("resize")) return;
@@ -1731,7 +1810,7 @@
           const rect = block.getBoundingClientRect();
           const ghost = document.createElement("div");
           ghost.className = "dragGhost";
-          ghost.innerHTML = `<div style="font-weight:900;">#${esc(s.number||"")} — ${esc(s.slugline||"")}</div><div style="color:var(--muted);font-size:12px;margin-top:4px;">${esc(formatDayTitle(d.date))}</div>`;
+          ghost.innerHTML = `<div style="font-weight:900;">#${esc(s.number||"")} — ${esc(s.slugline||"")}</div><div style="color:rgba(233,240,255,.65);font-size:12px;margin-top:4px;">${esc(formatDayTitle(d.date))}</div>`;
           document.body.appendChild(ghost);
 
           schedDrag = {
@@ -1775,7 +1854,6 @@
       d.durations = d.durations || {};
       d.durations[resizing.sceneId] = newDur;
 
-      // keep start time, only duration changes (timeline-friendly)
       touch();
       renderScheduleBoard();
       renderDaysBoard();
@@ -1815,7 +1893,6 @@
       startMin = Math.max(0, startMin);
     }
 
-    // avoid overlaps by pushing forward
     startMin = findNonOverlappingStart(targetDay, schedDrag.sceneId, startMin, schedDrag.dur, schedDrag.snapMin);
 
     schedDrag.targetDayId = dayId;
@@ -1831,7 +1908,7 @@
 
     if(!schedDrag) return;
 
-    const { sceneId, fromDayId, targetDayId, targetStartMin, dur, ghostEl } = schedDrag;
+    const { sceneId, fromDayId, targetDayId, targetStartMin, dur, ghostEl, snapMin } = schedDrag;
 
     ghostEl?.remove();
     document.body.style.userSelect = "";
@@ -1846,11 +1923,9 @@
       ensureDayTimingMaps(toDay);
 
       if(fromDayId === targetDayId){
-        // move within day: just update start time
         toDay.times[sceneId] = Math.max(0, targetStartMin);
         sortDaySceneIdsByTime(toDay);
       }else{
-        // move across days
         fromDay.sceneIds = (fromDay.sceneIds||[]).filter(x=>x!==sceneId);
         if(fromDay.durations) delete fromDay.durations[sceneId];
         if(fromDay.times) delete fromDay.times[sceneId];
@@ -1861,13 +1936,9 @@
 
         toDay.sceneIds.push(sceneId);
         toDay.sceneIds = Array.from(new Set(toDay.sceneIds));
-
         toDay.durations[sceneId] = dur || 60;
         toDay.times[sceneId] = Math.max(0, targetStartMin);
-
-        // avoid overlap final
-        toDay.times[sceneId] = findNonOverlappingStart(toDay, sceneId, toDay.times[sceneId], toDay.durations[sceneId], schedDrag.snapMin);
-
+        toDay.times[sceneId] = findNonOverlappingStart(toDay, sceneId, toDay.times[sceneId], toDay.durations[sceneId], snapMin);
         sortDaySceneIdsByTime(toDay);
       }
 
@@ -1898,7 +1969,7 @@
     renderDaysBoard();
   }
 
-  // ----------- Settings / JSONBin -----------
+  // ----------- Settings / JSONBin / Rangos -----------
   async function doPull(){
     const cfg = StorageLayer.loadCfg();
     if(!cfg.binId || !cfg.accessKey){ toast("Config JSONBin incompleta"); showView("settings"); return; }
@@ -1958,6 +2029,62 @@
     updateSyncPill(cfg.binId && cfg.accessKey ? "JSONBin" : "Local");
   }
 
+  function renderRanges(){
+    const wrap = el("rangeList");
+    if(!wrap) return;
+    wrap.innerHTML = "";
+
+    const list = (state.scheduleItems||[]).slice().sort((a,b)=>{
+      const ta = a.startDate ? Date.parse(a.startDate+"T00:00:00") : 0;
+      const tb = b.startDate ? Date.parse(b.startDate+"T00:00:00") : 0;
+      return ta - tb;
+    });
+
+    if(!list.length){
+      wrap.innerHTML = `<div class="muted">No hay ítems todavía.</div>`;
+      return;
+    }
+
+    list.forEach(it=>{
+      const row = document.createElement("div");
+      row.className = "listItem";
+      row.innerHTML = `
+        <div>
+          <div class="title">${esc(it.name||"")}</div>
+          <div class="meta">${esc(it.startDate||"")} → ${esc(it.endDate||"")} ${it.status? " · "+esc(it.status):""}</div>
+        </div>
+        <div class="row gap">
+          <button class="btn danger">Borrar</button>
+        </div>
+      `;
+      row.querySelector("button").addEventListener("click", ()=>{
+        if(!confirm("Borrar ítem?")) return;
+        state.scheduleItems = (state.scheduleItems||[]).filter(x=>x.id!==it.id);
+        touch();
+        renderRanges();
+        renderDaySchedule();
+      });
+      wrap.appendChild(row);
+    });
+  }
+
+  function addRangeFromUI(){
+    const name = (el("range_name").value||"").trim();
+    const start = (el("range_start").value||"").trim();
+    const end = (el("range_end").value||"").trim();
+    const status = (el("range_status").value||"").trim();
+    if(!name || !start || !end){
+      toast("Nombre + fecha inicio + fecha fin");
+      return;
+    }
+    state.scheduleItems = state.scheduleItems || [];
+    state.scheduleItems.push({ id: uid("rng"), name, startDate:start, endDate:end, status });
+    el("range_name").value=""; el("range_start").value=""; el("range_end").value=""; el("range_status").value="";
+    touch();
+    renderRanges();
+    renderDaySchedule();
+  }
+
   function setResetKeyFromUI(){
     const a = el("cfg_resetKey").value || "";
     const b = el("cfg_resetKeyConfirm").value || "";
@@ -1994,6 +2121,7 @@
         if(v === "schedule") renderScheduleBoard();
         if(v === "reports") renderReports();
         if(v === "callsheet"){ renderCallSheetCalendar(); renderCallSheet(); }
+        if(v === "settings") renderRanges();
       });
     });
 
@@ -2019,12 +2147,15 @@
         renderElementsExplorer();
         renderScheduleBoard();
         renderCallSheet();
+        refreshElementSuggestions();
       });
     });
 
     el("btnAddSceneElement")?.addEventListener("click", addSceneElement);
-
-    el("elCategory")?.addEventListener("change", ()=>updateAddElementUI());
+    el("elCategory")?.addEventListener("change", ()=>{
+      refreshElementSuggestions();
+    });
+    el("elItem")?.addEventListener("input", ()=>refreshElementSuggestions());
 
     el("btnImportScenes")?.addEventListener("click", importScenesTable);
     el("btnClearImport")?.addEventListener("click", ()=>{ el("sceneImportText").value=""; });
@@ -2084,6 +2215,7 @@
 
     // crew
     el("btnAddCrew")?.addEventListener("click", addCrew);
+    el("crewSearch")?.addEventListener("input", renderCrew);
 
     // reports
     el("btnRefreshReports")?.addEventListener("click", renderReports);
@@ -2106,6 +2238,7 @@
     el("btnPush")?.addEventListener("click", doPush);
     el("btnSaveCfg")?.addEventListener("click", saveCfgFromUI);
     el("btnTestCfg")?.addEventListener("click", testCfg);
+    el("btnAddRange")?.addEventListener("click", addRangeFromUI);
     el("btnSetResetKey")?.addEventListener("click", setResetKeyFromUI);
     el("btnReset")?.addEventListener("click", doReset);
 
@@ -2118,8 +2251,7 @@
 
   function hydrateUI(){
     renderCatSelects();
-    renderCastDatalist();
-    updateAddElementUI();
+    refreshElementSuggestions();
 
     el("projectTitle").value = state.meta.title || "Proyecto";
 
@@ -2145,14 +2277,19 @@
     renderCallSheetCalendar();
     renderCallSheet();
     renderScheduleBoard();
+    renderRanges();
   }
 
   function init(){
     const local = StorageLayer.loadLocal();
     state = (local && local.meta) ? local : defaultState();
 
-    // migrate older days missing fields
+    // migrate
     state.shootDays = state.shootDays || [];
+    state.crew = state.crew || [];
+    state.scheduleItems = state.scheduleItems || [];
+    state.scenes = state.scenes || [];
+
     for(const d of state.shootDays){
       d.sceneIds = d.sceneIds || [];
       d.crewIds = d.crewIds || [];
