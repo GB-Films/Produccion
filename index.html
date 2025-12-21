@@ -30,7 +30,6 @@
       <div class="sideFoot">
         <div class="hr" style="margin:8px 0;"></div>
 
-        <!-- Sync abajo a la izquierda -->
         <button class="navBtn sideSettingsBtn" data-view="settings">Sync / Ajustes</button>
 
         <div style="height:8px;"></div>
@@ -218,7 +217,8 @@
 
               <div class="pairs">
                 <label class="field"><span>Fecha</span><input id="day_date" class="input" type="date"/></label>
-                <label class="field"><span>Call time</span><input id="day_call" class="input" type="time"/></label>
+                <!-- step 900 = 15 minutos -->
+                <label class="field"><span>Call time</span><input id="day_call" class="input" type="time" step="900"/></label>
                 <label class="field"><span>Locación</span><input id="day_location" class="input"/></label>
                 <label class="field"><span>Nombre (opcional)</span><input id="day_label" class="input" placeholder="Ej: Día 3 - Casa"/></label>
               </div>
