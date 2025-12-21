@@ -40,11 +40,8 @@
   let callSheetDayId = null;
   let selectedElementKey = null;
 
-  // schedule drag / resize
-  let pendingDrag = null; // {sceneId, fromDayId, startY, startX, startMin, pxPerMin}
-  let schedDrag = null;   // active
-  let resizing = null;    // {sceneId, dayId, startY, startDur, pxPerMin}
-
+  // schedule resize only
+  let resizing = null; // {sceneId, dayId, startY, startDur, pxPerMin, snapMin}
   let nativeDragActive = false;
 
   let calCursor = { year: new Date().getFullYear(), month: new Date().getMonth() };
@@ -236,7 +233,7 @@
   }
   function attachSceneHover(node, scene){
     node.addEventListener("mouseenter", (e)=>{
-      if(nativeDragActive || schedDrag || pendingDrag || resizing) return;
+      if(nativeDragActive || resizing) return;
       showHoverTip(buildSceneTooltipHTML(scene), e.clientX, e.clientY);
     });
     node.addEventListener("mousemove", (e)=>{
@@ -312,6 +309,13 @@
     const mi = String(mm%60).padStart(2,"0");
     return `${String(h).padStart(2,"0")}:${mi}`;
   }
+  // ✅ para que NO “reinicie” en 00:00 sin avisar
+  function fmtClock(totalMinutes){
+    const days = Math.floor(totalMinutes / (24*60));
+    const base = hhmmFromMinutes(totalMinutes);
+    return days > 0 ? `${base} (+${days})` : base;
+  }
+
   function snap(value, step){ return Math.round(value/step)*step; }
   function roundTimeToStep(hhmm, stepMin=15){
     if(!hhmm || !hhmm.includes(":")) return hhmm;
@@ -853,11 +857,13 @@
     node.draggable = true;
     node.dataset.sceneId = s.id;
 
-    const isAssigned = !!sceneAssignedDayId(s.id);
-    node.classList.add(isAssigned ? "assigned" : "unassigned");
+    // ✅ color SOLO en Banco de Escenas
+    if(mode === "bank"){
+      const isAssigned = !!sceneAssignedDayId(s.id);
+      node.classList.add(isAssigned ? "assigned" : "unassigned");
+    }
 
     if(mode === "day"){
-      // ✅ ahora muestra número + slugline
       node.innerHTML = `
         <div class="left">
           <div class="title">#${esc(s.number||"")} — ${esc(s.slugline||"")}</div>
@@ -928,7 +934,7 @@
     for(const d of state.shootDays){
       d.sceneIds = (d.sceneIds||[]).filter(x=>x!==sceneId);
       if(d.times) delete d.times[sceneId];
-      // duraciones las dejamos (si vuelve, se mantiene)
+      // duraciones: las dejamos para conservar si vuelve a ese día
     }
   }
 
@@ -940,7 +946,6 @@
     if(!day.sceneIds.includes(sceneId)) day.sceneIds.push(sceneId);
     if(typeof day.durations[sceneId] !== "number") day.durations[sceneId] = 60;
 
-    // al final (hora más tarde)
     let end = 0;
     for(const sid of day.sceneIds){
       const st = day.times[sid] ?? 0;
@@ -996,7 +1001,6 @@
         const data = JSON.parse(raw);
         if(data.type !== "scene") return;
 
-        // mover escena (plan): la sacamos de todos los días y la agregamos al final de este
         removeSceneFromAllDays(data.sceneId);
         addSceneToDayEnd(data.sceneId, d.id);
 
@@ -1137,23 +1141,6 @@
     }
   }
 
-  function deptFromCat(cat){
-    const map = {
-      cast:"Talento",
-      props:"Arte",
-      art:"Arte",
-      wardrobe:"Vestuario",
-      makeup:"Maquillaje",
-      sound:"Sonido",
-      sfx:"SFX",
-      vfx:"Post/VFX",
-      vehicles:"Producción",
-      animals:"Producción",
-      extras:"Producción"
-    };
-    return map[cat] || "Otros";
-  }
-
   function renderDayNeeds(){
     const wrap = el("dayNeeds");
     wrap.innerHTML = "";
@@ -1175,7 +1162,6 @@
       return;
     }
 
-    // bloque por categoría (colores)
     for(const cat of cats){
       if(!needs[cat]) continue;
       const box = document.createElement("div");
@@ -1471,6 +1457,60 @@
     return "cast";
   }
 
+  // ✅ Drag & drop nativo (como antes)
+  function handleSchedDrop(e, targetDayId, gridEl){
+    e.preventDefault();
+    const raw = e.dataTransfer.getData("application/json");
+    if(!raw) return;
+    let data;
+    try{ data = JSON.parse(raw); }catch{ return; }
+    if(data.type !== "sched") return;
+
+    const sceneId = data.sceneId;
+    const fromDayId = data.fromDayId;
+
+    const fromDay = getDay(fromDayId);
+    const toDay = getDay(targetDayId);
+    if(!toDay) return;
+
+    ensureDayTimingMaps(toDay);
+
+    // mantener duración (prioridad: en el target si ya existía, sino desde el origen, sino 60)
+    const durKeep =
+      (typeof toDay.durations?.[sceneId] === "number") ? toDay.durations[sceneId] :
+      (typeof fromDay?.durations?.[sceneId] === "number") ? fromDay.durations[sceneId] : 60;
+
+    // calcular startMin por Y
+    const zoom = Number(el("schedZoom")?.value || 90);
+    const snapMin = Number(el("schedSnap")?.value || 15);
+    const pxPerMin = zoom / 60;
+
+    const gr = gridEl.getBoundingClientRect();
+    const y = Math.max(0, e.clientY - gr.top);
+    const desiredStart = snap(y / pxPerMin, snapMin);
+
+    // mover: único día
+    removeSceneFromAllDays(sceneId);
+    if(!toDay.sceneIds.includes(sceneId)) toDay.sceneIds.push(sceneId);
+
+    toDay.durations[sceneId] = durKeep;
+
+    // evitar overlaps (si querés permitir overlaps lo saco)
+    const safeStart = findNonOverlappingStart(toDay, sceneId, desiredStart, durKeep, snapMin);
+    toDay.times[sceneId] = safeStart;
+
+    sortDaySceneIdsByTime(toDay);
+
+    touch();
+    renderScheduleBoard();
+    renderDaysBoard();
+    renderSceneBank();
+    renderDayDetail();
+    renderReports();
+    renderCallSheetCalendar();
+    renderCallSheet();
+  }
+
   function renderScheduleBoard(){
     const board = el("schedBoard");
     if(!board) return;
@@ -1506,6 +1546,17 @@
       grid.className = "schedGrid";
       grid.dataset.dayId = d.id;
 
+      // drop handlers en TODO el día
+      const onDragOver = (e)=>{ e.preventDefault(); dayWrap.classList.add("dropTarget"); };
+      const onDragLeave = ()=>dayWrap.classList.remove("dropTarget");
+      const onDrop = (e)=>{
+        dayWrap.classList.remove("dropTarget");
+        handleSchedDrop(e, d.id, grid);
+      };
+      dayWrap.addEventListener("dragover", onDragOver);
+      dayWrap.addEventListener("dragleave", onDragLeave);
+      dayWrap.addEventListener("drop", onDrop);
+
       const gridMin = computeDayGridMinutes(d);
       grid.style.height = `${Math.ceil(gridMin * pxPerMin)}px`;
 
@@ -1522,7 +1573,7 @@
         const lab = document.createElement("div");
         lab.className = "hourLabel";
         lab.style.top = `${y}px`;
-        lab.textContent = hhmmFromMinutes(callBase + h*60);
+        lab.textContent = fmtClock(callBase + h*60); // ✅ sin wrap silencioso
         grid.appendChild(lab);
       }
 
@@ -1550,7 +1601,7 @@
         block.innerHTML = `
           <div class="bar" style="background:${barColor}"></div>
           <div class="title">#${esc(s.number||"")} — ${esc(s.slugline||"")}</div>
-          <div class="meta">${esc(hhmmFromMinutes(callBase + startMin))} · ${durMin} min</div>
+          <div class="meta">${esc(fmtClock(callBase + startMin))} · ${durMin} min</div>
           <div class="resize" title="Cambiar duración"></div>
         `;
 
@@ -1564,25 +1615,28 @@
           renderSceneEditor();
         });
 
-        // drag start (mousedown)
+        // ✅ draggable nativo
+        block.draggable = true;
+        block.addEventListener("dragstart", (e)=>{
+          nativeDragActive = true;
+          hideHoverTip();
+          block.classList.add("dragging");
+          const payload = { type:"sched", sceneId:sid, fromDayId:d.id };
+          e.dataTransfer.setData("application/json", JSON.stringify(payload));
+          e.dataTransfer.effectAllowed = "move";
+        });
+        block.addEventListener("dragend", ()=>{
+          nativeDragActive = false;
+          block.classList.remove("dragging");
+          document.querySelectorAll(".schedDay").forEach(n=>n.classList.remove("dropTarget"));
+        });
+
+        // resize con mouse (no con drag)
         block.addEventListener("mousedown", (e)=>{
           if(e.button !== 0) return;
           const isResize = e.target && e.target.classList.contains("resize");
-          if(isResize){
-            resizing = { sceneId:sid, dayId:d.id, startY:e.clientY, startDur:durMin, pxPerMin, snapMin };
-            e.preventDefault();
-            return;
-          }
-
-          pendingDrag = {
-            sceneId:sid,
-            fromDayId:d.id,
-            startX:e.clientX,
-            startY:e.clientY,
-            startMin,
-            pxPerMin,
-            snapMin
-          };
+          if(!isResize) return;
+          resizing = { sceneId:sid, dayId:d.id, startY:e.clientY, startDur:durMin, pxPerMin, snapMin };
           e.preventDefault();
         });
 
@@ -1595,122 +1649,25 @@
     }
   }
 
-  function scheduleMouseMove(e){
-    const zoom = Number(el("schedZoom")?.value || 90);
-    const snapMin = Number(el("schedSnap")?.value || 15);
-    const pxPerMin = zoom/60;
+  function scheduleResizeMouseMove(e){
+    if(!resizing) return;
+    const d = getDay(resizing.dayId);
+    if(!d) return;
 
-    if(resizing){
-      const d = getDay(resizing.dayId);
-      if(!d) return;
+    const dy = e.clientY - resizing.startY;
+    const deltaMin = snap(dy / resizing.pxPerMin, resizing.snapMin);
+    const newDur = Math.max(15, resizing.startDur + deltaMin);
 
-      const dy = e.clientY - resizing.startY;
-      const deltaMin = snap(dy / resizing.pxPerMin, resizing.snapMin);
-      const newDur = Math.max(15, resizing.startDur + deltaMin);
-
-      d.durations[resizing.sceneId] = newDur;
-      touch();
-      renderScheduleBoard();
-      renderReports();
-      renderCallSheet();
-      return;
-    }
-
-    if(pendingDrag && !schedDrag){
-      const dx = Math.abs(e.clientX - pendingDrag.startX);
-      const dy = Math.abs(e.clientY - pendingDrag.startY);
-      if(dx + dy > 4){
-        schedDrag = pendingDrag;
-        pendingDrag = null;
-        document.body.style.cursor = "grabbing";
-      }
-    }
-
-    if(schedDrag){
-      // detectar día target
-      const under = document.elementFromPoint(e.clientX, e.clientY);
-      const dayNode = under ? under.closest(".schedDay") : null;
-      document.querySelectorAll(".schedDay").forEach(n=>n.classList.remove("dropTarget"));
-      if(dayNode) dayNode.classList.add("dropTarget");
-
-      // opcional: no hacemos ghost, movemos al soltar. (menos lindo, más estable)
-      return;
-    }
+    d.durations[resizing.sceneId] = newDur;
+    touch();
+    renderScheduleBoard();
+    renderReports();
+    renderCallSheet();
   }
 
-  function scheduleMouseUp(e){
-    if(resizing){
-      resizing = null;
-      document.body.style.cursor = "";
-      document.querySelectorAll(".schedDay").forEach(n=>n.classList.remove("dropTarget"));
-      return;
-    }
-    if(pendingDrag){
-      pendingDrag = null;
-      return;
-    }
-    if(!schedDrag) return;
-
-    const zoom = Number(el("schedZoom")?.value || 90);
-    const snapMin = Number(el("schedSnap")?.value || 15);
-    const pxPerMin = zoom/60;
-
-    const under = document.elementFromPoint(e.clientX, e.clientY);
-    const dayNode = under ? under.closest(".schedDay") : null;
-
-    const fromDay = getDay(schedDrag.fromDayId);
-    const targetDayId = dayNode ? dayNode.dataset.dayId : schedDrag.fromDayId;
-    const toDay = getDay(targetDayId);
-
-    if(fromDay && toDay){
-      ensureDayTimingMaps(fromDay);
-      ensureDayTimingMaps(toDay);
-
-      const dur = fromDay.d.durations?.[schedDrag.sceneId] ?? fromDay.durations?.[schedDrag.sceneId] ?? 60;
-      // (arriba es por si alguien pegó un estado raro)
-
-      // calcular nueva hora dentro del target day
-      const grid = dayNode ? dayNode.querySelector(".schedGrid") : null;
-      let startMin = schedDrag.startMin;
-
-      if(grid){
-        const gr = grid.getBoundingClientRect();
-        const y = e.clientY - gr.top;
-        startMin = snap(Math.max(0, y / pxPerMin), snapMin);
-      }
-
-      // mover de día si corresponde
-      if(targetDayId !== schedDrag.fromDayId){
-        fromDay.sceneIds = (fromDay.sceneIds||[]).filter(x=>x!==schedDrag.sceneId);
-        delete fromDay.times[schedDrag.sceneId];
-
-        if(!toDay.sceneIds.includes(schedDrag.sceneId)) toDay.sceneIds.push(schedDrag.sceneId);
-      }
-
-      // set dur y time
-      toDay.durations[schedDrag.sceneId] = (typeof toDay.durations[schedDrag.sceneId] === "number")
-        ? toDay.durations[schedDrag.sceneId]
-        : (typeof fromDay.durations[schedDrag.sceneId] === "number" ? fromDay.durations[schedDrag.sceneId] : 60);
-
-      const finalDur = toDay.durations[schedDrag.sceneId] || 60;
-      const safeStart = findNonOverlappingStart(toDay, schedDrag.sceneId, startMin, finalDur, snapMin);
-      toDay.times[schedDrag.sceneId] = safeStart;
-
-      sortDaySceneIdsByTime(fromDay);
-      sortDaySceneIdsByTime(toDay);
-
-      touch();
-      renderScheduleBoard();
-      renderDaysBoard();      // ✅ sync con plan de rodaje
-      renderSceneBank();      // ✅ bordes asignación
-      renderDayDetail();
-      renderReports();
-      renderCallSheetCalendar();
-      renderCallSheet();
-    }
-
-    schedDrag = null;
-    document.body.style.cursor = "";
+  function scheduleResizeMouseUp(){
+    if(!resizing) return;
+    resizing = null;
     document.querySelectorAll(".schedDay").forEach(n=>n.classList.remove("dropTarget"));
   }
 
@@ -1765,7 +1722,6 @@
       body.appendChild(castBox);
       body.appendChild(crewBox);
 
-      // Necesidades por categoría
       for(const cat of cats){
         const items = union(scenes.flatMap(s=>s.elements?.[cat]||[]));
         if(!items.length) continue;
@@ -1805,7 +1761,6 @@
       if(d.date) shootByDate.set(d.date, d.id);
     }
 
-    // placeholders
     for(let i=0;i<startDow;i++){
       const cell = document.createElement("div");
       cell.className = "calCell";
@@ -1862,7 +1817,7 @@
     const sceneLines = scenes.map(s=>{
       const st = d.times[s.id] ?? 0;
       const du = d.durations[s.id] ?? 60;
-      return `• ${hhmmFromMinutes(callBase + st)} (${du}m) — #${s.number} ${s.slugline}`;
+      return `• ${fmtClock(callBase + st)} (${du}m) — #${s.number} ${s.slugline}`;
     }).join("<br/>");
 
     let needsHTML = "";
@@ -2090,7 +2045,7 @@
       });
     });
 
-    // ✅ botoncitos ±15
+    // botoncitos ±15
     el("day_call_minus")?.addEventListener("click", ()=>{
       const d = selectedDayId ? getDay(selectedDayId) : null;
       if(!d) return;
@@ -2149,8 +2104,8 @@
       renderCallSheet();
     });
 
-    window.addEventListener("mousemove", scheduleMouseMove);
-    window.addEventListener("mouseup", scheduleMouseUp);
+    window.addEventListener("mousemove", scheduleResizeMouseMove);
+    window.addEventListener("mouseup", scheduleResizeMouseUp);
 
     // Call sheet calendar nav + print
     el("calPrev")?.addEventListener("click", ()=>{
