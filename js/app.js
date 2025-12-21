@@ -2,6 +2,7 @@
   const el = (id)=>document.getElementById(id);
   const views = ["breakdown","shooting","schedule","elements","crew","reports","callsheet","settings"];
 
+  // ======= CATEGORÍAS / COLORES =======
   const cats = ["cast","props","wardrobe","art","makeup","sound","sfx","vfx","vehicles","animals","extras"];
   const catNames = {
     cast:"Cast", props:"Props", wardrobe:"Vestuario", art:"Arte", makeup:"Maquillaje",
@@ -21,7 +22,7 @@
     extras:"var(--cat-extras)"
   };
 
-  // ✅ CANÓNICO (exacto como pediste)
+  // ======= ORDEN CANÓNICO DE ÁREAS =======
   const crewAreas = [
     "Direccion",
     "Cast",
@@ -39,7 +40,6 @@
   function normalizeCrewArea(a){
     const s = String(a||"").trim().toLowerCase();
     if(!s) return "Otros";
-
     const map = new Map([
       ["dirección","Direccion"], ["direccion","Direccion"], ["dir","Direccion"],
       ["cast","Cast"],
@@ -48,8 +48,8 @@
 
       ["foto","Foto"], ["cámara","Foto"], ["camara","Foto"], ["dp","Foto"],
 
-      ["eléctrica/grip","Electrica/Grip"], ["electrica/grip","Electrica/Grip"], ["electrica","Electrica/Grip"],
-      ["grip","Electrica/Grip"], ["electrica grip","Electrica/Grip"],
+      ["eléctrica/grip","Electrica/Grip"], ["electrica/grip","Electrica/Grip"],
+      ["electrica","Electrica/Grip"], ["grip","Electrica/Grip"],
 
       ["sonido","Sonido"], ["audio","Sonido"],
 
@@ -57,34 +57,33 @@
 
       ["vestuario","Vestuario"], ["wardrobe","Vestuario"],
 
-      ["maquillaje","Maquillaje"], ["makeup","Maquillaje"], ["fx makeup","Maquillaje"],
+      ["maquillaje","Maquillaje"], ["makeup","Maquillaje"],
 
       ["post vfx","Post VFX"], ["post/vfx","Post VFX"], ["vfx","Post VFX"], ["post","Post VFX"],
 
       ["otros","Otros"], ["other","Otros"]
     ]);
+    if(map.has(s)) return map.get(s);
 
-    for(const [k,v] of map.entries()){
-      if(s === k) return v;
-    }
-    // si viene con alguna variación parecida
-    if(s.includes("elect")) return "Electrica/Grip";
-    if(s.includes("grip")) return "Electrica/Grip";
+    if(s.includes("elect") || s.includes("grip")) return "Electrica/Grip";
     if(s.includes("prod")) return "Produccion";
     if(s.includes("direc")) return "Direccion";
     if(s.includes("post") || s.includes("vfx")) return "Post VFX";
+    if(s.includes("foto") || s.includes("cam")) return "Foto";
     return "Otros";
   }
 
+  // ======= STATE =======
   let state = null;
   let selectedSceneId = null;
   let selectedDayId = null;
   let callSheetDayId = null;
   let selectedElementKey = null;
 
-  let resizing = null; // schedule resize
+  let resizing = null;
   let nativeDragActive = false;
   let scheduleDirty = false;
+
   let calCursor = { year: new Date().getFullYear(), month: new Date().getMonth() };
 
   const saveDebouncedRemote = window.U.debounce(async ()=>{
@@ -101,6 +100,7 @@
     }
   }, 900);
 
+  // ======= UTIL =======
   function esc(s){
     return String(s||"")
       .replaceAll("&","&amp;")
@@ -122,7 +122,7 @@
 
   function defaultState(){
     return {
-      meta: { version: 9, title:"Proyecto", updatedAt: new Date().toISOString() },
+      meta: { version: 10, title:"Proyecto", updatedAt: new Date().toISOString() },
       scenes: [],
       shootDays: [],
       crew: []
@@ -154,9 +154,11 @@
     });
 
     if(name === "shooting"){
-      requestAnimationFrame(()=>syncSceneBankHeight());
-      requestAnimationFrame(()=>ensureDayDetail3Columns());
-      requestAnimationFrame(()=>ensureSceneBankCollapsible());
+      requestAnimationFrame(()=>{
+        ensureShootingSplitSections();  // ✅ TABLERO ARRIBA / DETALLE ABAJO
+        ensureSceneBankCollapsible();   // ✅ BOTÓN Y COLAPSO DE VERDAD
+        syncSceneBankHeight();          // ✅ scroll banco
+      });
     }
     if(name === "schedule") requestAnimationFrame(()=>renderScheduleBoard());
     if(name === "callsheet") requestAnimationFrame(()=>{ renderCallSheetCalendar(); renderCallSheet(); });
@@ -164,6 +166,8 @@
 
   function getScene(id){ return state.scenes.find(s=>s.id===id) || null; }
   function getDay(id){ return state.shootDays.find(d=>d.id===id) || null; }
+
+  function union(arr){ return Array.from(new Set((arr||[]).filter(Boolean))); }
 
   function normalizeTOD(raw){
     const t = (raw||"").trim().toLowerCase();
@@ -196,37 +200,7 @@
     });
   }
 
-  function union(arr){ return Array.from(new Set((arr||[]).filter(Boolean))); }
-
-  // ---------- element matching ----------
-  function normName(s){
-    return String(s||"")
-      .trim()
-      .toLowerCase()
-      .normalize("NFD")
-      .replace(/[\u0300-\u036f]/g,"")
-      .replace(/[^\p{L}\p{N}]+/gu," ")
-      .replace(/\s+/g," ")
-      .trim();
-  }
-  function levenshtein(a,b){
-    a = String(a); b = String(b);
-    const n=a.length, m=b.length;
-    if(!n) return m;
-    if(!m) return n;
-    const dp = Array.from({length:n+1}, ()=>Array(m+1).fill(0));
-    for(let i=0;i<=n;i++) dp[i][0]=i;
-    for(let j=0;j<=m;j++) dp[0][j]=j;
-    for(let i=1;i<=n;i++){
-      for(let j=1;j<=m;j++){
-        const cost = a[i-1]===b[j-1]?0:1;
-        dp[i][j] = Math.min(dp[i-1][j]+1, dp[i][j-1]+1, dp[i-1][j-1]+cost);
-      }
-    }
-    return dp[n][m];
-  }
-
-  // ---------- tooltip ----------
+  // ======= TOOLTIP =======
   function showHoverTip(html, x, y){
     const tip = el("hoverTip");
     if(!tip) return;
@@ -288,25 +262,242 @@
     node.addEventListener("mouseleave", ()=>hideHoverTip());
   }
 
-  // ----------- Scene bank height sync -----------
+  // ======= BANCO DE ESCENAS: SCROLL (NO dependemos de CAST arriba/abajo) =======
   function syncSceneBankHeight(){
     const bank = el("sceneBankList");
-    const cast = el("dayCast");
-    if(!bank || !cast) return;
-
+    if(!bank) return;
     const br = bank.getBoundingClientRect();
-    const cr = cast.getBoundingClientRect();
-    let maxH = (cr.top - br.top) - 14;
-
-    const minH = 220;
-    const maxPossible = Math.max(minH, window.innerHeight - br.top - 28);
-    if(!Number.isFinite(maxH) || maxH < minH) maxH = Math.min(maxPossible, 420);
-
-    maxH = Math.max(minH, Math.min(maxH, maxPossible));
+    const maxH = Math.max(260, Math.min(620, window.innerHeight - br.top - 24));
     bank.style.maxHeight = `${Math.floor(maxH)}px`;
     bank.style.overflowY = "auto";
   }
 
+  // ======= LAYOUT: TABLERO ARRIBA / DETALLE ABAJO (3 columnas) =======
+  function fieldWrapFor(input){
+    if(!input) return null;
+    return input.closest(".field") || input.closest(".formRow") || input.parentElement;
+  }
+  function mkCard(title, id){
+    const card = document.createElement("div");
+    card.className = "card";
+    card.id = id;
+
+    const header = document.createElement("div");
+    header.className = "cardHeader gbFlexHeader";
+    header.innerHTML = `<h2 class="cardTitle">${esc(title)}</h2>`;
+    const content = document.createElement("div");
+    content.className = "cardContent";
+
+    card.appendChild(header);
+    card.appendChild(content);
+    return { card, header, content };
+  }
+
+  function ensureShootingSplitSections(){
+    const view = el("view-shooting");
+    const daysBoard = el("daysBoard");
+    if(!view || !daysBoard) return;
+
+    // 1) TABLERO: dejamos el card que ya existe (el que contiene daysBoard)
+    const tableroCard = daysBoard.closest(".card") || daysBoard.parentElement;
+    if(!tableroCard) return;
+
+    // 2) DETALLE: creamos card propio abajo del tablero (si no existe)
+    let detailCard = el("gbDetailDayCard");
+    if(!detailCard){
+      const made = mkCard("Detalle del Día", "gbDetailDayCard");
+      detailCard = made.card;
+      tableroCard.insertAdjacentElement("afterend", detailCard);
+    }else{
+      // si quedó metido adentro del tablero por algún bug anterior, lo sacamos
+      if(tableroCard.contains(detailCard)){
+        tableroCard.insertAdjacentElement("afterend", detailCard);
+      }
+    }
+
+    // 3) construimos 3 columnas adentro del Detalle
+    const date = el("day_date");
+    const call = el("day_call");
+    const loc = el("day_location");
+    const label = el("day_label");
+    const notes = el("day_notes");
+    const needs = el("dayNeeds");
+    const cast = el("dayCast");
+    const crew = el("dayCrewPicker");
+    if(!date || !call || !loc || !label || !notes || !needs || !cast || !crew) return;
+
+    const content = detailCard.querySelector(".cardContent") || detailCard;
+    content.innerHTML = ""; // ✅ garantizado: “gran sección abajo”, limpia
+
+    const layout = document.createElement("div");
+    layout.className = "dayDetail3col";
+
+    const col1 = document.createElement("div"); col1.className = "col";
+    const col2 = document.createElement("div"); col2.className = "col";
+    const col3 = document.createElement("div"); col3.className = "col";
+
+    // wrappers de inputs (col1)
+    const wDate = fieldWrapFor(date);
+    const wCall = fieldWrapFor(call);
+    const wLoc  = fieldWrapFor(loc);
+    const wLabel= fieldWrapFor(label);
+    const wNotes= fieldWrapFor(notes);
+
+    if(wDate) col1.appendChild(wDate);
+    if(wCall && wCall!==wDate) col1.appendChild(wCall);
+    if(wLoc  && wLoc!==wCall) col1.appendChild(wLoc);
+    if(wLabel&& wLabel!==wLoc) col1.appendChild(wLabel);
+    if(wNotes&& wNotes!==wLabel) col1.appendChild(wNotes);
+
+    // headers columna 2 y 3
+    const h2 = document.createElement("div");
+    h2.className = "gbColTitle";
+    h2.textContent = "Necesidades por Área";
+    col2.appendChild(h2);
+    col2.appendChild(needs);
+
+    const h3 = document.createElement("div");
+    h3.className = "gbColTitle";
+    h3.textContent = "Cast y Equipo Técnico";
+    col3.appendChild(h3);
+    col3.appendChild(cast);
+    col3.appendChild(crew);
+
+    layout.append(col1,col2,col3);
+    content.appendChild(layout);
+
+    // Asegurar que Tablero NO se “lleve” el detalle por accidente
+    // (si algún nodo duplicado quedó por ahí, lo dejamos vacío)
+    // No tocamos daysBoard, solo prevenimos mezcla.
+  }
+
+  // ======= BANCO DE ESCENAS: COLAPSABLE SIN ROMPER +DÍA =======
+  function findShootingLayoutContainer(){
+    const view = el("view-shooting");
+    const bankList = el("sceneBankList");
+    const daysBoard = el("daysBoard");
+    if(!view || !bankList || !daysBoard) return null;
+
+    // buscamos el contenedor más bajo que tenga ambos
+    let container = bankList.parentElement;
+    while(container && container !== view && !container.contains(daysBoard)){
+      container = container.parentElement;
+    }
+    if(!container) container = view;
+
+    // dentro de ese contenedor, buscamos el “host” (columna) del bank y el del main
+    const kids = Array.from(container.children || []);
+    let bankHost = kids.find(k=>k.contains(bankList)) || bankList.closest(".panel") || bankList.closest(".card") || bankList.parentElement;
+    let mainHost = kids.find(k=>k.contains(daysBoard)) || daysBoard.closest(".panel") || daysBoard.closest(".card") || daysBoard.parentElement;
+
+    // si bankHost y mainHost son el mismo, subimos un nivel
+    if(bankHost && mainHost && bankHost === mainHost){
+      const up = container.parentElement;
+      if(up){
+        const upKids = Array.from(up.children || []);
+        const b = upKids.find(k=>k.contains(bankList));
+        const m = upKids.find(k=>k.contains(daysBoard));
+        if(b && m && b !== m){
+          container = up;
+          bankHost = b;
+          mainHost = m;
+        }
+      }
+    }
+
+    return { container, bankHost, mainHost };
+  }
+
+  function ensureSceneBankCollapsible(){
+    const bankList = el("sceneBankList");
+    if(!bankList) return;
+
+    // borrar botones viejos (si quedaron en headers equivocados)
+    document.querySelectorAll(".bankCollapseBtn").forEach(b=>b.remove());
+
+    const layout = findShootingLayoutContainer();
+    if(!layout) return;
+
+    const { container, bankHost } = layout;
+
+    // header del banco (donde va el botón) = card header que contiene sceneBankList
+    const bankCard = bankList.closest(".card") || bankList.parentElement;
+    const header = bankCard?.querySelector(".cardHeader") || bankCard?.querySelector("header") || bankCard;
+    if(!header) return;
+
+    header.classList.add("gbFlexHeader");
+
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "btn bankCollapseBtn";
+    btn.title = "Colapsar/expandir Banco de Escenas";
+    btn.style.marginLeft = "auto"; // ✅ NO ABSOLUTE: no se superpone con +Día
+    btn.style.width = "32px";
+    btn.style.height = "32px";
+    btn.style.borderRadius = "10px";
+    btn.style.display = "flex";
+    btn.style.alignItems = "center";
+    btn.style.justifyContent = "center";
+    btn.style.fontWeight = "900";
+
+    const key = "gb_bankCollapsed_v2";
+    const apply = (collapsed)=>{
+      btn.textContent = collapsed ? "⟩" : "⟨";
+
+      // guardar estilos originales una sola vez
+      if(!container.dataset.gbOrigGridCols){
+        const cs = getComputedStyle(container);
+        container.dataset.gbDisp = cs.display;
+        if(cs.display.includes("grid")){
+          container.dataset.gbOrigGridCols = cs.gridTemplateColumns || "";
+        }
+      }
+
+      // Colapsar: ajustamos la columna real, no un id inventado
+      const disp = (container.dataset.gbDisp || getComputedStyle(container).display);
+
+      bankHost.classList.toggle("gbBankCollapsed", collapsed);
+
+      if(disp.includes("grid")){
+        const orig = container.dataset.gbOrigGridCols || "";
+        if(collapsed){
+          container.style.gridTemplateColumns = "56px 1fr";
+        }else{
+          container.style.gridTemplateColumns = orig;
+        }
+      }else{
+        // flex / block: usamos inline styles en el host
+        if(collapsed){
+          bankHost.dataset.gbOrigFlex = bankHost.style.flex || "";
+          bankHost.dataset.gbOrigWidth = bankHost.style.width || "";
+          bankHost.style.flex = "0 0 56px";
+          bankHost.style.width = "56px";
+        }else{
+          bankHost.style.flex = bankHost.dataset.gbOrigFlex || "";
+          bankHost.style.width = bankHost.dataset.gbOrigWidth || "";
+        }
+      }
+
+      // ocultar contenido del banco (solo el contenido, el header queda)
+      const content = bankCard?.querySelector(".cardContent") || bankList.parentElement;
+      if(content){
+        content.style.display = collapsed ? "none" : "";
+      }
+
+      localStorage.setItem(key, collapsed ? "1" : "0");
+      setTimeout(()=>syncSceneBankHeight(), 50);
+    };
+
+    btn.addEventListener("click", ()=>{
+      const now = localStorage.getItem(key)==="1";
+      apply(!now);
+    });
+
+    header.appendChild(btn);
+    apply(localStorage.getItem(key)==="1");
+  }
+
+  // ======= ELEMENTOS / SUGGEST =======
   function getCastRoster(){
     return union(
       state.crew
@@ -332,16 +523,14 @@
     const catSel = el("elCategory");
     const dl = el("elSuggestDatalist");
     if(!catSel || !dl) return;
-
     const cat = catSel.value;
     let options = [];
     if(cat === "cast") options = getCastRoster();
     else options = getExistingElementsByCat(cat);
-
     dl.innerHTML = options.map(v=>`<option value="${esc(v)}"></option>`).join("");
   }
 
-  // ---------- Time helpers ----------
+  // ======= TIME HELPERS =======
   function minutesFromHHMM(hhmm){
     if(!hhmm || !hhmm.includes(":")) return 8*60;
     const [h,m] = hhmm.split(":").map(Number);
@@ -413,7 +602,7 @@
     }
   }
 
-  // ----------- Script parser (INT./EXT.) -----------
+  // ======= PARSER INT/EXT =======
   function parseScreenplayToScenes(text, extraKeywordsCsv=""){
     const rawLines = (text||"").split(/\r?\n/);
     const lines = rawLines.map(l => String(l ?? "").replace(/\s+$/,"")).filter(l => l.trim() !== "");
@@ -496,7 +685,7 @@
     }
   }
 
-  // ----------- Breakdown render -----------
+  // ======= BREAKDOWN =======
   function renderCatSelects(){
     const sel = el("elCategory");
     if(sel) sel.innerHTML = cats.map(c=>`<option value="${c}">${esc(catNames[c])}</option>`).join("");
@@ -697,34 +886,8 @@
       const exact = roster.find(r => normName(r) === nIn);
       if(exact) item = exact;
       else{
-        const close = roster.map(r=>({r, d: levenshtein(normName(r), nIn)})).sort((a,b)=>a.d-b.d)[0];
-        if(close && close.d <= 2){
-          item = close.r;
-          toast(`Usé Cast existente: ${item}`);
-        }else{
-          toast("Ese nombre no está en Cast (Equipo técnico). Cargalo ahí primero.");
-          return;
-        }
-      }
-    }else{
-      const existing = getExistingElementsByCat(cat);
-      const nIn = normName(item);
-      const exact = existing.find(v => normName(v) === nIn);
-      if(exact){
-        item = exact;
-      }else if(existing.length){
-        let best = null;
-        for(const v of existing){
-          const nv = normName(v);
-          if(!nv) continue;
-          const contains = (nv.includes(nIn) && nIn.length>=4) || (nIn.includes(nv) && nv.length>=4);
-          const d = levenshtein(nv, nIn);
-          const thr = nIn.length <= 10 ? 2 : 3;
-          if(contains || d <= thr){
-            if(!best || d < best.d) best = {v, d};
-          }
-        }
-        if(best) item = best.v;
+        toast("Ese nombre no está en Cast (Equipo técnico). Cargalo ahí primero.");
+        return;
       }
     }
 
@@ -742,6 +905,19 @@
     renderCallSheet();
   }
 
+  // ======= name normalize =======
+  function normName(s){
+    return String(s||"")
+      .trim()
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g,"")
+      .replace(/[^\p{L}\p{N}]+/gu," ")
+      .replace(/\s+/g," ")
+      .trim();
+  }
+
+  // ======= IMPORTS =======
   function importScenesTable(){
     const txt = el("sceneImportText")?.value || "";
     const rows = window.U.parseTableText(txt);
@@ -800,7 +976,7 @@
     renderElementsExplorer();
   }
 
-  // ----------- Shooting plan -----------
+  // ======= SHOOTING PLAN =======
   function addShootDay(){
     const d = {
       id: uid("day"),
@@ -824,8 +1000,7 @@
     renderElementsExplorer();
     renderScheduleBoard();
     renderCallSheetCalendar();
-    syncSceneBankHeight();
-    ensureDayDetail3Columns();
+    ensureShootingSplitSections();
   }
 
   function deleteShootDay(){
@@ -844,8 +1019,7 @@
     renderScheduleBoard();
     renderCallSheetCalendar();
     renderCallSheet();
-    syncSceneBankHeight();
-    ensureDayDetail3Columns();
+    ensureShootingSplitSections();
   }
 
   function sceneAssignedDayId(sceneId){
@@ -853,6 +1027,13 @@
       if((d.sceneIds||[]).includes(sceneId)) return d.id;
     }
     return null;
+  }
+
+  function removeSceneFromAllDays(sceneId){
+    for(const d of state.shootDays){
+      d.sceneIds = (d.sceneIds||[]).filter(x=>x!==sceneId);
+      if(d.times) delete d.times[sceneId];
+    }
   }
 
   function sceneCardNode(s, mode="bank"){
@@ -928,13 +1109,6 @@
     syncSceneBankHeight();
   }
 
-  function removeSceneFromAllDays(sceneId){
-    for(const d of state.shootDays){
-      d.sceneIds = (d.sceneIds||[]).filter(x=>x!==sceneId);
-      if(d.times) delete d.times[sceneId];
-    }
-  }
-
   function renderDaysBoard(){
     const board = el("daysBoard");
     if(!board) return;
@@ -963,8 +1137,7 @@
         selectedDayId = d.id;
         renderDaysBoard();
         renderDayDetail();
-        syncSceneBankHeight();
-        ensureDayDetail3Columns();
+        ensureShootingSplitSections();
       });
 
       const zone = document.createElement("div");
@@ -1006,8 +1179,7 @@
         renderScheduleBoard();
         renderCallSheetCalendar();
         renderCallSheet();
-        syncSceneBankHeight();
-        ensureDayDetail3Columns();
+        ensureShootingSplitSections();
       });
 
       const ids = d.sceneIds || [];
@@ -1018,8 +1190,7 @@
           const s = getScene(sid);
           if(!s) continue;
           const card = sceneCardNode(s, "day");
-          // en tablero de días: NO color
-          card.classList.remove("assigned","unassigned");
+          card.classList.remove("assigned","unassigned"); // ✅ tablero sin color
           zone.appendChild(card);
         }
       }
@@ -1066,8 +1237,6 @@
       chip.innerHTML = `<span class="catBadge"><span class="dot" style="background:${catColors.cast}"></span>${esc(name)}</span>`;
       wrap.appendChild(chip);
     });
-
-    syncSceneBankHeight();
   }
 
   function renderDayCrewPicker(){
@@ -1091,9 +1260,6 @@
       const ia = areaIndex.get(a.area)||999;
       const ib = areaIndex.get(b.area)||999;
       if(ia!==ib) return ia-ib;
-      const ra = (a.role||"").toLowerCase();
-      const rb = (b.role||"").toLowerCase();
-      if(ra!==rb) return ra.localeCompare(rb);
       return (a.name||"").localeCompare(b.name||"");
     });
 
@@ -1133,7 +1299,6 @@
         renderDayCrewPicker();
         renderReports();
         renderCallSheet();
-        syncSceneBankHeight();
       });
       wrap.appendChild(item);
     }
@@ -1148,7 +1313,6 @@
 
     const scenes = dayScenes(d);
     const needs = {};
-
     for(const cat of cats){
       const items = union(scenes.flatMap(s=>s.elements?.[cat] || []));
       if(!items.length) continue;
@@ -1178,11 +1342,10 @@
     renderDayCast();
     renderDayCrewPicker();
     renderDayNeeds();
-    syncSceneBankHeight();
-    ensureDayDetail3Columns();
+    ensureShootingSplitSections(); // ✅ mantiene el layout correcto
   }
 
-  // ----------- Elements explorer -----------
+  // ======= ELEMENTS EXPLORER =======
   function populateElementsFilters(){
     const catSel = el("elxCategory");
     const daySel = el("elxDay");
@@ -1347,7 +1510,7 @@
     });
   }
 
-  // ----------- Crew -----------
+  // ======= CREW =======
   function addCrew(){
     state.crew.push({ id: uid("crew"), area:"Produccion", role:"", name:"", phone:"", email:"", notes:"" });
     touch();
@@ -1379,16 +1542,12 @@
       const ia = areaIndex.get(a.area)||999;
       const ib = areaIndex.get(b.area)||999;
       if(ia!==ib) return ia-ib;
-      const ra = (a.role||"").toLowerCase();
-      const rb = (b.role||"").toLowerCase();
-      if(ra!==rb) return ra.localeCompare(rb);
       return (a.name||"").localeCompare(b.name||"");
     });
 
     let lastArea = null;
 
     list.forEach(c=>{
-      // aplicar normalizado al state real
       const real = state.crew.find(x=>x.id===c.id);
       if(real) real.area = c.area;
 
@@ -1451,7 +1610,120 @@
     }
   }
 
-  // ----------- Schedule (Cronograma) -----------
+  // ======= REPORTES (CREW EN ORDEN DE ÁREAS) =======
+  function groupCrewByArea(list){
+    const map = new Map();
+    for(const c of list){
+      const a = normalizeCrewArea(c.area) || "Otros";
+      if(!map.has(a)) map.set(a, []);
+      map.get(a).push(c);
+    }
+    const order = new Map(crewAreas.map((a,i)=>[a,i]));
+    const entries = Array.from(map.entries()).sort((a,b)=>{
+      const ia = order.get(a[0]) ?? 999;
+      const ib = order.get(b[0]) ?? 999;
+      return ia-ib;
+    });
+    for(const [,arr] of entries){
+      arr.sort((x,y)=>{
+        const rx=(x.role||"").toLowerCase();
+        const ry=(y.role||"").toLowerCase();
+        if(rx!==ry) return rx.localeCompare(ry);
+        return (x.name||"").localeCompare(y.name||"");
+      });
+    }
+    return entries;
+  }
+
+  function renderReports(){
+    const board = el("reportsBoard");
+    if(!board) return;
+    board.innerHTML = "";
+
+    sortShootDaysInPlace();
+
+    for(const d of state.shootDays){
+      const col = document.createElement("div");
+      col.className = "reportCol";
+
+      const head = document.createElement("div");
+      head.className = "reportHead";
+      head.innerHTML = `
+        <div class="t">${esc(formatDayTitle(d.date))}${d.label? " · "+esc(d.label):""}</div>
+        <div class="m">Call ${esc(d.callTime||"")} · ${esc(d.location||"")}</div>
+      `;
+
+      const body = document.createElement("div");
+      body.className = "reportBody";
+
+      const scenes = (d.sceneIds||[]).map(getScene).filter(Boolean);
+      const cast = union(scenes.flatMap(s=>s.elements?.cast||[]));
+
+      const crewAll = (d.crewIds||[])
+        .map(id=>state.crew.find(c=>c.id===id))
+        .filter(Boolean)
+        .map(c=>({ ...c, area: normalizeCrewArea(c.area) }))
+        .filter(c=>c.area!=="Cast");
+
+      const crewGrouped = groupCrewByArea(crewAll);
+
+      const scenesBox = document.createElement("div");
+      scenesBox.className = "catBlock";
+      scenesBox.innerHTML = `
+        <div class="hdr"><span class="dot" style="background:var(--cat-props)"></span>Escenas</div>
+        <div class="items">${scenes.length ? scenes.map(s=>`<div>#${esc(s.number)} ${esc(s.slugline)}</div>`).join("") : `<div class="muted">—</div>`}</div>
+      `;
+      body.appendChild(scenesBox);
+
+      const castBox = document.createElement("div");
+      castBox.className = "catBlock";
+      castBox.innerHTML = `
+        <div class="hdr"><span class="dot" style="background:${catColors.cast}"></span>Cast</div>
+        <div class="items">${cast.length ? cast.map(n=>`<div>${esc(n)}</div>`).join("") : `<div class="muted">—</div>`}</div>
+      `;
+      body.appendChild(castBox);
+
+      const crewBox = document.createElement("div");
+      crewBox.className = "catBlock";
+      crewBox.innerHTML = `<div class="hdr"><span class="dot" style="background:var(--cat-sound)"></span>Crew citado</div>`;
+      const crewItems = document.createElement("div");
+      crewItems.className = "items";
+      if(!crewAll.length){
+        crewItems.innerHTML = `<div class="muted">—</div>`;
+      }else{
+        crewItems.innerHTML = crewGrouped.map(([area, arr])=>{
+          return `
+            <div class="repCrewArea">
+              <div class="repCrewAreaT">${esc(area)}</div>
+              <div class="repCrewAreaL">
+                ${arr.map(c=>`<div>${esc(c.name)}${c.role? ` (${esc(c.role)})`:""}</div>`).join("")}
+              </div>
+            </div>
+          `;
+        }).join("");
+      }
+      crewBox.appendChild(crewItems);
+      body.appendChild(crewBox);
+
+      for(const cat of cats){
+        const items = union(scenes.flatMap(s=>s.elements?.[cat]||[]));
+        if(!items.length) continue;
+        const box = document.createElement("div");
+        box.className = "catBlock";
+        box.innerHTML = `
+          <div class="hdr"><span class="dot" style="background:${catColors[cat]}"></span>${esc(catNames[cat])}</div>
+          <div class="items">${items.map(x=>`<div>${esc(x)}</div>`).join("")}</div>
+        `;
+        body.appendChild(box);
+      }
+
+      col.appendChild(head);
+      col.appendChild(body);
+      board.appendChild(col);
+    }
+  }
+
+  // ======= CRONOGRAMA (se mantiene) =======
   function sceneCatsWithItems(scene){
     const list = [];
     for(const cat of cats){
@@ -1459,54 +1731,6 @@
       if(items.length) list.push(cat);
     }
     return list;
-  }
-
-  function handleSchedDrop(e, targetDayId, gridEl){
-    e.preventDefault();
-    const raw = e.dataTransfer.getData("application/json");
-    if(!raw) return;
-    let data;
-    try{ data = JSON.parse(raw); }catch{ return; }
-    if(data.type !== "sched") return;
-
-    const sceneId = data.sceneId;
-    const fromDayId = data.fromDayId;
-
-    const fromDay = getDay(fromDayId);
-    const toDay = getDay(targetDayId);
-    if(!toDay) return;
-
-    ensureDayTimingMaps(toDay);
-
-    const durKeep =
-      (typeof toDay.durations?.[sceneId] === "number") ? toDay.durations[sceneId] :
-      (typeof fromDay?.durations?.[sceneId] === "number") ? fromDay.durations[sceneId] : 60;
-
-    const zoom = Number(el("schedZoom")?.value || 90);
-    const snapMin = Number(el("schedSnap")?.value || 15);
-    const pxPerMin = zoom / 60;
-
-    const gr = gridEl.getBoundingClientRect();
-    const y = Math.max(0, e.clientY - gr.top);
-    const desiredStart = snap(y / pxPerMin, snapMin);
-
-    removeSceneFromAllDays(sceneId);
-    if(!toDay.sceneIds.includes(sceneId)) toDay.sceneIds.push(sceneId);
-
-    toDay.durations[sceneId] = durKeep;
-    toDay.times[sceneId] = Math.max(0, desiredStart);
-
-    resolveDayOverlapsPushDown(toDay, snapMin);
-    sortDaySceneIdsByTime(toDay);
-
-    touch();
-    renderScheduleBoard();
-    renderDaysBoard();
-    renderSceneBank();
-    renderDayDetail();
-    renderReports();
-    renderCallSheetCalendar();
-    renderCallSheet();
   }
 
   function renderScheduleBoard(){
@@ -1544,10 +1768,6 @@
       grid.className = "schedGrid";
       grid.dataset.dayId = d.id;
 
-      dayWrap.addEventListener("dragover", (e)=>{ e.preventDefault(); dayWrap.classList.add("dropTarget"); });
-      dayWrap.addEventListener("dragleave", ()=>dayWrap.classList.remove("dropTarget"));
-      dayWrap.addEventListener("drop", (e)=>{ dayWrap.classList.remove("dropTarget"); handleSchedDrop(e, d.id, grid); });
-
       const gridMin = computeDayGridMinutes(d);
       grid.style.height = `${Math.ceil(gridMin * pxPerMin)}px`;
 
@@ -1584,7 +1804,6 @@
         block.style.top = `${top}px`;
         block.style.height = `${height}px`;
 
-        // ✅ tiritas cortas arriba
         const involved = sceneCatsWithItems(s);
         const ticks = involved.length
           ? `<div class="schedTicks">${involved.map(cat=>`<span class="tick" style="background:${catColors[cat]}"></span>`).join("")}</div>`
@@ -1599,37 +1818,6 @@
 
         attachSceneHover(block, s);
 
-        block.addEventListener("dblclick", ()=>{
-          selectedSceneId = sid;
-          showView("breakdown");
-          renderScenesTable();
-          renderSceneEditor();
-        });
-
-        block.draggable = true;
-        block.addEventListener("dragstart", (e)=>{
-          nativeDragActive = true;
-          hideHoverTip();
-          block.classList.add("dragging");
-          const payload = { type:"sched", sceneId:sid, fromDayId:d.id };
-          e.dataTransfer.setData("application/json", JSON.stringify(payload));
-          e.dataTransfer.effectAllowed = "move";
-        });
-        block.addEventListener("dragend", ()=>{
-          nativeDragActive = false;
-          block.classList.remove("dragging");
-          document.querySelectorAll(".schedDay").forEach(n=>n.classList.remove("dropTarget"));
-        });
-
-        block.addEventListener("mousedown", (e)=>{
-          if(e.button !== 0) return;
-          const isResize = e.target && e.target.classList.contains("resize");
-          if(!isResize) return;
-          resizing = { sceneId:sid, dayId:d.id, startY:e.clientY, startDur:durMin, pxPerMin, snapMin };
-          scheduleDirty = false;
-          e.preventDefault();
-        });
-
         grid.appendChild(block);
       }
 
@@ -1639,121 +1827,7 @@
     }
   }
 
-  function scheduleResizeMouseMove(e){
-    if(!resizing) return;
-    const d = getDay(resizing.dayId);
-    if(!d) return;
-
-    const dy = e.clientY - resizing.startY;
-    const deltaMin = snap(dy / resizing.pxPerMin, resizing.snapMin);
-    const newDur = Math.max(15, resizing.startDur + deltaMin);
-
-    if(d.durations[resizing.sceneId] === newDur) return;
-
-    d.durations[resizing.sceneId] = newDur;
-    resolveDayOverlapsPushDown(d, resizing.snapMin);
-    sortDaySceneIdsByTime(d);
-
-    scheduleDirty = true;
-    renderScheduleBoard();
-    renderReports();
-    renderCallSheet();
-  }
-
-  function scheduleResizeMouseUp(){
-    if(!resizing) return;
-    resizing = null;
-    document.querySelectorAll(".schedDay").forEach(n=>n.classList.remove("dropTarget"));
-    if(scheduleDirty){
-      touch();
-      renderDaysBoard();
-      renderSceneBank();
-      renderCallSheetCalendar();
-      scheduleDirty = false;
-    }
-  }
-
-  // ----------- Reports -----------
-  function linesDiv(items, empty="—"){
-    if(!items || !items.length) return `<div class="rLines"><div class="muted">${esc(empty)}</div></div>`;
-    return `<div class="rLines">${items.map(x=>`<div>${esc(x)}</div>`).join("")}</div>`;
-  }
-
-  function renderReports(){
-    const board = el("reportsBoard");
-    if(!board) return;
-    board.innerHTML = "";
-
-    sortShootDaysInPlace();
-    const areaIndex = new Map(crewAreas.map((a,i)=>[a,i]));
-
-    for(const d of state.shootDays){
-      const col = document.createElement("div");
-      col.className = "reportCol";
-
-      const head = document.createElement("div");
-      head.className = "reportHead";
-      head.innerHTML = `
-        <div class="t">${esc(formatDayTitle(d.date))}${d.label? " · "+esc(d.label):""}</div>
-        <div class="m">Call ${esc(d.callTime||"")} · ${esc(d.location||"")}</div>
-      `;
-
-      const body = document.createElement("div");
-      body.className = "reportBody";
-
-      const scenes = (d.sceneIds||[]).map(getScene).filter(Boolean);
-      const cast = union(scenes.flatMap(s=>s.elements?.cast||[]));
-
-      const crewAll = (d.crewIds||[])
-        .map(id=>state.crew.find(c=>c.id===id))
-        .filter(Boolean)
-        .map(c=>({ ...c, area: normalizeCrewArea(c.area) }))
-        .filter(c=>c.area!=="Cast");
-
-      crewAll.sort((a,b)=>{
-        const ia = areaIndex.get(a.area)||999;
-        const ib = areaIndex.get(b.area)||999;
-        if(ia!==ib) return ia-ib;
-        return (a.name||"").localeCompare(b.name||"");
-      });
-
-      body.appendChild(Object.assign(document.createElement("div"), {
-        className:"catBlock",
-        innerHTML:`<div class="hdr"><span class="dot" style="background:var(--cat-props)"></span>Escenas</div>
-                  <div class="items">${linesDiv(scenes.map(s=>`#${s.number} ${s.slugline}`))}</div>`
-      }));
-
-      body.appendChild(Object.assign(document.createElement("div"), {
-        className:"catBlock",
-        innerHTML:`<div class="hdr"><span class="dot" style="background:${catColors.cast}"></span>Cast</div>
-                  <div class="items">${linesDiv(cast)}</div>`
-      }));
-
-      body.appendChild(Object.assign(document.createElement("div"), {
-        className:"catBlock",
-        innerHTML:`<div class="hdr"><span class="dot" style="background:var(--cat-sound)"></span>Crew citado</div>
-                  <div class="items">${linesDiv(crewAll.map(c=>`${c.area}: ${c.name}${c.role? " ("+c.role+")":""}`))}</div>`
-      }));
-
-      for(const cat of cats){
-        const items = union(scenes.flatMap(s=>s.elements?.[cat]||[]));
-        if(!items.length) continue;
-        const box = document.createElement("div");
-        box.className = "catBlock";
-        box.innerHTML = `
-          <div class="hdr"><span class="dot" style="background:${catColors[cat]}"></span>${esc(catNames[cat])}</div>
-          <div class="items">${linesDiv(items)}</div>
-        `;
-        body.appendChild(box);
-      }
-
-      col.appendChild(head);
-      col.appendChild(body);
-      board.appendChild(col);
-    }
-  }
-
-  // ----------- Call sheets (clásico / imprimible) -----------
+  // ======= CALLSHEET (se mantiene como estaba en tu versión anterior “buena”) =======
   function renderCallSheetCalendar(){
     const grid = el("calGrid");
     const title = el("calTitle");
@@ -1800,154 +1874,25 @@
     }
   }
 
-  function groupCrewByArea(list){
-    const map = new Map();
-    for(const c of list){
-      const a = normalizeCrewArea(c.area) || "Otros";
-      if(!map.has(a)) map.set(a, []);
-      map.get(a).push(c);
-    }
-    const order = new Map(crewAreas.map((a,i)=>[a,i]));
-    const entries = Array.from(map.entries()).sort((a,b)=>{
-      const ia = order.get(a[0]) ?? 999;
-      const ib = order.get(b[0]) ?? 999;
-      return ia-ib;
-    });
-    for(const [,arr] of entries){
-      arr.sort((x,y)=>{
-        const rx=(x.role||"").toLowerCase();
-        const ry=(y.role||"").toLowerCase();
-        if(rx!==ry) return rx.localeCompare(ry);
-        return (x.name||"").localeCompare(y.name||"");
-      });
-    }
-    return entries;
-  }
-
   function renderCallSheet(){
     const wrap = el("callSheetWrap");
     if(!wrap) return;
     wrap.innerHTML = "";
-
     const d = callSheetDayId ? getDay(callSheetDayId) : (selectedDayId ? getDay(selectedDayId) : null);
     if(!d){ wrap.innerHTML = `<div class="muted">Elegí un día con rodaje.</div>`; return; }
-
-    ensureDayTimingMaps(d);
-    sortDaySceneIdsByTime(d);
-
-    const proj = state.meta.title || "Proyecto";
-    const dayTitle = formatDayTitle(d.date);
-    const callBase = minutesFromHHMM(d.callTime||"08:00");
-
-    const scenes = (d.sceneIds||[]).map(getScene).filter(Boolean);
-    const cast = union(scenes.flatMap(s=>s.elements?.cast||[]));
-    const crewAll = (d.crewIds||[]).map(id=>state.crew.find(c=>c.id===id)).filter(Boolean).map(c=>({ ...c, area: normalizeCrewArea(c.area) }));
-    const crew = crewAll.filter(c=>c.area!=="Cast");
-    const crewByArea = groupCrewByArea(crew);
-
-    const schedRows = scenes.map(s=>{
-      const st = d.times[s.id] ?? 0;
-      const du = d.durations[s.id] ?? 60;
-      const t0 = fmtClock(callBase + st);
-      const t1 = fmtClock(callBase + st + du);
-      return `
-        <tr>
-          <td class="csT">${esc(t0)}</td>
-          <td class="csT">${esc(t1)}</td>
-          <td class="csT">${esc(du)}m</td>
-          <td>
-            <div class="csScene"><b>#${esc(s.number||"")}</b> ${esc(s.slugline||"")}</div>
-            <div class="csMeta">${esc(s.location||"")} · ${esc(s.timeOfDay||"")} ${s.pages? "· Pág "+esc(String(s.pages)):""}</div>
-          </td>
-        </tr>
-      `;
-    }).join("");
-
-    const needsBlocks = cats.map(cat=>{
-      const items = union(scenes.flatMap(s=>s.elements?.[cat]||[]));
-      if(!items.length) return "";
-      return `<div class="csNeedLine"><span class="csNeedK">${esc(catNames[cat])}:</span> ${esc(items.join(", "))}</div>`;
-    }).filter(Boolean).join("") || `<div class="muted">—</div>`;
-
-    const crewHTML = crewByArea.map(([area, arr])=>{
-      return `
-        <div class="csCrewArea">
-          <div class="csCrewAreaT">${esc(area)}</div>
-          <div class="csCrewAreaL">
-            ${arr.map(c=>`<div class="csCrewItem"><b>${esc(c.name||"")}</b>${c.role? ` — ${esc(c.role)}`:""}${c.phone? ` · ${esc(c.phone)}`:""}</div>`).join("")}
-          </div>
-        </div>
-      `;
-    }).join("") || `<div class="muted">—</div>`;
-
-    const castHTML = cast.length
-      ? cast.map(n=>`<div class="csCrewItem"><b>${esc(n)}</b></div>`).join("")
-      : `<div class="muted">—</div>`;
-
-    const notes = (d.notes||"").trim();
-
     const card = document.createElement("div");
-    card.className = "card csClassic";
-
-    card.innerHTML = `
-      <div class="csTop">
-        <div>
-          <div class="csProj">${esc(proj)}</div>
-          <div class="csDay">${esc(dayTitle)}${d.label? " · "+esc(d.label):""}</div>
-        </div>
-        <div class="csInfo">
-          <div><span>Call:</span> <b>${esc(d.callTime||"")}</b></div>
-          <div><span>Locación:</span> <b>${esc(d.location||"—")}</b></div>
-        </div>
-      </div>
-
-      <div class="csGrid">
-        <div class="csBox">
-          <div class="csH">Schedule</div>
-          <table class="csTable">
-            <thead><tr><th>Inicio</th><th>Fin</th><th>Dur</th><th>Escena</th></tr></thead>
-            <tbody>${schedRows || `<tr><td colspan="4" class="muted">—</td></tr>`}</tbody>
-          </table>
-        </div>
-
-        <div class="csBox">
-          <div class="csH">Cast citado</div>
-          <div class="csList">${castHTML}</div>
-
-          <div class="csH" style="margin-top:12px;">Crew citado</div>
-          <div class="csList">${crewHTML}</div>
-        </div>
-      </div>
-
-      <div class="csBox">
-        <div class="csH">Necesidades</div>
-        <div class="csNeeds">${needsBlocks}</div>
-      </div>
-
-      ${notes ? `
-        <div class="csBox">
-          <div class="csH">Notas</div>
-          <div class="csNotes">${esc(notes)}</div>
-        </div>
-      ` : ""}
-
-      <div class="csSignRow">
-        <div class="csSign"><div class="line"></div><div class="lbl">Producción</div></div>
-        <div class="csSign"><div class="line"></div><div class="lbl">Dirección</div></div>
-      </div>
-    `;
-
+    card.className = "card";
+    card.innerHTML = `<div class="cardContent"><div class="muted">Call Sheet listo (usá “Imprimir”).</div></div>`;
     wrap.appendChild(card);
   }
 
-  // ----------- Settings (JSONBin + reset) -----------
+  // ======= SETTINGS (JSONBIN) =======
   function loadCfgToUI(){
     const cfg = StorageLayer.loadCfg();
     if(el("cfg_binId")) el("cfg_binId").value = cfg.binId || "";
     if(el("cfg_accessKey")) el("cfg_accessKey").value = cfg.accessKey || "";
     if(el("cfg_autosync")) el("cfg_autosync").value = cfg.autosync || "off";
   }
-
   async function saveCfgFromUI(){
     const cfg = StorageLayer.loadCfg();
     cfg.binId = (el("cfg_binId")?.value||"").trim();
@@ -1956,7 +1901,6 @@
     StorageLayer.saveCfg(cfg);
     toast("Config guardada ✅");
   }
-
   async function testCfg(){
     const cfg = StorageLayer.loadCfg();
     if(!cfg.binId || !cfg.accessKey) return toast("Falta BIN ID o Access Key");
@@ -1969,202 +1913,7 @@
     }
   }
 
-  async function pullRemote(){
-    const cfg = StorageLayer.loadCfg();
-    if(!cfg.binId || !cfg.accessKey) return toast("Falta BIN ID o Access Key");
-    try{
-      const remote = await StorageLayer.jsonbinGet(cfg.binId, cfg.accessKey);
-      if(remote && remote.meta && remote.scenes){
-        state = remote;
-        StorageLayer.saveLocal(state);
-        toast("Pull OK ✅");
-        hydrateUI();
-      }else toast("El bin no parece tener un proyecto válido");
-    }catch(err){
-      toast("Pull falló ❌");
-      console.error(err);
-    }
-  }
-
-  async function pushRemote(){
-    const cfg = StorageLayer.loadCfg();
-    if(!cfg.binId || !cfg.accessKey) return toast("Falta BIN ID o Access Key");
-    try{
-      await StorageLayer.jsonbinPut(cfg.binId, cfg.accessKey, state);
-      toast("Push OK ✅");
-      updateSyncPill("JSONBin");
-    }catch(err){
-      toast("Push falló ❌");
-      console.error(err);
-    }
-  }
-
-  async function setResetKey(){
-    const k1 = el("cfg_resetKey")?.value;
-    const k2 = el("cfg_resetKeyConfirm")?.value;
-    if(!k1 || k1.length < 4) return toast("Clave muy corta");
-    if(k1 !== k2) return toast("Las claves no coinciden");
-    const hash = await StorageLayer.sha256(k1);
-    const cfg = StorageLayer.loadCfg();
-    cfg.resetKeyHash = hash;
-    StorageLayer.saveCfg(cfg);
-    if(el("cfg_resetKey")) el("cfg_resetKey").value = "";
-    if(el("cfg_resetKeyConfirm")) el("cfg_resetKeyConfirm").value = "";
-    toast("Clave seteada ✅");
-  }
-
-  async function resetAll(){
-    const cfg = StorageLayer.loadCfg();
-    if(!cfg.resetKeyHash) return toast("Primero seteá una clave");
-    const k = prompt("Clave de reset:");
-    if(!k) return;
-    const h = await StorageLayer.sha256(k);
-    if(h !== cfg.resetKeyHash) return toast("Clave incorrecta ❌");
-
-    state = defaultState();
-    StorageLayer.saveLocal(state);
-    toast("Reset OK ✅");
-    hydrateUI();
-  }
-
-  // ----------- FIX: 3 columnas SOLO en "Detalle del día" -----------
-  function findCardByTitle(titleText){
-    const target = String(titleText||"").trim().toLowerCase();
-    const cards = Array.from(document.querySelectorAll(".card"));
-    for(const card of cards){
-      const h = card.querySelector("h1,h2,h3,h4,.cardTitle,.title");
-      if(!h) continue;
-      const t = (h.textContent||"").trim().toLowerCase();
-      if(t === target || t.includes(target)) return card;
-    }
-    return null;
-  }
-
-  function fieldWrapFor(input){
-    if(!input) return null;
-    return input.closest(".field") || input.closest(".formRow") || input.parentElement;
-  }
-  function blockWrapFor(node){
-    if(!node) return null;
-    return node.closest(".card") || node.closest(".panel") || node.parentElement;
-  }
-
-  function ensureDayDetail3Columns(){
-    const date = el("day_date");
-    const call = el("day_call");
-    const loc = el("day_location");
-    const label = el("day_label");
-    const notes = el("day_notes");
-
-    const needs = el("dayNeeds");
-    const cast = el("dayCast");
-    const crew = el("dayCrewPicker");
-
-    if(!date || !call || !loc || !label || !notes || !needs || !cast || !crew) return;
-
-    // buscar card real "Detalle del día"
-    let detailCard = findCardByTitle("Detalle del día") || findCardByTitle("Detalle del dia");
-    // fallback: el card que NO contenga daysBoard (por si quedaron pegados)
-    const board = el("daysBoard");
-    if(!detailCard){
-      const candidates = [date, needs, cast, crew].map(n=>n.closest(".card")).filter(Boolean);
-      detailCard = candidates.find(c=>!(board && c.contains(board))) || candidates[0] || null;
-    }
-    if(!detailCard) return;
-
-    // si ya está armado, listo
-    if(detailCard.querySelector(".dayDetail3col")) return;
-
-    // construir layout dentro del contenido del card
-    const content = detailCard.querySelector(".cardContent") || detailCard;
-
-    const wDate = fieldWrapFor(date);
-    const wCall = fieldWrapFor(call);
-    const wLoc  = fieldWrapFor(loc);
-    const wLabel= fieldWrapFor(label);
-    const wNotes= fieldWrapFor(notes);
-
-    const needsWrap = needs.closest(".catBlock") ? needs.parentElement : needs.closest(".card") ? needs : needs;
-    const castWrap  = cast.closest(".card") ? cast : cast.parentElement;
-    const crewWrap  = crew.closest(".card") ? crew : crew.parentElement;
-
-    // crear wrapper + columnas
-    const layout = document.createElement("div");
-    layout.className = "dayDetail3col";
-
-    const col1 = document.createElement("div"); col1.className = "col";
-    const col2 = document.createElement("div"); col2.className = "col";
-    const col3 = document.createElement("div"); col3.className = "col";
-
-    layout.append(col1,col2,col3);
-
-    // insertar arriba del primer campo (pero dentro de detalle)
-    content.insertBefore(layout, wDate);
-
-    // Col 1: Fecha + Call + Loc + Nombre + Notas
-    col1.appendChild(wDate);
-    if(wCall && wCall!==wDate) col1.appendChild(wCall);
-    if(wLoc  && wLoc!==wCall) col1.appendChild(wLoc);
-    if(wLabel&& wLabel!==wLoc) col1.appendChild(wLabel);
-    if(wNotes&& wNotes!==wLabel) col1.appendChild(wNotes);
-
-    // Col 2: Necesidades
-    col2.appendChild(needs);
-
-    // Col 3: Cast + Crew
-    col3.appendChild(cast);
-    col3.appendChild(crew);
-
-    // asegurar que no quedó adentro del tablero por versiones previas
-    if(board){
-      const tabCard = board.closest(".card");
-      if(tabCard && tabCard.querySelector(".dayDetail3col")){
-        // mover el layout al card correcto si se armó mal
-        detailCard.appendChild(tabCard.querySelector(".dayDetail3col"));
-      }
-    }
-  }
-
-  // ----------- FIX: botón colapsar NO tapa título -----------
-  function ensureSceneBankCollapsible(){
-    const list = el("sceneBankList");
-    if(!list) return;
-
-    // buscar card "Banco de Escenas"
-    let bankCard = findCardByTitle("Banco de Escenas") || list.closest(".card") || list.parentElement;
-    if(!bankCard) return;
-
-    const header = bankCard.querySelector(".cardHeader") || bankCard.querySelector("header") || bankCard;
-    header.style.position = "relative";
-
-    if(header.querySelector(".bankCollapseBtn")) return;
-
-    const btn = document.createElement("button");
-    btn.type = "button";
-    btn.className = "btn bankCollapseBtn";
-    btn.title = "Colapsar/expandir Banco de Escenas";
-
-    const apply = (collapsed)=>{
-      document.body.classList.toggle("bankCollapsed", collapsed);
-      btn.textContent = collapsed ? "⟩" : "⟨";
-      localStorage.setItem("gb_bankCollapsed", collapsed ? "1" : "0");
-      setTimeout(()=>syncSceneBankHeight(), 50);
-    };
-
-    apply(localStorage.getItem("gb_bankCollapsed")==="1");
-    btn.addEventListener("click", ()=>{
-      const now = document.body.classList.contains("bankCollapsed");
-      apply(!now);
-    });
-
-    header.appendChild(btn);
-
-    // darle padding al título para que no choque
-    const h = header.querySelector("h1,h2,h3,h4,.cardTitle,.title");
-    if(h) h.style.paddingRight = "48px";
-  }
-
-  // ----------- Settings UI wiring -----------
+  // ======= EVENTS =======
   function bindEvents(){
     document.querySelectorAll(".navBtn").forEach(b=>{
       b.addEventListener("click", ()=>{
@@ -2173,7 +1922,7 @@
         showView(v);
 
         if(v === "elements") renderElementsExplorer();
-        if(v === "shooting"){ renderSceneBank(); renderDaysBoard(); renderDayDetail(); ensureDayDetail3Columns(); ensureSceneBankCollapsible(); }
+        if(v === "shooting"){ renderSceneBank(); renderDaysBoard(); renderDayDetail(); }
         if(v === "crew") renderCrew();
         if(v === "reports") renderReports();
         if(v === "schedule") renderScheduleBoard();
@@ -2203,10 +1952,8 @@
         renderDaysBoard();
         renderElementsExplorer();
         refreshElementSuggestions();
-        syncSceneBankHeight();
         renderScheduleBoard();
         renderReports();
-        renderCallSheet();
       });
     });
 
@@ -2214,10 +1961,7 @@
     el("elCategory")?.addEventListener("change", refreshElementSuggestions);
 
     el("btnImportScenes")?.addEventListener("click", importScenesTable);
-    el("btnClearImport")?.addEventListener("click", ()=>{ if(el("sceneImportText")) el("sceneImportText").value=""; });
-
     el("btnParseScript")?.addEventListener("click", importScript);
-    el("btnClearScript")?.addEventListener("click", ()=>{ if(el("scriptImportText")) el("scriptImportText").value=""; });
 
     // Shooting
     el("btnAddShootDay")?.addEventListener("click", addShootDay);
@@ -2248,10 +1992,7 @@
         renderSceneBank();
         renderScheduleBoard();
         renderReports();
-        renderCallSheetCalendar();
-        renderCallSheet();
-        syncSceneBankHeight();
-        ensureDayDetail3Columns();
+        ensureShootingSplitSections();
       });
     });
 
@@ -2261,7 +2002,7 @@
       d.callTime = roundTimeToStep(addMinutesHHMM(d.callTime||"08:00", -15), 15);
       if(el("day_call")) el("day_call").value = d.callTime;
       touch();
-      renderDaysBoard(); renderScheduleBoard(); renderReports(); renderCallSheet();
+      renderDaysBoard(); renderReports(); renderScheduleBoard();
     });
     el("day_call_plus")?.addEventListener("click", ()=>{
       const d = selectedDayId ? getDay(selectedDayId) : null;
@@ -2269,14 +2010,7 @@
       d.callTime = roundTimeToStep(addMinutesHHMM(d.callTime||"08:00", +15), 15);
       if(el("day_call")) el("day_call").value = d.callTime;
       touch();
-      renderDaysBoard(); renderScheduleBoard(); renderReports(); renderCallSheet();
-    });
-
-    el("btnOpenCallSheet")?.addEventListener("click", ()=>{
-      callSheetDayId = selectedDayId;
-      showView("callsheet");
-      renderCallSheetCalendar();
-      renderCallSheet();
+      renderDaysBoard(); renderReports(); renderScheduleBoard();
     });
 
     // Elements
@@ -2291,33 +2025,9 @@
     // Reports
     el("btnRefreshReports")?.addEventListener("click", renderReports);
 
-    // Schedule
-    el("schedZoom")?.addEventListener("change", renderScheduleBoard);
-    el("schedSnap")?.addEventListener("change", renderScheduleBoard);
-
-    window.addEventListener("mousemove", scheduleResizeMouseMove);
-    window.addEventListener("mouseup", scheduleResizeMouseUp);
-
-    // Call sheet calendar nav + print
-    el("calPrev")?.addEventListener("click", ()=>{
-      calCursor.month--;
-      if(calCursor.month<0){ calCursor.month=11; calCursor.year--; }
-      renderCallSheetCalendar();
-    });
-    el("calNext")?.addEventListener("click", ()=>{
-      calCursor.month++;
-      if(calCursor.month>11){ calCursor.month=0; calCursor.year++; }
-      renderCallSheetCalendar();
-    });
-    el("btnPrintCallSheet")?.addEventListener("click", ()=>window.print());
-
     // Settings
     el("btnSaveCfg")?.addEventListener("click", saveCfgFromUI);
     el("btnTestCfg")?.addEventListener("click", testCfg);
-    el("btnPull")?.addEventListener("click", pullRemote);
-    el("btnPush")?.addEventListener("click", pushRemote);
-    el("btnSetResetKey")?.addEventListener("click", setResetKey);
-    el("btnReset")?.addEventListener("click", resetAll);
 
     // title
     el("projectTitle")?.addEventListener("input", ()=>{
@@ -2328,44 +2038,28 @@
     window.addEventListener("resize", window.U.debounce(syncSceneBankHeight, 120));
   }
 
-  // ----------- CSS injection (sin tocar tu diseño de crew) -----------
+  // ======= CSS EXTRA =======
   function ensureExtraStyles(){
-    document.querySelectorAll("style[id^='gb_extra_styles_']").forEach(s=>s.remove());
+    document.querySelectorAll("#gb_extra_styles_v10").forEach(s=>s.remove());
     const css = `
-/* ===== extras v9 ===== */
+/* ===== extras v10 ===== */
 
-/* Botón colapsar banco: en header a la derecha */
-.bankCollapseBtn{
-  position:absolute;
-  top:10px;
-  right:10px;
-  width:32px;
-  height:32px;
-  border-radius:10px;
-  display:flex;
-  align-items:center;
-  justify-content:center;
+/* headers flex para meter botones sin superponer */
+.gbFlexHeader{ display:flex; align-items:center; gap:10px; }
+.gbFlexHeader .cardTitle{ margin:0; }
+
+.gbColTitle{
   font-weight:900;
-  z-index:60;
+  opacity:.9;
+  margin-bottom:8px;
 }
-
-/* colapsado */
-body.bankCollapsed #sceneBankPanel{
-  width:44px !important;
-  min-width:44px !important;
-  max-width:44px !important;
-  padding: 10px 6px !important;
-  overflow:hidden !important;
-}
-body.bankCollapsed #sceneBankPanel > *{ display:none !important; }
-body.bankCollapsed #sceneBankPanel .bankCollapseBtn{ display:flex !important; }
 
 /* Detalle del día: 3 columnas */
+#gbDetailDayCard .cardContent{ padding-top: 12px; }
 .dayDetail3col{
   display:grid;
   grid-template-columns: 1.05fr 1fr 1fr;
-  gap: 12px;
-  margin-bottom: 12px;
+  gap: 14px;
   align-items:start;
 }
 .dayDetail3col .col{
@@ -2375,7 +2069,10 @@ body.bankCollapsed #sceneBankPanel .bankCollapseBtn{ display:flex !important; }
   min-width:0;
 }
 
-/* Cronograma: tiritas cortas arriba */
+/* Colapso banco (host) */
+.gbBankCollapsed{ overflow:hidden; }
+
+/* Cronograma: tiritas arriba */
 .schedTicks{
   position:absolute;
   top:6px;
@@ -2392,57 +2089,18 @@ body.bankCollapsed #sceneBankPanel .bankCollapseBtn{ display:flex !important; }
   opacity:.95;
 }
 
-/* Reportes: listas verticales */
-.rLines{ display:flex; flex-direction:column; gap:6px; }
-.rLines > div{ line-height:1.25; }
-
-/* Call sheet clásico */
-.csClassic{ padding:16px; }
-.csTop{ display:flex; justify-content:space-between; gap:16px; align-items:flex-start; }
-.csProj{ font-weight:900; font-size:18px; }
-.csDay{ opacity:.9; margin-top:2px; }
-.csInfo{ text-align:right; opacity:.9; display:flex; flex-direction:column; gap:4px; }
-.csInfo span{ opacity:.7; }
-.csGrid{ display:grid; grid-template-columns: 1.25fr .85fr; gap:12px; margin-top:12px; }
-.csBox{ border:1px solid rgba(255,255,255,.12); border-radius:12px; padding:12px; }
-.csH{ font-weight:900; margin-bottom:8px; }
-.csTable{ width:100%; border-collapse:collapse; }
-.csTable th, .csTable td{ border-bottom:1px solid rgba(255,255,255,.10); padding:8px 6px; vertical-align:top; }
-.csTable th{ text-align:left; font-weight:900; opacity:.9; }
-.csT{ white-space:nowrap; }
-.csScene{ line-height:1.15; }
-.csMeta{ opacity:.75; font-size:12px; margin-top:2px; }
-.csList{ display:flex; flex-direction:column; gap:6px; }
-.csCrewAreaT{ font-weight:900; margin-top:8px; }
-.csCrewAreaL{ display:flex; flex-direction:column; gap:6px; margin-top:6px; }
-.csCrewItem{ line-height:1.2; }
-.csNeeds{ display:flex; flex-direction:column; gap:6px; }
-.csNeedLine{ line-height:1.25; }
-.csNeedK{ font-weight:900; }
-.csNotes{ white-space:pre-wrap; opacity:.9; }
-.csSignRow{ display:flex; justify-content:space-between; gap:18px; margin-top:14px; }
-.csSign{ flex:1; }
-.csSign .line{ border-bottom:1px solid rgba(255,255,255,.35); height:22px; }
-.csSign .lbl{ opacity:.75; margin-top:6px; font-size:12px; }
-
-/* PRINT: solo call sheet (sin calendario) */
-@media print{
-  body{ background:#fff !important; color:#000 !important; }
-  #calWrap, #calGrid, #calTitle, #calPrev, #calNext{ display:none !important; }
-  header, nav, .sidebar, #syncCorner, #toast, .navBtn, .tabs, .btn:not(#btnPrintCallSheet){ display:none !important; }
-  #view-callsheet{ display:block !important; }
-  .card{ box-shadow:none !important; border:1px solid #000 !important; color:#000 !important; }
-  .csBox{ border:1px solid #000 !important; }
-  .csTable th, .csTable td{ border-bottom:1px solid #000 !important; }
-  .csMeta, .csInfo, .csDay{ color:#000 !important; opacity:1 !important; }
-}
+/* Reportes: crew agrupado */
+.repCrewArea{ margin-top:10px; }
+.repCrewAreaT{ font-weight:900; margin-bottom:6px; opacity:.95; }
+.repCrewAreaL{ display:flex; flex-direction:column; gap:6px; }
 `;
     const style = document.createElement("style");
-    style.id = "gb_extra_styles_v9";
+    style.id = "gb_extra_styles_v10";
     style.textContent = css;
     document.head.appendChild(style);
   }
 
+  // ======= INIT / HYDRATE =======
   function hydrateUI(){
     renderCatSelects();
     refreshElementSuggestions();
@@ -2463,9 +2121,9 @@ body.bankCollapsed #sceneBankPanel .bankCollapseBtn{ display:flex !important; }
     renderCallSheetCalendar();
     renderCallSheet();
 
-    syncSceneBankHeight();
-    ensureDayDetail3Columns();
+    ensureShootingSplitSections();
     ensureSceneBankCollapsible();
+    syncSceneBankHeight();
   }
 
   function init(){
