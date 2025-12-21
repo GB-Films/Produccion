@@ -32,7 +32,20 @@
     extras:"var(--cat-extras)"
   };
 
-  const crewAreas = ["Producción","Dirección","Foto","Arte","Vestuario","Maquillaje","Sonido","Eléctrica/Grip","Post/VFX","Cast","Otros"];
+  // ✅ Orden único de áreas en TODA la app (listas, dropdowns, agrupados, etc.)
+  const crewAreas = [
+    "Dirección",
+    "Cast",
+    "Producción",
+    "Foto",
+    "Eléctrica/Grip",
+    "Sonido",
+    "Arte",
+    "Vestuario",
+    "Maquillaje",
+    "Post/VFX",
+    "Otros"
+  ];
 
   let state = null;
   let selectedSceneId = null;
@@ -82,7 +95,7 @@
 
   function defaultState(){
     return {
-      meta: { version: 7, title:"Proyecto", updatedAt: new Date().toISOString() },
+      meta: { version: 8, title:"Proyecto", updatedAt: new Date().toISOString() },
       scenes: [],
       shootDays: [],
       crew: []
@@ -115,7 +128,8 @@
 
     if(name === "shooting"){
       requestAnimationFrame(()=>syncSceneBankHeight());
-      requestAnimationFrame(()=>ensureDayTopTwoColumns());
+      requestAnimationFrame(()=>ensureDayLayout3Columns());
+      requestAnimationFrame(()=>ensureSceneBankCollapsible());
     }
     if(name === "schedule"){
       requestAnimationFrame(()=>renderScheduleBoard());
@@ -370,7 +384,6 @@
   }
 
   // ✅ Empujar escenas hacia abajo para que nunca se superpongan
-  // No "arrastra para arriba" (si achicás duración, deja huecos)
   function resolveDayOverlapsPushDown(d, snapMin){
     ensureDayTimingMaps(d);
     sortDaySceneIdsByTime(d);
@@ -828,7 +841,7 @@
     renderScheduleBoard();
     renderCallSheetCalendar();
     syncSceneBankHeight();
-    ensureDayTopTwoColumns();
+    ensureDayLayout3Columns();
   }
 
   function deleteShootDay(){
@@ -848,7 +861,7 @@
     renderCallSheetCalendar();
     renderCallSheet();
     syncSceneBankHeight();
-    ensureDayTopTwoColumns();
+    ensureDayLayout3Columns();
   }
 
   function sceneAssignedDayId(sceneId){
@@ -975,7 +988,7 @@
         renderDaysBoard();
         renderDayDetail();
         syncSceneBankHeight();
-        ensureDayTopTwoColumns();
+        ensureDayLayout3Columns();
       });
 
       const zone = document.createElement("div");
@@ -1019,7 +1032,7 @@
         renderCallSheetCalendar();
         renderCallSheet();
         syncSceneBankHeight();
-        ensureDayTopTwoColumns();
+        ensureDayLayout3Columns();
       });
 
       const ids = d.sceneIds || [];
@@ -1188,7 +1201,7 @@
     renderDayCrewPicker();
     renderDayNeeds();
     syncSceneBankHeight();
-    ensureDayTopTwoColumns();
+    ensureDayLayout3Columns();
   }
 
   // ----------- Elements explorer -----------
@@ -1467,7 +1480,7 @@
       const items = scene.elements?.[cat] || [];
       if(items.length) list.push(cat);
     }
-    return list.length ? list : ["cast"];
+    return list.length ? list : [];
   }
 
   // Drag & drop nativo
@@ -1605,15 +1618,14 @@
         block.style.top = `${top}px`;
         block.style.height = `${height}px`;
 
-        // ✅ múltiples líneas por categoría con elementos
+        // ✅ tiritas cortas arriba, de izquierda a derecha
         const involved = sceneCatsWithItems(s);
-        const lineH = 3;
-        const linesHtml = involved.map(cat=>`<div class="schedLine" style="background:${catColors[cat]}"></div>`).join("");
-        const linesWrap = `<div class="schedLines" style="height:${lineH*involved.length}px">${linesHtml}</div>`;
-        block.style.paddingTop = `${8 + (lineH*involved.length)}px`;
+        const ticks = involved.length
+          ? `<div class="schedTicks">${involved.map(cat=>`<span class="tick" style="background:${catColors[cat]}"></span>`).join("")}</div>`
+          : "";
 
         block.innerHTML = `
-          ${linesWrap}
+          ${ticks}
           <div class="title">#${esc(s.number||"")} — ${esc(s.slugline||"")}</div>
           <div class="meta">${esc(fmtClock(callBase + startMin))} · ${durMin} min</div>
           <div class="resize" title="Cambiar duración"></div>
@@ -1713,6 +1725,8 @@
 
     sortShootDaysInPlace();
 
+    const areaIndex = new Map(crewAreas.map((a,i)=>[a,i]));
+
     for(const d of state.shootDays){
       const col = document.createElement("div");
       col.className = "reportCol";
@@ -1729,7 +1743,14 @@
 
       const scenes = (d.sceneIds||[]).map(getScene).filter(Boolean);
       const cast = union(scenes.flatMap(s=>s.elements?.cast||[]));
-      const crew = (d.crewIds||[]).map(id=>state.crew.find(c=>c.id===id)).filter(Boolean);
+
+      const crewAll = (d.crewIds||[]).map(id=>state.crew.find(c=>c.id===id)).filter(Boolean);
+      crewAll.sort((a,b)=>{
+        const ia = areaIndex.get(a.area)||999;
+        const ib = areaIndex.get(b.area)||999;
+        if(ia!==ib) return ia-ib;
+        return (a.name||"").localeCompare(b.name||"");
+      });
 
       const scenesBox = document.createElement("div");
       scenesBox.className = "catBlock";
@@ -1749,7 +1770,7 @@
       crewBox.className = "catBlock";
       crewBox.innerHTML = `
         <div class="hdr"><span class="dot" style="background:var(--cat-sound)"></span>Crew citado</div>
-        <div class="items">${linesDiv(crew.map(c=>`${c.area}: ${c.name}${c.role? " ("+c.role+")":""}`))}</div>
+        <div class="items">${linesDiv(crewAll.map(c=>`${c.area}: ${c.name}${c.role? " ("+c.role+")":""}`))}</div>
       `;
 
       body.appendChild(scenesBox);
@@ -2076,86 +2097,116 @@
 
   // ----------- Layout helpers (sin tocar HTML) -----------
   function ensureExtraStyles(){
-    if(document.getElementById("gb_extra_styles_v7")) return;
+    // borrar versiones previas
+    document.querySelectorAll("style[id^='gb_extra_styles_']").forEach(s=>s.remove());
     const css = `
-/* ===== extras v7 ===== */
+/* ===== extras v8 ===== */
 
-/* Cronograma: líneas de color por categoría */
+/* 🔻 Ocultar botón reset 1h en Cronograma */
+#btnTimingAll1h{ display:none !important; }
+
+/* Cronograma: tiritas cortas arriba */
 .schedBlock{ position:absolute; left:48px; right:10px; border-radius:12px; overflow:hidden; }
-.schedLines{ position:absolute; left:0; top:0; right:0; display:flex; flex-direction:column; z-index:2; }
-.schedLine{ height:3px; }
+.schedTicks{
+  position:absolute;
+  top:6px;
+  left:10px;
+  display:flex;
+  gap:6px;
+  z-index:3;
+  pointer-events:none;
+}
+.schedTicks .tick{
+  width:14px;
+  height:4px;
+  border-radius:3px;
+  opacity:.95;
+}
 
 /* Reports: listas verticales */
 .rLines{ display:flex; flex-direction:column; gap:6px; }
 .rLines > div{ line-height:1.25; }
 
-/* Crew: headers con más contraste */
+/* Crew: headers con mejor contraste */
 .groupRow td{
-  background: rgba(110,231,255,.14) !important;
-  color: rgba(235,246,255,.95) !important;
-  font-weight: 800 !important;
+  background: rgba(255,255,255,.08) !important;
+  color: rgba(255,255,255,.95) !important;
+  font-weight: 900 !important;
   letter-spacing: .2px;
 }
 .crewAreaHeader{
-  margin-top: 10px;
-  padding: 8px 10px;
+  margin-top: 12px;
+  padding: 9px 10px;
   border-radius: 10px;
-  background: rgba(110,231,255,.14);
-  color: rgba(235,246,255,.95);
-  font-weight: 800;
+  background: rgba(255,255,255,.09);
+  border: 1px solid rgba(110,231,255,.22);
+  color: rgba(255,255,255,.95);
+  font-weight: 900;
 }
 
-/* Plan de rodaje: top en 2 columnas */
-.dayTopTwoCol{ display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom: 10px; }
-.dayTopTwoCol .col{ display:flex; flex-direction:column; gap:10px; }
+/* Plan de Rodaje: Detalle del día en 3 columnas */
+.dayLayout3col{
+  display:grid;
+  grid-template-columns: 1.05fr 1fr 1fr;
+  gap: 12px;
+  margin-bottom: 12px;
+  align-items:start;
+}
+.dayLayout3col .col{
+  display:flex;
+  flex-direction:column;
+  gap: 12px;
+  min-width: 0;
+}
+.dayLayout3col .dayInfoStack{
+  display:flex;
+  flex-direction:column;
+  gap: 10px;
+}
 
-/* Call Sheet: look pro */
-.csPage{ padding: 18px; }
-.csHeader{ display:flex; justify-content:space-between; gap:18px; align-items:flex-start; margin-bottom: 14px; }
-.csProj{ font-size: 20px; font-weight: 900; letter-spacing: .2px; }
-.csSub{ opacity:.85; margin-top: 2px; }
-.csRight{ text-align:right; display:flex; flex-direction:column; gap:6px; }
-.csKey .k{ opacity:.75; margin-right: 8px; }
-.csKey .v{ font-weight: 800; }
-.csSection{ margin-top: 14px; }
-.csH{ font-weight: 900; letter-spacing:.2px; margin-bottom: 8px; }
-.csGrid2{ display:grid; grid-template-columns: 1fr 1fr; gap:14px; }
-.csTable{ width:100%; border-collapse: collapse; }
-.csTable th, .csTable td{ border-bottom: 1px solid rgba(255,255,255,.10); padding: 8px 8px; vertical-align: top; }
-.csTable th{ text-align:left; font-weight:900; opacity:.9; }
-.csT{ white-space: nowrap; font-weight: 900; }
-.csScene{ line-height:1.2; }
-.csMeta{ opacity:.75; font-size: 12px; margin-top: 2px; }
-.csNeeds{ display:flex; flex-direction:column; gap:10px; }
-.csNeed{ border:1px solid rgba(255,255,255,.10); border-radius: 12px; padding: 10px; }
-.csNeedHdr{ font-weight: 900; display:flex; align-items:center; gap:8px; margin-bottom: 8px; }
-.csNeedBody{ display:flex; flex-wrap:wrap; gap:6px; }
-.csPill{ display:inline-block; padding:6px 8px; border-radius: 999px; border:1px solid rgba(255,255,255,.14); background: rgba(255,255,255,.06); font-size: 12px; }
-.csPillCast{ border-color: rgba(110,231,255,.25); }
-.csCrewHdr{ font-weight: 900; margin-bottom: 6px; padding: 6px 8px; border-radius: 10px; background: rgba(110,231,255,.10); }
-.csCrewList{ display:flex; flex-direction:column; gap:6px; }
-.csNotes{ white-space: pre-wrap; opacity: .92; }
-.csFooter{ display:flex; gap:16px; margin-top: 18px; }
-.csSign{ flex:1; }
-.csSign .line{ height:1px; background: rgba(255,255,255,.35); margin-bottom: 6px; }
-.csSign .lbl{ font-size: 12px; opacity: .75; }
+/* Banco de escenas colapsable */
+#sceneBankPanel{ position:relative; }
+.bankCollapseBtn{
+  position:absolute;
+  top:10px;
+  left:10px;
+  width:32px;
+  height:32px;
+  border-radius:10px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  font-weight:900;
+  z-index:60;
+}
+body.bankCollapsed #sceneBankPanel{
+  width:44px !important;
+  min-width:44px !important;
+  max-width:44px !important;
+  padding: 10px 6px !important;
+  overflow:hidden !important;
+}
+body.bankCollapsed #sceneBankPanel > *{ display:none !important; }
+body.bankCollapsed #sceneBankPanel .bankCollapseBtn{ display:flex !important; }
 
-/* PRINT: solo call sheet, sin calendario */
+/* Call Sheet: sangría de crew alineada con subtítulo */
+.csCrewList{
+  padding-left: 8px; /* <- alinea con el padding del hdr */
+}
+.csCrewItem{
+  padding-left: 8px;
+}
+
+/* Call Sheet: print sin calendario */
 @media print{
-  body{ background:#fff !important; color:#000 !important; }
-  header, nav, .sidebar, #syncCorner, #toast, .navBtn, .btn, .tabs, #callSheetCalendar, #calWrap { display:none !important; }
+  header, nav, .sidebar, #syncCorner, #toast, .navBtn, .btn, .tabs, #callSheetCalendar, #calWrap, #calGrid, #calTitle, #calPrev, #calNext { display:none !important; }
   #view-callsheet{ display:block !important; }
   #callSheetWrap{ padding: 0 !important; }
   .card{ box-shadow:none !important; border: 1px solid #000 !important; }
-  .csTable th, .csTable td{ border-bottom: 1px solid #000 !important; }
-  .csNeed{ border: 1px solid #000 !important; }
-  .csPill{ border: 1px solid #000 !important; background: transparent !important; }
-  .csCrewHdr{ background: transparent !important; border: 1px solid #000 !important; }
-  .csSign .line{ background:#000 !important; }
 }
 `;
     const style = document.createElement("style");
-    style.id = "gb_extra_styles_v7";
+    style.id = "gb_extra_styles_v8";
     style.textContent = css;
     document.head.appendChild(style);
   }
@@ -2165,50 +2216,112 @@
     return input.closest(".field") || input.closest(".formRow") || input.parentElement;
   }
 
-  // ✅ rearmar el top de Detalle del día en 2 columnas (sin tocar HTML)
-  function ensureDayTopTwoColumns(){
+  function blockWrapFor(node){
+    if(!node) return null;
+    // lo más probable: cada bloque vive dentro de una .card
+    return node.closest(".card") || node.closest(".panel") || node.parentElement;
+  }
+
+  function findCommonAncestor(nodes){
+    let root = nodes[0];
+    while(root && !nodes.every(n=>root.contains(n))) root = root.parentElement;
+    return root;
+  }
+
+  // ✅ Re-armar Detalle del día en 3 columnas (Col1 info, Col2 needs, Col3 cast/crew)
+  function ensureDayLayout3Columns(){
     const date = el("day_date");
     const call = el("day_call");
     const loc = el("day_location");
     const label = el("day_label");
     const notes = el("day_notes");
-    if(!date || !call || !loc || !label || !notes) return;
 
-    // Si ya existe, listo
-    const already = date.closest(".dayTopTwoCol");
-    if(already) return;
+    const needs = el("dayNeeds");
+    const cast = el("dayCast");
+    const crew = el("dayCrewPicker");
 
-    // Buscar un contenedor común razonable (el más chico que contiene a todos)
-    const nodes = [date, call, loc, label, notes];
-    let root = date.parentElement;
-    while(root && !nodes.every(n=>root.contains(n))) root = root.parentElement;
-    if(!root) return;
+    if(!date || !call || !loc || !label || !notes || !needs || !cast || !crew) return;
 
-    // crear wrapper
-    const wrapper = document.createElement("div");
-    wrapper.className = "dayTopTwoCol";
-    const c1 = document.createElement("div"); c1.className = "col";
-    const c2 = document.createElement("div"); c2.className = "col";
-    wrapper.append(c1,c2);
+    // si ya existe, listo
+    if(date.closest(".dayLayout3col")) return;
 
     const wDate = fieldWrapFor(date);
     const wCall = fieldWrapFor(call);
     const wLoc = fieldWrapFor(loc);
     const wLabel = fieldWrapFor(label);
     const wNotes = fieldWrapFor(notes);
-    if(!wDate || !wCall || !wLoc || !wLabel || !wNotes) return;
 
-    // Insertar wrapper antes del primer campo top
-    root.insertBefore(wrapper, wDate);
+    const needsWrap = blockWrapFor(needs);
+    const castWrap = blockWrapFor(cast);
+    const crewWrap = blockWrapFor(crew);
 
-    // Mover a col 1: Fecha + Call time
-    c1.appendChild(wDate);
-    if(wCall !== wDate) c1.appendChild(wCall);
+    if(!wDate || !wCall || !wLoc || !wLabel || !wNotes || !needsWrap || !castWrap || !crewWrap) return;
 
-    // Mover a col 2: Locación + Nombre + Notas
-    c2.appendChild(wLoc);
-    if(wLabel !== wLoc) c2.appendChild(wLabel);
-    if(wNotes !== wLabel && wNotes !== wLoc) c2.appendChild(wNotes);
+    const root = findCommonAncestor([wDate, wCall, wLoc, wLabel, wNotes, needsWrap, castWrap, crewWrap]);
+    if(!root) return;
+
+    const layout = document.createElement("div");
+    layout.className = "dayLayout3col";
+
+    const col1 = document.createElement("div"); col1.className = "col";
+    const col2 = document.createElement("div"); col2.className = "col";
+    const col3 = document.createElement("div"); col3.className = "col";
+
+    const infoStack = document.createElement("div");
+    infoStack.className = "dayInfoStack";
+
+    layout.append(col1,col2,col3);
+    col1.appendChild(infoStack);
+
+    // Insertar layout al principio del root (pero antes del primer wrapper de info)
+    root.insertBefore(layout, wDate);
+
+    // Col1: Fecha + Call + Loc + Nombre + Notas
+    infoStack.appendChild(wDate);
+    if(wCall !== wDate) infoStack.appendChild(wCall);
+    if(wLoc !== wCall) infoStack.appendChild(wLoc);
+    if(wLabel !== wLoc) infoStack.appendChild(wLabel);
+    if(wNotes !== wLabel) infoStack.appendChild(wNotes);
+
+    // Col2: Necesidades por Área (movemos su bloque/card)
+    col2.appendChild(needsWrap);
+
+    // Col3: Cast + Equipo técnico (dos bloques/card)
+    col3.appendChild(castWrap);
+    if(crewWrap !== castWrap) col3.appendChild(crewWrap);
+  }
+
+  // ✅ Banco de escenas colapsable
+  function ensureSceneBankCollapsible(){
+    const list = el("sceneBankList");
+    if(!list) return;
+    const panel = list.closest(".card") || list.parentElement;
+    if(!panel) return;
+
+    panel.id = "sceneBankPanel";
+
+    if(panel.querySelector(".bankCollapseBtn")) return;
+
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "btn bankCollapseBtn";
+
+    const apply = (collapsed)=>{
+      document.body.classList.toggle("bankCollapsed", collapsed);
+      btn.textContent = collapsed ? "⟩" : "⟨";
+      localStorage.setItem("gb_bankCollapsed", collapsed ? "1" : "0");
+      setTimeout(()=>syncSceneBankHeight(), 50);
+    };
+
+    const initial = localStorage.getItem("gb_bankCollapsed")==="1";
+    apply(initial);
+
+    btn.addEventListener("click", ()=>{
+      const now = document.body.classList.contains("bankCollapsed");
+      apply(!now);
+    });
+
+    panel.appendChild(btn);
   }
 
   // ----------- Events / init -----------
@@ -2220,7 +2333,7 @@
         showView(v);
 
         if(v === "elements") renderElementsExplorer();
-        if(v === "shooting"){ renderSceneBank(); renderDaysBoard(); renderDayDetail(); ensureDayTopTwoColumns(); }
+        if(v === "shooting"){ renderSceneBank(); renderDaysBoard(); renderDayDetail(); ensureDayLayout3Columns(); ensureSceneBankCollapsible(); }
         if(v === "crew") renderCrew();
         if(v === "reports") renderReports();
         if(v === "schedule") renderScheduleBoard();
@@ -2297,11 +2410,11 @@
         renderCallSheetCalendar();
         renderCallSheet();
         syncSceneBankHeight();
-        ensureDayTopTwoColumns();
+        ensureDayLayout3Columns();
       });
     });
 
-    // botoncitos ±15
+    // botoncitos ±15 (si existen en tu HTML)
     el("day_call_minus")?.addEventListener("click", ()=>{
       const d = selectedDayId ? getDay(selectedDayId) : null;
       if(!d) return;
@@ -2347,19 +2460,6 @@
     // Schedule
     el("schedZoom")?.addEventListener("change", renderScheduleBoard);
     el("schedSnap")?.addEventListener("change", renderScheduleBoard);
-    el("btnTimingAll1h")?.addEventListener("click", ()=>{
-      for(const d of state.shootDays){
-        ensureDayTimingMaps(d);
-        for(const sid of d.sceneIds){
-          d.durations[sid] = 60;
-        }
-        resolveDayOverlapsPushDown(d, Number(el("schedSnap")?.value || 15));
-      }
-      touch();
-      renderScheduleBoard();
-      renderReports();
-      renderCallSheet();
-    });
 
     window.addEventListener("mousemove", scheduleResizeMouseMove);
     window.addEventListener("mouseup", scheduleResizeMouseUp);
@@ -2415,7 +2515,8 @@
     renderCallSheet();
 
     syncSceneBankHeight();
-    ensureDayTopTwoColumns();
+    ensureDayLayout3Columns();
+    ensureSceneBankCollapsible();
   }
 
   function init(){
