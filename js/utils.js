@@ -1,28 +1,19 @@
 window.U = {
-  debounce(fn, wait=200){
-    let t=null;
+  debounce(fn, ms){
+    let t = null;
     return (...args)=>{
       clearTimeout(t);
-      t=setTimeout(()=>fn(...args), wait);
+      t = setTimeout(()=>fn(...args), ms);
     };
   },
 
   parseTableText(txt){
-    const lines = String(txt||"").split(/\r?\n/).map(l=>l.trim()).filter(Boolean);
-    const rows = [];
-    for(const line of lines){
-      // soporta TSV, CSV suave, o espacios múltiples
-      let parts;
-      if(line.includes("\t")) parts = line.split("\t");
-      else if(line.includes(",")) parts = line.split(",").map(s=>s.trim());
-      else parts = line.split(/\s{2,}/g); // dos o más espacios
-      rows.push(parts.map(s=>String(s??"").trim()));
-    }
-    return rows;
+    const lines = (txt||"").split(/\r?\n/).map(l=>l.trim()).filter(Boolean);
+    return lines.map(l=> l.split(/\t| {2,}|;|,/g).map(x=>x.trim()));
   },
 
   isHeaderRow(row){
-    const r = (row||[]).map(s=>String(s||"").toLowerCase());
-    return r.includes("number") || r.includes("slugline") || r.includes("location") || r.includes("timeofday") || r.includes("pages");
+    const h = (row||[]).join(" ").toLowerCase();
+    return h.includes("slug") || h.includes("loc") || h.includes("tod") || h.includes("pág") || h.includes("pag");
   }
 };

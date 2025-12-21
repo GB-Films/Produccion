@@ -1,25 +1,24 @@
 <!doctype html>
 <html lang="es-AR">
 <head>
-  <meta charset="utf-8"/>
-  <meta name="viewport" content="width=device-width,initial-scale=1"/>
-  <title>ProdBoard</title>
-  <link rel="stylesheet" href="css/styles.css"/>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>GB Production Board</title>
+  <link rel="stylesheet" href="css/styles.css" />
 </head>
 <body>
-  <div class="appShell">
+  <div class="shell">
     <aside class="sidebar">
       <div class="brand">
-        <div class="logo">PB</div>
-        <div class="brandTxt">
-          <div class="brandName">ProdBoard</div>
-          <div class="brandSub">Pre-producción sin caos</div>
+        <input id="projectTitle" class="titleInput" placeholder="Proyecto" />
+        <div class="sub">
+          Guardado: <span id="savedAtText">—</span>
         </div>
       </div>
 
       <nav class="nav">
-        <button class="navBtn active" data-view="breakdown">Breakdown</button>
-        <button class="navBtn" data-view="shooting">Plan de rodaje</button>
+        <button class="navBtn" data-view="breakdown">Breakdown</button>
+        <button class="navBtn" data-view="shooting">Plan de Rodaje</button>
         <button class="navBtn" data-view="schedule">Cronograma</button>
         <button class="navBtn" data-view="elements">Elementos</button>
         <button class="navBtn" data-view="crew">Equipo técnico</button>
@@ -27,50 +26,72 @@
         <button class="navBtn" data-view="callsheet">Call Sheets</button>
       </nav>
 
-      <div class="sideFoot">
-        <div class="hr" style="margin:8px 0;"></div>
-
-        <button class="navBtn sideSettingsBtn" data-view="settings">Sync / Ajustes</button>
-
-        <div style="height:8px;"></div>
-        <div class="pill" id="syncPill">Local</div>
-        <div class="muted small">Guardado: <span id="savedAtText">—</span></div>
+      <div class="navBottom">
+        <div class="pillRow">
+          <span class="pill" id="syncPill">Local</span>
+          <span class="pill muted" id="statusText">—</span>
+        </div>
+        <button class="navBtn bottom" data-view="settings">Sync / Ajustes</button>
       </div>
     </aside>
 
     <main class="main">
-      <header class="topbar">
-        <div class="row gap">
-          <label class="field inline">
-            <span class="muted">Proyecto</span>
-            <input id="projectTitle" class="input" placeholder="Nombre del proyecto"/>
-          </label>
-        </div>
+      <div id="toast" class="toast" style="display:none;"></div>
+      <div id="hoverTip" class="hoverTip" style="display:none;"></div>
 
-        <div class="row gap right">
-          <div class="muted small" id="statusText">Listo</div>
-        </div>
-      </header>
-
-      <div class="viewWrap">
-
-        <!-- Breakdown -->
-        <section class="view" id="view-breakdown">
-          <div class="grid2">
-            <div class="card">
-              <div class="cardHeader">
-                <h2>Escenas</h2>
-                <div class="row gap">
-                  <button class="btn" id="btnAddScene">+ Escena</button>
-                  <button class="btn" id="btnDuplicateScene">Duplicar</button>
-                  <button class="btn danger" id="btnDeleteScene">Borrar</button>
-                </div>
+      <!-- ================= BREAKDOWN ================= -->
+      <section id="view-breakdown" class="view">
+        <div class="grid2">
+          <div class="card">
+            <div class="cardHeader">
+              <h2 class="cardTitle">Cargar guion (INT./EXT.)</h2>
+            </div>
+            <div class="cardContent">
+              <div class="row gap">
+                <textarea id="scriptImportText" class="textarea" placeholder="Pegá el guion acá…"></textarea>
               </div>
+              <div class="row gap alignEnd">
+                <div class="field grow">
+                  <label>Keywords extra (opcional)</label>
+                  <input id="scriptKeywords" class="input" placeholder="Ej: EST., PLANO, MONTAGE" />
+                </div>
+                <button id="btnParseScript" class="btn primary">Detectar escenas</button>
+              </div>
+              <div class="muted small">
+                Tip: cada escena debe empezar con una línea que arranque en <b>INT.</b> o <b>EXT.</b>
+              </div>
+            </div>
+          </div>
 
-              <div class="filters">
-                <input id="sceneSearch" class="input" placeholder="Buscar… (número, slugline, locación, resumen)"/>
+          <div class="card">
+            <div class="cardHeader">
+              <h2 class="cardTitle">Importar tabla de escenas</h2>
+            </div>
+            <div class="cardContent">
+              <textarea id="sceneImportText" class="textarea" placeholder="Nro<TAB>Slugline<TAB>Locación<TAB>Momento del día<TAB>Páginas<TAB>Resumen"></textarea>
+              <div class="row gap alignEnd">
+                <button id="btnImportScenes" class="btn">Importar</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="grid2">
+          <div class="card">
+            <div class="cardHeader">
+              <h2 class="cardTitle">Escenas</h2>
+              <div class="row gap">
+                <button id="btnAddScene" class="btn">+ Escena</button>
+                <button id="btnDuplicateScene" class="btn">Duplicar</button>
+                <button id="btnDeleteScene" class="btn danger">Borrar</button>
+              </div>
+            </div>
+
+            <div class="cardContent">
+              <div class="row gap">
+                <input id="sceneSearch" class="input grow" placeholder="Buscar escena…" />
                 <select id="sceneFilterTOD" class="input">
-                  <option value="">Todo horario</option>
+                  <option value="">TOD</option>
                   <option value="Día">Día</option>
                   <option value="Noche">Noche</option>
                   <option value="Amanecer">Amanecer</option>
@@ -79,360 +100,381 @@
               </div>
 
               <div class="tableWrap">
-                <table class="table" id="sceneTable">
+                <table id="sceneTable" class="table">
                   <thead>
                     <tr>
-                      <th>#</th>
+                      <th style="width:72px;">#</th>
                       <th>Slugline</th>
                       <th>Locación</th>
-                      <th>Horario</th>
-                      <th>Pág.</th>
+                      <th style="width:120px;">TOD</th>
+                      <th style="width:80px;">Pág</th>
                     </tr>
                   </thead>
                   <tbody></tbody>
                 </table>
               </div>
-
-              <details class="importBox">
-                <summary>Importar escenas (CSV/TSV)</summary>
-                <p class="muted">Columnas sugeridas: number, slugline, location, timeOfDay, pages, summary</p>
-                <textarea id="sceneImportText" class="textarea" rows="6" placeholder="1  INT. CASA - NOCHE  Casa  Noche  2  Lucio entra..."></textarea>
-                <div class="row gap">
-                  <button class="btn" id="btnImportScenes">Importar</button>
-                  <button class="btn danger" id="btnClearImport">Limpiar</button>
-                </div>
-              </details>
-
-              <details class="importBox">
-                <summary>Importar guion (texto) y detectar escenas</summary>
-                <p class="muted">
-                  Detecta encabezados tipo <code>INT.</code> <code>EXT.</code> <code>INT/EXT.</code>.
-                </p>
-                <input id="scriptKeywords" class="input" placeholder="Keywords extra (coma). Ej: ESCENA, SCENE"/>
-                <textarea id="scriptImportText" class="textarea" rows="10" placeholder="INT. CASA - NOCHE&#10;Lucio entra..."></textarea>
-                <div class="row gap">
-                  <button class="btn" id="btnParseScript">Detectar y cargar</button>
-                  <button class="btn danger" id="btnClearScript">Limpiar</button>
-                </div>
-              </details>
-            </div>
-
-            <div class="card">
-              <div class="cardHeader">
-                <h2>Editor</h2>
-                <div class="muted" id="selectedSceneHint">Seleccioná una escena</div>
-              </div>
-
-              <div class="pairs">
-                <label class="field"><span>Número</span><input id="scene_number" class="input"/></label>
-                <label class="field"><span>Horario</span><input id="scene_timeOfDay" class="input" placeholder="Día / Noche…"/></label>
-
-                <label class="field"><span>Slugline</span><input id="scene_slugline" class="input"/></label>
-                <label class="field"><span>Locación</span><input id="scene_location" class="input"/></label>
-
-                <label class="field">
-                  <span>Páginas (guion)</span>
-                  <input id="scene_pages" class="input" type="number" min="0" step="0.1" placeholder="Ej: 1.5"/>
-                </label>
-                <div class="hint muted small">Cantidad aproximada de páginas del guion que ocupa esta escena.</div>
-              </div>
-
-              <label class="field">
-                <span>Resumen</span>
-                <textarea id="scene_summary" class="textarea" rows="3"></textarea>
-              </label>
-
-              <label class="field">
-                <span>Notas</span>
-                <textarea id="scene_notes" class="textarea" rows="3"></textarea>
-              </label>
-
-              <div class="hr"></div>
-
-              <div class="cardSubHeader">
-                <h3>Elementos del breakdown</h3>
-                <div class="row gap">
-                  <select id="elCategory" class="input"></select>
-
-                  <input id="elItem" class="input" list="elSuggestDatalist" placeholder="Ej: Lucio / Pistola / Saco…"/>
-                  <datalist id="elSuggestDatalist"></datalist>
-
-                  <button class="btn" id="btnAddSceneElement">Agregar</button>
-                </div>
-              </div>
-
-              <div id="sceneElementsGrid" class="sceneElementsGrid"></div>
-
-              <p class="muted small">
-                Tip: Cast se carga como Área “Cast” en Equipo técnico, y después se elige acá.
-              </p>
             </div>
           </div>
-        </section>
 
-        <!-- Plan de rodaje -->
-        <section class="view hidden" id="view-shooting">
-          <div class="boardWrap">
-            <div class="card sceneBank">
-              <div class="cardHeader">
-                <h2>Banco de Escenas</h2>
-                <div class="row gap">
-                  <button class="btn" id="btnAddShootDay">+ Día</button>
-                </div>
-              </div>
-
-              <div class="filters">
-                <input id="bankSearch" class="input" placeholder="Buscar escena…"/>
-                <select id="bankFilter" class="input">
-                  <option value="all">Todas</option>
-                  <option value="unassigned">No asignadas</option>
-                </select>
-              </div>
-
-              <div id="sceneBankList" class="list"></div>
-              <p class="muted small">Arrastrá escenas a un día.</p>
+          <div class="card">
+            <div class="cardHeader">
+              <h2 class="cardTitle">Editor</h2>
+              <div id="selectedSceneHint" class="muted small">Seleccioná una escena</div>
             </div>
 
-            <div class="card dayBoardCard" style="flex:1;">
-              <div class="cardHeader">
-                <h2>Tablero de días</h2>
-                <div class="row gap noPrint">
-                  <button class="btn danger" id="btnDeleteShootDay">Borrar día</button>
+            <div class="cardContent">
+              <div class="gridEditor">
+                <div class="field">
+                  <label>Nro</label>
+                  <input id="scene_number" class="input" />
+                </div>
+                <div class="field">
+                  <label>Slugline</label>
+                  <input id="scene_slugline" class="input" />
+                </div>
+                <div class="field">
+                  <label>Locación</label>
+                  <input id="scene_location" class="input" />
+                </div>
+                <div class="field">
+                  <label>Momento del día</label>
+                  <input id="scene_timeOfDay" class="input" placeholder="Día / Noche" />
+                </div>
+                <div class="field">
+                  <label>Páginas</label>
+                  <input id="scene_pages" class="input" type="number" min="0" step="0.25" />
                 </div>
               </div>
 
-              <div class="daysPanel">
-                <div class="daysBoard" id="daysBoard"></div>
+              <div class="field">
+                <label>Resumen</label>
+                <textarea id="scene_summary" class="textarea smallArea"></textarea>
+              </div>
+              <div class="field">
+                <label>Notas</label>
+                <textarea id="scene_notes" class="textarea smallArea"></textarea>
               </div>
 
-              <div class="hr"></div>
-
-              <div class="cardSubHeader">
-                <h3>Detalle del día</h3>
-                <div class="row gap noPrint">
-                  <button class="btn" id="btnOpenCallSheet">Ver Call Sheet</button>
+              <div class="row gap alignEnd">
+                <div class="field">
+                  <label>Categoría</label>
+                  <select id="elCategory" class="input"></select>
                 </div>
+                <div class="field grow">
+                  <label>Elemento</label>
+                  <input id="elItem" class="input" list="elSuggestDatalist" placeholder="Ej: Pistola, Sombrero…" />
+                  <datalist id="elSuggestDatalist"></datalist>
+                </div>
+                <button id="btnAddSceneElement" class="btn primary">Agregar</button>
               </div>
-
-              <div class="pairs">
-                <label class="field"><span>Fecha</span><input id="day_date" class="input" type="date"/></label>
-
-                <label class="field">
-                  <span>Call time</span>
-                  <div class="timeStepper">
-                    <button class="iconBtn" id="day_call_minus" type="button" title="-15 min">−</button>
-                    <input id="day_call" class="input" type="time" step="900"/>
-                    <button class="iconBtn" id="day_call_plus" type="button" title="+15 min">+</button>
-                  </div>
-                  <div class="hint muted small">Ajuste de a 15 min.</div>
-                </label>
-
-                <label class="field"><span>Locación</span><input id="day_location" class="input"/></label>
-                <label class="field"><span>Nombre (opcional)</span><input id="day_label" class="input" placeholder="Ej: Día 3 - Casa"/></label>
-              </div>
-
-              <label class="field">
-                <span>Notas</span>
-                <textarea id="day_notes" class="textarea" rows="3"></textarea>
-              </label>
 
               <div class="spacer"></div>
-
-              <div class="grid2" style="grid-template-columns:1fr 1fr;">
-                <div>
-                  <h3 class="h3">Cast citado (auto)</h3>
-                  <div id="dayCast" class="chips"></div>
-
-                  <div class="hr"></div>
-
-                  <h3 class="h3">Equipo técnico (clic para seleccionar)</h3>
-                  <div class="hint muted small">Rojo = no citado · Verde = citado.</div>
-                  <div id="dayCrewPicker" class="crewPicker"></div>
-                </div>
-
-                <div>
-                  <h3 class="h3">Necesidades por área</h3>
-                  <div id="dayNeeds" class="list"></div>
-                </div>
-              </div>
-
+              <div id="sceneElementsGrid"></div>
             </div>
           </div>
-        </section>
+        </div>
+      </section>
 
-        <!-- Cronograma -->
-        <section class="view hidden" id="view-schedule">
-          <div class="card">
-            <div class="cardHeader">
-              <h2>Cronograma (timeline por día)</h2>
-              <div class="row gap noPrint">
-                <select id="schedZoom" class="input" style="width:160px;">
-                  <option value="60">Zoom normal</option>
-                  <option value="90" selected>Zoom grande</option>
-                  <option value="120">Zoom enorme</option>
-                </select>
-                <select id="schedSnap" class="input" style="width:160px;">
-                  <option value="15" selected>Snap 15 min</option>
-                  <option value="30">Snap 30 min</option>
-                  <option value="5">Snap 5 min</option>
-                </select>
-                <button class="btn" id="btnTimingAll1h">Reset 1h</button>
+      <!-- ================= PLAN DE RODAJE ================= -->
+      <section id="view-shooting" class="view hidden">
+        <div id="shootingLayout" class="shootingLayout">
+          <!-- Banco -->
+          <div id="bankCol" class="col">
+            <div class="card bankCard">
+              <div class="cardHeader bankHeader" id="sceneBankHeader">
+                <h2 class="cardTitle">Banco de Escenas</h2>
+                <button id="btnToggleBank" class="btn icon" title="Colapsar/expandir">⟨</button>
+              </div>
+
+              <div class="cardContent" id="sceneBankBody">
+                <div class="row gap">
+                  <input id="bankSearch" class="input grow" placeholder="Buscar…" />
+                  <select id="bankFilter" class="input">
+                    <option value="all">Todas</option>
+                    <option value="unassigned">No asignadas</option>
+                  </select>
+                </div>
+                <div id="sceneBankList" class="bankList"></div>
               </div>
             </div>
 
+            <!-- Dock visible cuando está colapsado -->
+            <div id="bankDock" class="bankDock hidden">
+              <button id="btnToggleBankDock" class="btn icon" title="Expandir">⟩</button>
+            </div>
+          </div>
+
+          <!-- Tablero -->
+          <div class="col">
+            <div class="card">
+              <div class="cardHeader">
+                <h2 class="cardTitle">Tablero de Días</h2>
+                <div class="row gap">
+                  <button id="btnAddShootDay" class="btn">+ Día</button>
+                  <button id="btnDeleteShootDay" class="btn danger">Borrar Día</button>
+                </div>
+              </div>
+              <div class="cardContent">
+                <div id="daysBoardWrap" class="daysBoardWrap">
+                  <div id="daysBoard" class="daysBoard"></div>
+                </div>
+              </div>
+            </div>
+
+            <div class="card" id="dayDetailCard">
+              <div class="cardHeader">
+                <h2 class="cardTitle">Detalle del Día</h2>
+                <button id="btnOpenCallSheet" class="btn">Ver Call Sheet</button>
+              </div>
+
+              <div class="cardContent">
+                <div class="dayDetail3col">
+                  <!-- Col 1 -->
+                  <div class="col">
+                    <div class="field">
+                      <label>Fecha</label>
+                      <input id="day_date" class="input" type="date" />
+                    </div>
+
+                    <div class="field">
+                      <label>Call Time</label>
+                      <div class="row gap">
+                        <button id="day_call_minus" class="btn icon" title="-15">−</button>
+                        <input id="day_call" class="input grow" placeholder="08:00" />
+                        <button id="day_call_plus" class="btn icon" title="+15">+</button>
+                      </div>
+                      <div class="muted small">Se ajusta en pasos de 15 min.</div>
+                    </div>
+
+                    <div class="field">
+                      <label>Locación</label>
+                      <input id="day_location" class="input" />
+                    </div>
+
+                    <div class="field">
+                      <label>Nombre</label>
+                      <input id="day_label" class="input" />
+                    </div>
+
+                    <div class="field">
+                      <label>Notas</label>
+                      <textarea id="day_notes" class="textarea smallArea"></textarea>
+                    </div>
+                  </div>
+
+                  <!-- Col 2 -->
+                  <div class="col">
+                    <div class="colTitle">Necesidades por Área</div>
+                    <div id="dayNeeds"></div>
+                  </div>
+
+                  <!-- Col 3 -->
+                  <div class="col">
+                    <div class="colTitle">Cast citado (auto)</div>
+                    <div id="dayCast"></div>
+
+                    <div class="spacer"></div>
+                    <div class="colTitle">Equipo técnico (clic para seleccionar)</div>
+                    <div class="muted small">Rojo = no citado · Verde = citado.</div>
+                    <div id="dayCrewPicker"></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+          </div>
+        </div>
+      </section>
+
+      <!-- ================= CRONOGRAMA ================= -->
+      <section id="view-schedule" class="view hidden">
+        <div class="card">
+          <div class="cardHeader">
+            <h2 class="cardTitle">Cronograma</h2>
+            <div class="row gap">
+              <label class="row gap small muted">Zoom
+                <select id="schedZoom" class="input">
+                  <option value="60">Bajo</option>
+                  <option value="90" selected>Medio</option>
+                  <option value="120">Grande</option>
+                  <option value="160">Gigante</option>
+                </select>
+              </label>
+              <label class="row gap small muted">Snap
+                <select id="schedSnap" class="input">
+                  <option value="5">5 min</option>
+                  <option value="10">10 min</option>
+                  <option value="15" selected>15 min</option>
+                  <option value="30">30 min</option>
+                </select>
+              </label>
+            </div>
+          </div>
+          <div class="cardContent">
             <div id="schedBoard" class="schedBoard"></div>
-            <p class="muted">
-              Arrastrá el bloque para mover hora (dentro del día o a otro día). Handle inferior = duración.
-              <b>Doble click</b> abre Breakdown.
-            </p>
           </div>
-        </section>
+        </div>
+      </section>
 
-        <!-- Elementos -->
-        <section class="view hidden" id="view-elements">
+      <!-- ================= ELEMENTOS ================= -->
+      <section id="view-elements" class="view hidden">
+        <div class="grid2">
           <div class="card">
             <div class="cardHeader">
-              <h2>Elementos (desde Breakdown)</h2>
+              <h2 class="cardTitle">Explorar elementos</h2>
             </div>
-
-            <div class="filters">
-              <select id="elxCategory" class="input"></select>
-              <select id="elxDay" class="input"></select>
-              <input id="elxSearch" class="input" placeholder="Buscar elemento…"/>
-            </div>
-
-            <div class="grid2" style="grid-template-columns:1fr 1fr;">
-              <div>
-                <h3 class="h3">Lista</h3>
-                <div id="elxList" class="list"></div>
-              </div>
-              <div>
-                <h3 class="h3">Detalle</h3>
-                <div id="elxDetail" class="list"></div>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        <!-- Crew -->
-        <section class="view hidden" id="view-crew">
-          <div class="card">
-            <div class="cardHeader">
-              <h2>Equipo técnico</h2>
+            <div class="cardContent">
               <div class="row gap">
-                <input id="crewSearch" class="input" placeholder="Buscar (área / rol / nombre / tel / mail)…" style="width:340px;"/>
-                <button class="btn" id="btnAddCrew">+ Integrante</button>
+                <select id="elxCategory" class="input"></select>
+                <select id="elxDay" class="input"></select>
+                <input id="elxSearch" class="input grow" placeholder="Buscar elemento…" />
               </div>
+              <div class="spacer"></div>
+              <div id="elxList"></div>
             </div>
+          </div>
+          <div class="card">
+            <div class="cardHeader">
+              <h2 class="cardTitle">Detalle</h2>
+            </div>
+            <div class="cardContent">
+              <div id="elxDetail"></div>
+            </div>
+          </div>
+        </div>
+      </section>
 
+      <!-- ================= CREW ================= -->
+      <section id="view-crew" class="view hidden">
+        <div class="card">
+          <div class="cardHeader">
+            <h2 class="cardTitle">Equipo técnico (incluye Cast como área)</h2>
+            <div class="row gap">
+              <input id="crewSearch" class="input grow" placeholder="Buscar por área / rol / nombre…" />
+              <button id="btnAddCrew" class="btn">+ Integrante</button>
+            </div>
+          </div>
+          <div class="cardContent">
             <div class="tableWrap">
-              <table class="table" id="crewTable">
+              <table id="crewTable" class="table">
                 <thead>
                   <tr>
-                    <th>Área</th>
-                    <th>Rol</th>
+                    <th style="width:190px;">Área</th>
+                    <th style="width:200px;">Rol</th>
                     <th>Nombre</th>
-                    <th>Tel</th>
-                    <th>Email</th>
+                    <th style="width:140px;">Tel</th>
+                    <th style="width:220px;">Email</th>
                     <th>Notas</th>
-                    <th>Acciones</th>
+                    <th style="width:110px;"></th>
                   </tr>
                 </thead>
                 <tbody></tbody>
               </table>
             </div>
-
-            <p class="muted small">“Cast” es un Área más. Se usa para seleccionarlo desde Breakdown.</p>
           </div>
-        </section>
+        </div>
+      </section>
 
-        <!-- Reports -->
-        <section class="view hidden" id="view-reports">
-          <div class="card">
-            <div class="cardHeader">
-              <h2>Reportes (por día)</h2>
-              <div class="row gap">
-                <button class="btn" id="btnRefreshReports">Actualizar</button>
-              </div>
-            </div>
+      <!-- ================= REPORTES ================= -->
+      <section id="view-reports" class="view hidden">
+        <div class="card">
+          <div class="cardHeader">
+            <h2 class="cardTitle">Reportes por día</h2>
+            <button id="btnRefreshReports" class="btn">Actualizar</button>
+          </div>
+          <div class="cardContent">
             <div id="reportsBoard" class="reportsBoard"></div>
           </div>
-        </section>
+        </div>
+      </section>
 
-        <!-- Call Sheets -->
-        <section class="view hidden" id="view-callsheet">
-          <div class="card">
+      <!-- ================= CALL SHEETS ================= -->
+      <section id="view-callsheet" class="view hidden">
+        <div class="grid2">
+          <div class="card noPrint" id="callCalCard">
             <div class="cardHeader">
-              <h2>Call Sheets</h2>
-              <div class="row gap noPrint">
-                <button class="btn" id="calPrev">‹</button>
-                <div id="calTitle" class="pill">—</div>
-                <button class="btn" id="calNext">›</button>
-                <button class="btn" id="btnPrintCallSheet">Imprimir</button>
-              </div>
-            </div>
-
-            <div class="noPrint">
-              <div id="calGrid" class="calGrid"></div>
-              <div class="hr"></div>
-            </div>
-
-            <div id="callSheetWrap"></div>
-          </div>
-        </section>
-
-        <!-- Settings -->
-        <section class="view hidden" id="view-settings">
-          <div class="card">
-            <div class="cardHeader">
-              <h2>Sync / Ajustes</h2>
+              <h2 class="cardTitle">Calendario</h2>
               <div class="row gap">
-                <button class="btn" id="btnPull">Pull</button>
-                <button class="btn" id="btnPush">Push</button>
+                <button id="calPrev" class="btn icon" title="Mes anterior">‹</button>
+                <div id="calTitle" class="muted"></div>
+                <button id="calNext" class="btn icon" title="Mes siguiente">›</button>
               </div>
             </div>
-
-            <div class="pairs">
-              <label class="field"><span>JSONBin BIN ID</span><input id="cfg_binId" class="input"/></label>
-              <label class="field"><span>JSONBin Access Key</span><input id="cfg_accessKey" class="input"/></label>
-              <label class="field">
-                <span>Autosync</span>
-                <select id="cfg_autosync" class="input">
-                  <option value="on">ON</option>
-                  <option value="off">OFF</option>
-                </select>
-              </label>
+            <div class="cardContent">
+              <div class="calGrid" id="calGrid"></div>
             </div>
-
-            <div class="row gap" style="margin-top:10px;">
-              <button class="btn" id="btnSaveCfg">Guardar config</button>
-              <button class="btn" id="btnTestCfg">Probar conexión</button>
-            </div>
-
-            <div class="hr"></div>
-
-            <h3 class="h3">Reset protegido</h3>
-            <div class="pairs">
-              <label class="field"><span>Clave</span><input id="cfg_resetKey" class="input" type="password"/></label>
-              <label class="field"><span>Confirmar</span><input id="cfg_resetKeyConfirm" class="input" type="password"/></label>
-            </div>
-            <div class="row gap" style="margin-top:10px;">
-              <button class="btn" id="btnSetResetKey">Setear clave</button>
-              <button class="btn danger" id="btnReset">Reset</button>
-            </div>
-
-            <p class="muted small">
-              No subas tu Access Key al repo. Si ya la pegaste en algún lado público: rotala.
-            </p>
           </div>
-        </section>
 
-      </div>
+          <div class="card" id="callDetailCard">
+            <div class="cardHeader">
+              <h2 class="cardTitle">Call Sheet</h2>
+              <button id="btnPrintCallSheet" class="btn primary">Imprimir</button>
+            </div>
+            <div class="cardContent">
+              <div id="callSheetDetail"></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ================= SETTINGS ================= -->
+      <section id="view-settings" class="view hidden">
+        <div class="grid2">
+          <div class="card">
+            <div class="cardHeader">
+              <h2 class="cardTitle">JSONBin</h2>
+            </div>
+            <div class="cardContent">
+              <div class="field">
+                <label>Bin ID</label>
+                <input id="cfg_binId" class="input" />
+              </div>
+              <div class="field">
+                <label>Access Key</label>
+                <input id="cfg_accessKey" class="input" />
+              </div>
+              <div class="field">
+                <label>Autosync</label>
+                <select id="cfg_autosync" class="input">
+                  <option value="off">Off</option>
+                  <option value="on">On</option>
+                </select>
+              </div>
+              <div class="row gap">
+                <button id="btnSaveCfg" class="btn">Guardar</button>
+                <button id="btnTestCfg" class="btn">Probar conexión</button>
+                <button id="btnPullRemote" class="btn">Traer remoto</button>
+                <button id="btnPushRemote" class="btn primary">Subir estado</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="cardHeader">
+              <h2 class="cardTitle">Reset (con clave)</h2>
+            </div>
+            <div class="cardContent">
+              <div class="field">
+                <label>Clave de reset (la elegís vos)</label>
+                <input id="cfg_resetKey" class="input" placeholder="Ej: GB-RESET-2025" />
+                <div class="muted small">Se guarda local. Si la perdés, no hay magia.</div>
+              </div>
+              <div class="field">
+                <label>Ingresar clave para reset</label>
+                <input id="resetKeyInput" class="input" placeholder="Escribí la clave…" />
+              </div>
+              <button id="btnResetApp" class="btn danger">RESET TOTAL</button>
+              <div class="spacer"></div>
+              <div class="muted small">
+                Nota: el reset borra local y remoto (si tenés JSONBin configurado y accesible).
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
     </main>
   </div>
-
-  <div class="toast" id="toast" style="display:none"></div>
-  <div class="tooltip" id="hoverTip" style="display:none"></div>
 
   <script src="js/utils.js"></script>
   <script src="js/storage.js"></script>

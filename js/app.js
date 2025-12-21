@@ -2,11 +2,11 @@
   const el = (id)=>document.getElementById(id);
   const views = ["breakdown","shooting","schedule","elements","crew","reports","callsheet","settings"];
 
-  // ======= CATEGORÍAS / COLORES =======
+  // ======= Categorías (orden) =======
   const cats = ["cast","props","wardrobe","art","makeup","sound","sfx","vfx","vehicles","animals","extras"];
   const catNames = {
     cast:"Cast", props:"Props", wardrobe:"Vestuario", art:"Arte", makeup:"Maquillaje",
-    sound:"Sonido", sfx:"SFX", vfx:"VFX", vehicles:"Vehículos", animals:"Animales", extras:"Extras"
+    sound:"Sonido", sfx:"SFX", vfx:"Post VFX", vehicles:"Vehículos", animals:"Animales", extras:"Extras"
   };
   const catColors = {
     cast:"var(--cat-cast)",
@@ -22,7 +22,7 @@
     extras:"var(--cat-extras)"
   };
 
-  // ======= ORDEN CANÓNICO DE ÁREAS =======
+  // ======= Orden de áreas (canónico) =======
   const crewAreas = [
     "Direccion",
     "Cast",
@@ -37,131 +37,67 @@
     "Otros"
   ];
 
-  function normalizeCrewArea(a){
-    const s = String(a||"").trim().toLowerCase();
-    if(!s) return "Otros";
-    const map = new Map([
-      ["dirección","Direccion"], ["direccion","Direccion"], ["dir","Direccion"],
-      ["cast","Cast"],
-
-      ["producción","Produccion"], ["produccion","Produccion"],
-
-      ["foto","Foto"], ["cámara","Foto"], ["camara","Foto"], ["dp","Foto"],
-
-      ["eléctrica/grip","Electrica/Grip"], ["electrica/grip","Electrica/Grip"],
-      ["electrica","Electrica/Grip"], ["grip","Electrica/Grip"],
-
-      ["sonido","Sonido"], ["audio","Sonido"],
-
-      ["arte","Arte"], ["art","Arte"],
-
-      ["vestuario","Vestuario"], ["wardrobe","Vestuario"],
-
-      ["maquillaje","Maquillaje"], ["makeup","Maquillaje"],
-
-      ["post vfx","Post VFX"], ["post/vfx","Post VFX"], ["vfx","Post VFX"], ["post","Post VFX"],
-
-      ["otros","Otros"], ["other","Otros"]
-    ]);
-    if(map.has(s)) return map.get(s);
-
-    if(s.includes("elect") || s.includes("grip")) return "Electrica/Grip";
-    if(s.includes("prod")) return "Produccion";
-    if(s.includes("direc")) return "Direccion";
-    if(s.includes("post") || s.includes("vfx")) return "Post VFX";
-    if(s.includes("foto") || s.includes("cam")) return "Foto";
-    return "Otros";
-  }
-
-  // ======= STATE =======
+  // ======= State =======
   let state = null;
   let selectedSceneId = null;
   let selectedDayId = null;
   let callSheetDayId = null;
-  let selectedElementKey = null;
-
-  let resizing = null;
-  let nativeDragActive = false;
-  let scheduleDirty = false;
 
   let calCursor = { year: new Date().getFullYear(), month: new Date().getMonth() };
 
-  const saveDebouncedRemote = window.U.debounce(async ()=>{
-    const cfg = StorageLayer.loadCfg();
-    if(cfg.autosync !== "on") return;
-    if(!cfg.binId || !cfg.accessKey) return;
-    try{
-      await StorageLayer.jsonbinPut(cfg.binId, cfg.accessKey, state);
-      toast("Autosync: JSONBin ✅");
-      updateSyncPill("JSONBin");
-    }catch{
-      toast("Autosync falló (quedó local)");
-      updateSyncPill("Local");
-    }
-  }, 900);
+  // Schedule drag
+  let schedDrag = null;
 
-  // ======= UTIL =======
+  // ======= Helpers =======
+  function uid(p="id"){ return `${p}_${Math.random().toString(16).slice(2)}_${Date.now().toString(16)}`; }
   function esc(s){
     return String(s||"")
-      .replaceAll("&","&amp;")
-      .replaceAll("<","&lt;")
-      .replaceAll(">","&gt;")
-      .replaceAll('"',"&quot;")
-      .replaceAll("'","&#039;");
+      .replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;")
+      .replaceAll('"',"&quot;").replaceAll("'","&#039;");
   }
-  function uid(p="id"){ return `${p}_${Math.random().toString(16).slice(2)}_${Date.now().toString(16)}`; }
-
   function toast(msg){
     const t = el("toast");
     if(!t) return;
     t.textContent = msg;
     t.style.display="block";
     clearTimeout(toast._t);
-    toast._t = setTimeout(()=>t.style.display="none", 2400);
+    toast._t = setTimeout(()=>t.style.display="none", 2200);
+  }
+  function touch(){
+    state.meta.updatedAt = new Date().toISOString();
+    StorageLayer.saveLocal(state);
+    const saved = el("savedAtText");
+    if(saved) saved.textContent = new Date(state.meta.updatedAt).toLocaleString("es-AR");
+    const st = el("statusText");
+    if(st) st.textContent = "Guardado";
+
+    autosyncDebounced();
+  }
+
+  const autosyncDebounced = window.U.debounce(async ()=>{
+    const cfg = StorageLayer.loadCfg();
+    if(cfg.autosync !== "on") return;
+    if(!cfg.binId || !cfg.accessKey) return;
+    try{
+      await StorageLayer.jsonbinPut(cfg.binId, cfg.accessKey, state);
+      updateSyncPill("JSONBin");
+    }catch{
+      updateSyncPill("Local");
+    }
+  }, 900);
+
+  function updateSyncPill(mode){
+    const p = el("syncPill");
+    if(p) p.textContent = mode;
   }
 
   function defaultState(){
     return {
-      meta: { version: 10, title:"Proyecto", updatedAt: new Date().toISOString() },
+      meta:{ version: 11, title:"Proyecto", updatedAt: new Date().toISOString() },
       scenes: [],
       shootDays: [],
       crew: []
     };
-  }
-
-  function touch(){
-    state.meta.updatedAt = new Date().toISOString();
-    StorageLayer.saveLocal(state);
-    const savedAt = el("savedAtText");
-    if(savedAt) savedAt.textContent = new Date(state.meta.updatedAt).toLocaleString("es-AR");
-    const status = el("statusText");
-    if(status) status.textContent = "Guardado";
-    saveDebouncedRemote();
-  }
-
-  function updateSyncPill(mode){
-    const pill = el("syncPill");
-    if(pill) pill.textContent = mode;
-  }
-
-  function showView(name){
-    for(const v of views){
-      const node = el(`view-${v}`);
-      if(node) node.classList.toggle("hidden", v!==name);
-    }
-    document.querySelectorAll(".navBtn").forEach(b=>{
-      b.classList.toggle("active", b.dataset.view === name);
-    });
-
-    if(name === "shooting"){
-      requestAnimationFrame(()=>{
-        ensureShootingSplitSections();  // ✅ TABLERO ARRIBA / DETALLE ABAJO
-        ensureSceneBankCollapsible();   // ✅ BOTÓN Y COLAPSO DE VERDAD
-        syncSceneBankHeight();          // ✅ scroll banco
-      });
-    }
-    if(name === "schedule") requestAnimationFrame(()=>renderScheduleBoard());
-    if(name === "callsheet") requestAnimationFrame(()=>{ renderCallSheetCalendar(); renderCallSheet(); });
   }
 
   function getScene(id){ return state.scenes.find(s=>s.id===id) || null; }
@@ -169,6 +105,7 @@
 
   function union(arr){ return Array.from(new Set((arr||[]).filter(Boolean))); }
 
+  // ======= TOD parsing =======
   function normalizeTOD(raw){
     const t = (raw||"").trim().toLowerCase();
     const map = {
@@ -181,14 +118,64 @@
     return map[t] || (raw||"").trim();
   }
 
-  function formatDayTitle(dateStr){
-    if(!dateStr) return "Sin fecha";
-    const d = new Date(dateStr + "T00:00:00");
-    const weekday = new Intl.DateTimeFormat("es-AR",{weekday:"long"}).format(d);
-    const dd = String(d.getDate()).padStart(2,"0");
-    const mm = String(d.getMonth()+1).padStart(2,"0");
-    const cap = weekday.charAt(0).toUpperCase() + weekday.slice(1);
-    return `${cap} ${dd}/${mm}`;
+  // ======= Crew area normalize =======
+  function normalizeCrewArea(a){
+    const s = String(a||"").trim().toLowerCase();
+    if(!s) return "Otros";
+    const map = new Map([
+      ["dirección","Direccion"], ["direccion","Direccion"], ["dir","Direccion"],
+      ["cast","Cast"],
+      ["producción","Produccion"], ["produccion","Produccion"],
+      ["foto","Foto"], ["cámara","Foto"], ["camara","Foto"], ["dp","Foto"],
+      ["eléctrica/grip","Electrica/Grip"], ["electrica/grip","Electrica/Grip"],
+      ["electrica","Electrica/Grip"], ["grip","Electrica/Grip"],
+      ["sonido","Sonido"], ["audio","Sonido"],
+      ["arte","Arte"], ["art","Arte"],
+      ["vestuario","Vestuario"], ["wardrobe","Vestuario"],
+      ["maquillaje","Maquillaje"], ["makeup","Maquillaje"],
+      ["post vfx","Post VFX"], ["post/vfx","Post VFX"], ["vfx","Post VFX"], ["post","Post VFX"],
+      ["otros","Otros"]
+    ]);
+    if(map.has(s)) return map.get(s);
+    if(s.includes("elect") || s.includes("grip")) return "Electrica/Grip";
+    if(s.includes("prod")) return "Produccion";
+    if(s.includes("direc")) return "Direccion";
+    if(s.includes("post") || s.includes("vfx")) return "Post VFX";
+    if(s.includes("foto") || s.includes("cam")) return "Foto";
+    return "Otros";
+  }
+
+  // ======= Time helpers =======
+  function minutesFromHHMM(hhmm){
+    if(!hhmm || !hhmm.includes(":")) return 8*60;
+    const [h,m] = hhmm.split(":").map(Number);
+    return (h*60 + (m||0));
+  }
+  function hhmmFromMinutes(m){
+    const mm = ((m % (24*60)) + (24*60)) % (24*60);
+    const h = Math.floor(mm/60);
+    const mi = String(mm%60).padStart(2,"0");
+    return `${String(h).padStart(2,"0")}:${mi}`;
+  }
+  function snap(v, step){ return Math.round(v/step)*step; }
+  function clamp(v, a, b){ return Math.max(a, Math.min(b, v)); }
+  function fmtClockFromCall(callHHMM, offsetMin){
+    const base = minutesFromHHMM(callHHMM || "08:00");
+    return hhmmFromMinutes(base + offsetMin);
+  }
+
+  // Clamp a shoot day to max 24h relative timeline
+  const DAY_SPAN_MIN = 24*60;
+
+  function ensureDayTimingMaps(d){
+    d.durations = d.durations || {};
+    d.times = d.times || {};
+    d.sceneIds = d.sceneIds || [];
+    d.crewIds = d.crewIds || [];
+    for(const sid of d.sceneIds){
+      if(typeof d.durations[sid] !== "number") d.durations[sid] = 60;
+      if(typeof d.times[sid] !== "number") d.times[sid] = 0;
+    }
   }
 
   function sortShootDaysInPlace(){
@@ -200,7 +187,60 @@
     });
   }
 
-  // ======= TOOLTIP =======
+  function formatDayTitle(dateStr){
+    if(!dateStr) return "Sin fecha";
+    const d = new Date(dateStr+"T00:00:00");
+    const weekday = new Intl.DateTimeFormat("es-AR",{weekday:"long"}).format(d);
+    const dd = String(d.getDate()).padStart(2,"0");
+    const mm = String(d.getMonth()+1).padStart(2,"0");
+    const cap = weekday.charAt(0).toUpperCase()+weekday.slice(1);
+    return `${cap} ${dd}/${mm}`;
+  }
+
+  function sceneAssignedDayId(sceneId){
+    for(const d of state.shootDays){
+      if((d.sceneIds||[]).includes(sceneId)) return d.id;
+    }
+    return null;
+  }
+  function removeSceneFromAllDays(sceneId){
+    for(const d of state.shootDays){
+      d.sceneIds = (d.sceneIds||[]).filter(x=>x!==sceneId);
+      if(d.times) delete d.times[sceneId];
+      if(d.durations) delete d.durations[sceneId];
+    }
+  }
+
+  function resolveOverlapsPushDown(d, snapMin){
+    ensureDayTimingMaps(d);
+    // order by start time
+    d.sceneIds.sort((a,b)=> (d.times[a]??0) - (d.times[b]??0));
+    let cursor = 0;
+    for(const sid of d.sceneIds){
+      let st = d.times[sid] ?? 0;
+      const du = d.durations[sid] ?? 60;
+      st = clamp(st, 0, DAY_SPAN_MIN - snapMin);
+      if(st < cursor){
+        st = snap(cursor, snapMin);
+      }
+      // clamp again considering duration
+      st = clamp(st, 0, Math.max(0, DAY_SPAN_MIN - du));
+      d.times[sid] = st;
+      cursor = st + du;
+      cursor = clamp(cursor, 0, DAY_SPAN_MIN);
+    }
+  }
+
+  function sceneCatsWithItems(scene){
+    const list = [];
+    for(const cat of cats){
+      const items = scene.elements?.[cat] || [];
+      if(items.length) list.push(cat);
+    }
+    return list;
+  }
+
+  // ======= Tooltip =======
   function showHoverTip(html, x, y){
     const tip = el("hoverTip");
     if(!tip) return;
@@ -214,30 +254,26 @@
     const pad = 16;
     const w = tip.offsetWidth || 420;
     const h = tip.offsetHeight || 200;
-
     let left = x + 14;
-    let top = y + 14;
-
+    let top  = y + 14;
     if(left + w + pad > window.innerWidth) left = x - w - 14;
     if(top + h + pad > window.innerHeight) top = y - h - 14;
-
-    tip.style.left = `${Math.max(pad, left)}px`;
-    tip.style.top = `${Math.max(pad, top)}px`;
+    tip.style.left = `${Math.max(pad,left)}px`;
+    tip.style.top  = `${Math.max(pad,top)}px`;
   }
   function hideHoverTip(){
     const tip = el("hoverTip");
     if(!tip) return;
-    tip.style.display = "none";
-    tip.innerHTML = "";
+    tip.style.display="none";
+    tip.innerHTML="";
   }
-  function buildSceneTooltipHTML(scene){
+  function buildSceneTooltip(scene){
     const parts = [];
     parts.push(`<div class="t">#${esc(scene.number||"")} — ${esc(scene.slugline||"")}</div>`);
     parts.push(`<div class="m">${esc(scene.location||"")} · ${esc(scene.timeOfDay||"")} · Pág ${esc(scene.pages||"")}</div>`);
     if(scene.summary) parts.push(`<div class="m" style="margin-top:8px;">${esc(scene.summary)}</div>`);
-
     for(const cat of cats){
-      const items = (scene.elements?.[cat] || []);
+      const items = scene.elements?.[cat] || [];
       if(!items.length) continue;
       parts.push(`
         <div class="grp">
@@ -252,357 +288,17 @@
   }
   function attachSceneHover(node, scene){
     node.addEventListener("mouseenter", (e)=>{
-      if(nativeDragActive || resizing) return;
-      showHoverTip(buildSceneTooltipHTML(scene), e.clientX, e.clientY);
+      if(schedDrag) return;
+      showHoverTip(buildSceneTooltip(scene), e.clientX, e.clientY);
     });
     node.addEventListener("mousemove", (e)=>{
       const tip = el("hoverTip");
-      if(tip && tip.style.display === "block") moveHoverTip(e.clientX, e.clientY);
+      if(tip && tip.style.display==="block") moveHoverTip(e.clientX, e.clientY);
     });
-    node.addEventListener("mouseleave", ()=>hideHoverTip());
+    node.addEventListener("mouseleave", hideHoverTip);
   }
 
-  // ======= BANCO DE ESCENAS: SCROLL (NO dependemos de CAST arriba/abajo) =======
-  function syncSceneBankHeight(){
-    const bank = el("sceneBankList");
-    if(!bank) return;
-    const br = bank.getBoundingClientRect();
-    const maxH = Math.max(260, Math.min(620, window.innerHeight - br.top - 24));
-    bank.style.maxHeight = `${Math.floor(maxH)}px`;
-    bank.style.overflowY = "auto";
-  }
-
-  // ======= LAYOUT: TABLERO ARRIBA / DETALLE ABAJO (3 columnas) =======
-  function fieldWrapFor(input){
-    if(!input) return null;
-    return input.closest(".field") || input.closest(".formRow") || input.parentElement;
-  }
-  function mkCard(title, id){
-    const card = document.createElement("div");
-    card.className = "card";
-    card.id = id;
-
-    const header = document.createElement("div");
-    header.className = "cardHeader gbFlexHeader";
-    header.innerHTML = `<h2 class="cardTitle">${esc(title)}</h2>`;
-    const content = document.createElement("div");
-    content.className = "cardContent";
-
-    card.appendChild(header);
-    card.appendChild(content);
-    return { card, header, content };
-  }
-
-  function ensureShootingSplitSections(){
-    const view = el("view-shooting");
-    const daysBoard = el("daysBoard");
-    if(!view || !daysBoard) return;
-
-    // 1) TABLERO: dejamos el card que ya existe (el que contiene daysBoard)
-    const tableroCard = daysBoard.closest(".card") || daysBoard.parentElement;
-    if(!tableroCard) return;
-
-    // 2) DETALLE: creamos card propio abajo del tablero (si no existe)
-    let detailCard = el("gbDetailDayCard");
-    if(!detailCard){
-      const made = mkCard("Detalle del Día", "gbDetailDayCard");
-      detailCard = made.card;
-      tableroCard.insertAdjacentElement("afterend", detailCard);
-    }else{
-      // si quedó metido adentro del tablero por algún bug anterior, lo sacamos
-      if(tableroCard.contains(detailCard)){
-        tableroCard.insertAdjacentElement("afterend", detailCard);
-      }
-    }
-
-    // 3) construimos 3 columnas adentro del Detalle
-    const date = el("day_date");
-    const call = el("day_call");
-    const loc = el("day_location");
-    const label = el("day_label");
-    const notes = el("day_notes");
-    const needs = el("dayNeeds");
-    const cast = el("dayCast");
-    const crew = el("dayCrewPicker");
-    if(!date || !call || !loc || !label || !notes || !needs || !cast || !crew) return;
-
-    const content = detailCard.querySelector(".cardContent") || detailCard;
-    content.innerHTML = ""; // ✅ garantizado: “gran sección abajo”, limpia
-
-    const layout = document.createElement("div");
-    layout.className = "dayDetail3col";
-
-    const col1 = document.createElement("div"); col1.className = "col";
-    const col2 = document.createElement("div"); col2.className = "col";
-    const col3 = document.createElement("div"); col3.className = "col";
-
-    // wrappers de inputs (col1)
-    const wDate = fieldWrapFor(date);
-    const wCall = fieldWrapFor(call);
-    const wLoc  = fieldWrapFor(loc);
-    const wLabel= fieldWrapFor(label);
-    const wNotes= fieldWrapFor(notes);
-
-    if(wDate) col1.appendChild(wDate);
-    if(wCall && wCall!==wDate) col1.appendChild(wCall);
-    if(wLoc  && wLoc!==wCall) col1.appendChild(wLoc);
-    if(wLabel&& wLabel!==wLoc) col1.appendChild(wLabel);
-    if(wNotes&& wNotes!==wLabel) col1.appendChild(wNotes);
-
-    // headers columna 2 y 3
-    const h2 = document.createElement("div");
-    h2.className = "gbColTitle";
-    h2.textContent = "Necesidades por Área";
-    col2.appendChild(h2);
-    col2.appendChild(needs);
-
-    const h3 = document.createElement("div");
-    h3.className = "gbColTitle";
-    h3.textContent = "Cast y Equipo Técnico";
-    col3.appendChild(h3);
-    col3.appendChild(cast);
-    col3.appendChild(crew);
-
-    layout.append(col1,col2,col3);
-    content.appendChild(layout);
-
-    // Asegurar que Tablero NO se “lleve” el detalle por accidente
-    // (si algún nodo duplicado quedó por ahí, lo dejamos vacío)
-    // No tocamos daysBoard, solo prevenimos mezcla.
-  }
-
-  // ======= BANCO DE ESCENAS: COLAPSABLE SIN ROMPER +DÍA =======
-  function findShootingLayoutContainer(){
-    const view = el("view-shooting");
-    const bankList = el("sceneBankList");
-    const daysBoard = el("daysBoard");
-    if(!view || !bankList || !daysBoard) return null;
-
-    // buscamos el contenedor más bajo que tenga ambos
-    let container = bankList.parentElement;
-    while(container && container !== view && !container.contains(daysBoard)){
-      container = container.parentElement;
-    }
-    if(!container) container = view;
-
-    // dentro de ese contenedor, buscamos el “host” (columna) del bank y el del main
-    const kids = Array.from(container.children || []);
-    let bankHost = kids.find(k=>k.contains(bankList)) || bankList.closest(".panel") || bankList.closest(".card") || bankList.parentElement;
-    let mainHost = kids.find(k=>k.contains(daysBoard)) || daysBoard.closest(".panel") || daysBoard.closest(".card") || daysBoard.parentElement;
-
-    // si bankHost y mainHost son el mismo, subimos un nivel
-    if(bankHost && mainHost && bankHost === mainHost){
-      const up = container.parentElement;
-      if(up){
-        const upKids = Array.from(up.children || []);
-        const b = upKids.find(k=>k.contains(bankList));
-        const m = upKids.find(k=>k.contains(daysBoard));
-        if(b && m && b !== m){
-          container = up;
-          bankHost = b;
-          mainHost = m;
-        }
-      }
-    }
-
-    return { container, bankHost, mainHost };
-  }
-
-  function ensureSceneBankCollapsible(){
-    const bankList = el("sceneBankList");
-    if(!bankList) return;
-
-    // borrar botones viejos (si quedaron en headers equivocados)
-    document.querySelectorAll(".bankCollapseBtn").forEach(b=>b.remove());
-
-    const layout = findShootingLayoutContainer();
-    if(!layout) return;
-
-    const { container, bankHost } = layout;
-
-    // header del banco (donde va el botón) = card header que contiene sceneBankList
-    const bankCard = bankList.closest(".card") || bankList.parentElement;
-    const header = bankCard?.querySelector(".cardHeader") || bankCard?.querySelector("header") || bankCard;
-    if(!header) return;
-
-    header.classList.add("gbFlexHeader");
-
-    const btn = document.createElement("button");
-    btn.type = "button";
-    btn.className = "btn bankCollapseBtn";
-    btn.title = "Colapsar/expandir Banco de Escenas";
-    btn.style.marginLeft = "auto"; // ✅ NO ABSOLUTE: no se superpone con +Día
-    btn.style.width = "32px";
-    btn.style.height = "32px";
-    btn.style.borderRadius = "10px";
-    btn.style.display = "flex";
-    btn.style.alignItems = "center";
-    btn.style.justifyContent = "center";
-    btn.style.fontWeight = "900";
-
-    const key = "gb_bankCollapsed_v2";
-    const apply = (collapsed)=>{
-      btn.textContent = collapsed ? "⟩" : "⟨";
-
-      // guardar estilos originales una sola vez
-      if(!container.dataset.gbOrigGridCols){
-        const cs = getComputedStyle(container);
-        container.dataset.gbDisp = cs.display;
-        if(cs.display.includes("grid")){
-          container.dataset.gbOrigGridCols = cs.gridTemplateColumns || "";
-        }
-      }
-
-      // Colapsar: ajustamos la columna real, no un id inventado
-      const disp = (container.dataset.gbDisp || getComputedStyle(container).display);
-
-      bankHost.classList.toggle("gbBankCollapsed", collapsed);
-
-      if(disp.includes("grid")){
-        const orig = container.dataset.gbOrigGridCols || "";
-        if(collapsed){
-          container.style.gridTemplateColumns = "56px 1fr";
-        }else{
-          container.style.gridTemplateColumns = orig;
-        }
-      }else{
-        // flex / block: usamos inline styles en el host
-        if(collapsed){
-          bankHost.dataset.gbOrigFlex = bankHost.style.flex || "";
-          bankHost.dataset.gbOrigWidth = bankHost.style.width || "";
-          bankHost.style.flex = "0 0 56px";
-          bankHost.style.width = "56px";
-        }else{
-          bankHost.style.flex = bankHost.dataset.gbOrigFlex || "";
-          bankHost.style.width = bankHost.dataset.gbOrigWidth || "";
-        }
-      }
-
-      // ocultar contenido del banco (solo el contenido, el header queda)
-      const content = bankCard?.querySelector(".cardContent") || bankList.parentElement;
-      if(content){
-        content.style.display = collapsed ? "none" : "";
-      }
-
-      localStorage.setItem(key, collapsed ? "1" : "0");
-      setTimeout(()=>syncSceneBankHeight(), 50);
-    };
-
-    btn.addEventListener("click", ()=>{
-      const now = localStorage.getItem(key)==="1";
-      apply(!now);
-    });
-
-    header.appendChild(btn);
-    apply(localStorage.getItem(key)==="1");
-  }
-
-  // ======= ELEMENTOS / SUGGEST =======
-  function getCastRoster(){
-    return union(
-      state.crew
-        .filter(c=>normalizeCrewArea(c.area)==="Cast")
-        .map(c=>(c.name||"").trim())
-        .filter(Boolean)
-    ).sort((a,b)=>a.localeCompare(b));
-  }
-
-  function getExistingElementsByCat(cat){
-    const set = new Set();
-    for(const s of state.scenes){
-      const arr = s.elements?.[cat] || [];
-      for(const it of arr){
-        const v = (it||"").trim();
-        if(v) set.add(v);
-      }
-    }
-    return Array.from(set).sort((a,b)=>a.localeCompare(b));
-  }
-
-  function refreshElementSuggestions(){
-    const catSel = el("elCategory");
-    const dl = el("elSuggestDatalist");
-    if(!catSel || !dl) return;
-    const cat = catSel.value;
-    let options = [];
-    if(cat === "cast") options = getCastRoster();
-    else options = getExistingElementsByCat(cat);
-    dl.innerHTML = options.map(v=>`<option value="${esc(v)}"></option>`).join("");
-  }
-
-  // ======= TIME HELPERS =======
-  function minutesFromHHMM(hhmm){
-    if(!hhmm || !hhmm.includes(":")) return 8*60;
-    const [h,m] = hhmm.split(":").map(Number);
-    return (h*60 + (m||0));
-  }
-  function hhmmFromMinutes(m){
-    const mm = ((m % (24*60)) + (24*60)) % (24*60);
-    const h = Math.floor(mm/60);
-    const mi = String(mm%60).padStart(2,"0");
-    return `${String(h).padStart(2,"0")}:${mi}`;
-  }
-  function fmtClock(totalMinutes){
-    const days = Math.floor(totalMinutes / (24*60));
-    const base = hhmmFromMinutes(totalMinutes);
-    return days > 0 ? `${base} (+${days})` : base;
-  }
-  function snap(value, step){ return Math.round(value/step)*step; }
-  function roundTimeToStep(hhmm, stepMin=15){
-    if(!hhmm || !hhmm.includes(":")) return hhmm;
-    const total = minutesFromHHMM(hhmm);
-    const r = Math.round(total/stepMin)*stepMin;
-    return hhmmFromMinutes(r);
-  }
-  function addMinutesHHMM(hhmm, delta){
-    const total = minutesFromHHMM(hhmm);
-    return hhmmFromMinutes(total + delta);
-  }
-
-  function ensureDayTimingMaps(d){
-    d.durations = d.durations || {};
-    d.times = d.times || {};
-    d.sceneIds = d.sceneIds || [];
-    for(const sid of d.sceneIds){
-      if(typeof d.durations[sid] !== "number") d.durations[sid] = 60;
-      if(typeof d.times[sid] !== "number") d.times[sid] = 0;
-    }
-  }
-  function sortDaySceneIdsByTime(d){
-    ensureDayTimingMaps(d);
-    d.sceneIds.sort((a,b)=>{
-      const ta = (typeof d.times[a] === "number") ? d.times[a] : 0;
-      const tb = (typeof d.times[b] === "number") ? d.times[b] : 0;
-      if(ta !== tb) return ta - tb;
-      return String(a).localeCompare(String(b));
-    });
-  }
-  function computeDayGridMinutes(d){
-    ensureDayTimingMaps(d);
-    let maxEnd = 10*60;
-    for(const sid of d.sceneIds){
-      const st = d.times[sid] ?? 0;
-      const dur = d.durations[sid] ?? 60;
-      maxEnd = Math.max(maxEnd, st + dur + 120);
-    }
-    return maxEnd;
-  }
-  function resolveDayOverlapsPushDown(d, snapMin){
-    ensureDayTimingMaps(d);
-    sortDaySceneIdsByTime(d);
-    let cursorEnd = 0;
-    for(const sid of d.sceneIds){
-      let st = d.times[sid] ?? 0;
-      const du = d.durations[sid] ?? 60;
-      if(st < cursorEnd){
-        st = snap(cursorEnd, snapMin);
-        d.times[sid] = st;
-      }
-      cursorEnd = st + du;
-    }
-  }
-
-  // ======= PARSER INT/EXT =======
+  // ======= Script parser (INT/EXT) =======
   function parseScreenplayToScenes(text, extraKeywordsCsv=""){
     const rawLines = (text||"").split(/\r?\n/);
     const lines = rawLines.map(l => String(l ?? "").replace(/\s+$/,"")).filter(l => l.trim() !== "");
@@ -685,16 +381,82 @@
     }
   }
 
-  // ======= BREAKDOWN =======
-  function renderCatSelects(){
+  // ======= Cast roster (desde Crew área Cast) =======
+  function normName(s){
+    return String(s||"")
+      .trim()
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g,"")
+      .replace(/[^\p{L}\p{N}]+/gu," ")
+      .replace(/\s+/g," ")
+      .trim();
+  }
+  function getCastRoster(){
+    return union(
+      state.crew
+        .map(c=>({ ...c, area: normalizeCrewArea(c.area) }))
+        .filter(c=>c.area==="Cast")
+        .map(c=>(c.name||"").trim())
+        .filter(Boolean)
+    ).sort((a,b)=>a.localeCompare(b));
+  }
+  function getExistingElementsByCat(cat){
+    const set = new Set();
+    for(const s of state.scenes){
+      for(const it of (s.elements?.[cat] || [])){
+        const v = (it||"").trim();
+        if(v) set.add(v);
+      }
+    }
+    return Array.from(set).sort((a,b)=>a.localeCompare(b));
+  }
+  function refreshElementSuggestions(){
+    const catSel = el("elCategory");
+    const dl = el("elSuggestDatalist");
+    if(!catSel || !dl) return;
+    const cat = catSel.value;
+    const options = (cat==="cast") ? getCastRoster() : getExistingElementsByCat(cat);
+    dl.innerHTML = options.map(v=>`<option value="${esc(v)}"></option>`).join("");
+  }
+
+  // ======= Navigation =======
+  function showView(name){
+    views.forEach(v=>{
+      const node = el(`view-${v}`);
+      if(node) node.classList.toggle("hidden", v!==name);
+    });
+    document.querySelectorAll(".navBtn").forEach(b=>{
+      b.classList.toggle("active", b.dataset.view===name);
+    });
+
+    if(name==="shooting"){
+      renderSceneBank();
+      renderDaysBoard();
+      renderDayDetail();
+      applyBankCollapsedUI();
+    }
+    if(name==="schedule") renderScheduleBoard();
+    if(name==="elements") renderElementsExplorer();
+    if(name==="crew") renderCrew();
+    if(name==="reports") renderReports();
+    if(name==="callsheet"){
+      renderCallSheetCalendar();
+      renderCallSheetDetail();
+    }
+    if(name==="settings") loadCfgToUI();
+  }
+
+  // ===================== Breakdown =====================
+  function renderCatSelect(){
     const sel = el("elCategory");
     if(sel) sel.innerHTML = cats.map(c=>`<option value="${c}">${esc(catNames[c])}</option>`).join("");
   }
 
   function renderScenesTable(){
-    const sceneTable = el("sceneTable");
-    if(!sceneTable) return;
-    const tbody = sceneTable.querySelector("tbody");
+    const table = el("sceneTable");
+    if(!table) return;
+    const tbody = table.querySelector("tbody");
     const q = (el("sceneSearch")?.value||"").toLowerCase();
     const tod = (el("sceneFilterTOD")?.value||"");
     tbody.innerHTML = "";
@@ -702,7 +464,7 @@
     const list = state.scenes.filter(s=>{
       const hay = `${s.number} ${s.slugline} ${s.location} ${s.summary}`.toLowerCase();
       if(q && !hay.includes(q)) return false;
-      if(tod && (s.timeOfDay||"") !== tod) return false;
+      if(tod && (s.timeOfDay||"")!==tod) return false;
       return true;
     });
 
@@ -737,7 +499,6 @@
       node.disabled = !s;
       node.value = s ? (s[f] ?? "") : "";
     }
-
     refreshElementSuggestions();
     renderSceneElementsGrid();
   }
@@ -749,18 +510,13 @@
     const s = selectedSceneId ? getScene(selectedSceneId) : null;
     if(!s) return;
 
-    const nonEmptyCats = cats.filter(cat => (s.elements?.[cat] || []).length > 0);
-    if(nonEmptyCats.length === 0){
-      wrap.innerHTML = `
-        <div class="emptyBox">
-          No hay elementos cargados todavía.<br/>
-          <b>Tip:</b> elegí una categoría arriba y agregá necesidades de la escena.
-        </div>
-      `;
+    const nonEmpty = cats.filter(c=> (s.elements?.[c]||[]).length>0);
+    if(!nonEmpty.length){
+      wrap.innerHTML = `<div class="catBlock"><div class="items">No hay elementos cargados todavía.</div></div>`;
       return;
     }
 
-    for(const cat of nonEmptyCats){
+    for(const cat of nonEmpty){
       const items = s.elements?.[cat] || [];
       const row = document.createElement("div");
       row.className = "sceneCatRow";
@@ -772,11 +528,10 @@
             <div class="count">(${items.length})</div>
           </div>
         </div>
-        <div class="chips" id="chips_${cat}"></div>
+        <div class="chips"></div>
       `;
-
-      const chipsWrap = row.querySelector(`#chips_${cat}`);
-      items.forEach(it=>{
+      const chips = row.querySelector(".chips");
+      for(const it of items){
         const chip = document.createElement("div");
         chip.className = "chip";
         chip.innerHTML = `<span>${esc(it)}</span><button title="Quitar">×</button>`;
@@ -784,17 +539,17 @@
           s.elements[cat] = (s.elements[cat]||[]).filter(x=>x!==it);
           touch();
           renderSceneElementsGrid();
-          renderDayDetail();
-          renderReports();
-          renderElementsExplorer();
-          renderScheduleBoard();
-          renderDaysBoard();
+          // refresh dependent views
           renderSceneBank();
-          renderCallSheetCalendar();
-          renderCallSheet();
+          renderDaysBoard();
+          renderDayDetail();
+          renderElementsExplorer();
+          renderReports();
+          renderScheduleBoard();
+          renderCallSheetDetail();
         });
-        chipsWrap.appendChild(chip);
-      });
+        chips.appendChild(chip);
+      }
       wrap.appendChild(row);
     }
   }
@@ -817,10 +572,6 @@
     renderScenesTable();
     renderSceneEditor();
     renderSceneBank();
-    renderDaysBoard();
-    renderScheduleBoard();
-    renderReports();
-    renderElementsExplorer();
   }
 
   function deleteScene(){
@@ -828,12 +579,7 @@
     const s = getScene(selectedSceneId);
     if(!s) return;
     if(!confirm(`Borrar escena #${s.number}?`)) return;
-
-    for(const d of state.shootDays){
-      d.sceneIds = (d.sceneIds||[]).filter(id=>id!==s.id);
-      if(d.durations) delete d.durations[s.id];
-      if(d.times) delete d.times[s.id];
-    }
+    removeSceneFromAllDays(s.id);
     state.scenes = state.scenes.filter(x=>x.id!==s.id);
     selectedSceneId = state.scenes[0]?.id || null;
     touch();
@@ -843,10 +589,8 @@
     renderDaysBoard();
     renderDayDetail();
     renderReports();
-    renderElementsExplorer();
     renderScheduleBoard();
-    renderCallSheetCalendar();
-    renderCallSheet();
+    renderCallSheetDetail();
   }
 
   function duplicateScene(){
@@ -862,10 +606,6 @@
     renderScenesTable();
     renderSceneEditor();
     renderSceneBank();
-    renderDaysBoard();
-    renderScheduleBoard();
-    renderReports();
-    renderElementsExplorer();
   }
 
   function addSceneElement(){
@@ -898,191 +638,48 @@
     touch();
     refreshElementSuggestions();
     renderSceneElementsGrid();
-    renderDayDetail();
-    renderReports();
-    renderElementsExplorer();
-    renderScheduleBoard();
-    renderCallSheet();
-  }
-
-  // ======= name normalize =======
-  function normName(s){
-    return String(s||"")
-      .trim()
-      .toLowerCase()
-      .normalize("NFD")
-      .replace(/[\u0300-\u036f]/g,"")
-      .replace(/[^\p{L}\p{N}]+/gu," ")
-      .replace(/\s+/g," ")
-      .trim();
-  }
-
-  // ======= IMPORTS =======
-  function importScenesTable(){
-    const txt = el("sceneImportText")?.value || "";
-    const rows = window.U.parseTableText(txt);
-    if(!rows.length) return toast("No hay nada para importar");
-
-    let start = 0;
-    if(rows[0] && window.U.isHeaderRow(rows[0])) start = 1;
-
-    let added = 0;
-    for(let i=start;i<rows.length;i++){
-      const r = rows[i];
-      if(!r.length) continue;
-      state.scenes.push({
-        id: uid("scene"),
-        number: r[0]||"",
-        slugline: r[1]||"",
-        location: r[2]||"",
-        timeOfDay: normalizeTOD(r[3]||""),
-        pages: Number(r[4]||0),
-        summary: r[5]||"",
-        notes:"",
-        elements: Object.fromEntries(cats.map(c=>[c,[]]))
-      });
-      added++;
-    }
-    if(added){
-      selectedSceneId = state.scenes[state.scenes.length-1].id;
-      touch();
-      toast(`Importadas ${added} escenas ✅`);
-      renderScenesTable();
-      renderSceneEditor();
-      renderSceneBank();
-      renderDaysBoard();
-      renderScheduleBoard();
-      renderReports();
-      renderElementsExplorer();
-    }
-  }
-
-  function importScript(){
-    const txt = el("scriptImportText")?.value || "";
-    const keys = el("scriptKeywords")?.value || "";
-    const scenes = parseScreenplayToScenes(txt, keys);
-    if(!scenes.length) return toast("No detecté escenas. Chequeá que cada INT./EXT. esté en su propia línea.");
-
-    state.scenes.push(...scenes);
-    selectedSceneId = state.scenes[state.scenes.length-1].id;
-    touch();
-    toast(`Cargadas ${scenes.length} escenas ✅`);
-    renderScenesTable();
-    renderSceneEditor();
     renderSceneBank();
     renderDaysBoard();
-    renderScheduleBoard();
-    renderReports();
-    renderElementsExplorer();
-  }
-
-  // ======= SHOOTING PLAN =======
-  function addShootDay(){
-    const d = {
-      id: uid("day"),
-      date:"",
-      callTime:"08:00",
-      location:"",
-      label:"",
-      notes:"",
-      sceneIds:[],
-      crewIds:[],
-      durations:{},
-      times:{}
-    };
-    state.shootDays.push(d);
-    sortShootDaysInPlace();
-    selectedDayId = d.id;
-    touch();
-    renderDaysBoard();
     renderDayDetail();
-    renderReports();
     renderElementsExplorer();
-    renderScheduleBoard();
-    renderCallSheetCalendar();
-    ensureShootingSplitSections();
-  }
-
-  function deleteShootDay(){
-    if(!selectedDayId) return;
-    const d = getDay(selectedDayId);
-    if(!d) return;
-    if(!confirm(`Borrar día ${d.date || "(sin fecha)"}?`)) return;
-    state.shootDays = state.shootDays.filter(x=>x.id!==d.id);
-    sortShootDaysInPlace();
-    selectedDayId = state.shootDays[0]?.id || null;
-    touch();
-    renderDaysBoard();
-    renderDayDetail();
     renderReports();
-    renderElementsExplorer();
     renderScheduleBoard();
-    renderCallSheetCalendar();
-    renderCallSheet();
-    ensureShootingSplitSections();
+    renderCallSheetDetail();
   }
 
-  function sceneAssignedDayId(sceneId){
-    for(const d of state.shootDays){
-      if((d.sceneIds||[]).includes(sceneId)) return d.id;
-    }
-    return null;
-  }
-
-  function removeSceneFromAllDays(sceneId){
-    for(const d of state.shootDays){
-      d.sceneIds = (d.sceneIds||[]).filter(x=>x!==sceneId);
-      if(d.times) delete d.times[sceneId];
-    }
-  }
-
-  function sceneCardNode(s, mode="bank"){
+  // ===================== Shooting plan =====================
+  function sceneCardNode(scene, mode="bank"){
     const node = document.createElement("div");
     node.className = "sceneCard";
     node.draggable = true;
-    node.dataset.sceneId = s.id;
+    node.dataset.sceneId = scene.id;
 
-    if(mode === "bank"){
-      const isAssigned = !!sceneAssignedDayId(s.id);
-      node.classList.add(isAssigned ? "assigned" : "unassigned");
-    }
-
-    if(mode === "day"){
+    if(mode==="bank"){
+      const assigned = !!sceneAssignedDayId(scene.id);
+      node.classList.add(assigned ? "assigned" : "unassigned");
       node.innerHTML = `
         <div class="left">
-          <div class="title">#${esc(s.number||"")} — ${esc(s.slugline||"")}</div>
+          <div class="title">#${esc(scene.number||"")} — ${esc(scene.slugline||"")}</div>
+          <div class="meta">${esc(scene.location||"")} · ${esc(scene.timeOfDay||"")}</div>
         </div>
-        <div class="right">
-          <span class="dragHandle" title="Arrastrar">⠿</span>
-        </div>
+        <div class="right"><span class="dragHandle">⠿</span></div>
       `;
     }else{
-      const assigned = sceneAssignedDayId(s.id);
+      // dentro del día: sin color (como pediste)
       node.innerHTML = `
         <div class="left">
-          <div class="title">#${esc(s.number||"")} — ${esc(s.slugline||"")}</div>
-          <div class="meta">${esc(s.location||"")} · ${esc(s.timeOfDay||"")}${assigned? " · asignada":""}</div>
+          <div class="title">#${esc(scene.number||"")} — ${esc(scene.slugline||"")}</div>
         </div>
-        <div class="right">
-          <span class="dragHandle" title="Arrastrar">⠿</span>
-        </div>
+        <div class="right"><span class="dragHandle">⠿</span></div>
       `;
     }
 
-    attachSceneHover(node, s);
+    attachSceneHover(node, scene);
 
     node.addEventListener("dragstart", (e)=>{
-      nativeDragActive = true;
       hideHoverTip();
-      node.classList.add("dragging");
-      const payload = { type:"scene", sceneId:s.id };
-      e.dataTransfer.setData("application/json", JSON.stringify(payload));
+      e.dataTransfer.setData("application/json", JSON.stringify({ type:"scene", sceneId: scene.id }));
       e.dataTransfer.effectAllowed = "move";
-    });
-    node.addEventListener("dragend", ()=>{
-      nativeDragActive = false;
-      node.classList.remove("dragging");
-      syncSceneBankHeight();
     });
 
     return node;
@@ -1097,7 +694,7 @@
     const filter = el("bankFilter")?.value || "all";
 
     let list = state.scenes.slice();
-    if(filter === "unassigned") list = list.filter(s=>!sceneAssignedDayId(s.id));
+    if(filter==="unassigned") list = list.filter(s=>!sceneAssignedDayId(s.id));
     if(q){
       list = list.filter(s=>{
         const hay = `${s.number} ${s.slugline} ${s.location} ${s.summary}`.toLowerCase();
@@ -1106,7 +703,49 @@
     }
 
     for(const s of list) wrap.appendChild(sceneCardNode(s, "bank"));
-    syncSceneBankHeight();
+  }
+
+  function addShootDay(){
+    const d = {
+      id: uid("day"),
+      date:"",
+      callTime:"08:00",
+      location:"",
+      label:`Día ${state.shootDays.length+1}`,
+      notes:"",
+      sceneIds:[],
+      crewIds:[],
+      times:{},
+      durations:{}
+    };
+    state.shootDays.push(d);
+    sortShootDaysInPlace();
+    selectedDayId = d.id;
+    touch();
+    renderDaysBoard();
+    renderDayDetail();
+    renderReports();
+    renderScheduleBoard();
+    renderCallSheetCalendar();
+    renderCallSheetDetail();
+  }
+
+  function deleteShootDay(){
+    if(!selectedDayId) return;
+    const d = getDay(selectedDayId);
+    if(!d) return;
+    if(!confirm(`Borrar ${formatDayTitle(d.date)}?`)) return;
+
+    state.shootDays = state.shootDays.filter(x=>x.id!==d.id);
+    sortShootDaysInPlace();
+    selectedDayId = state.shootDays[0]?.id || null;
+    touch();
+    renderDaysBoard();
+    renderDayDetail();
+    renderReports();
+    renderScheduleBoard();
+    renderCallSheetCalendar();
+    renderCallSheetDetail();
   }
 
   function renderDaysBoard(){
@@ -1118,7 +757,6 @@
 
     for(const d of state.shootDays){
       ensureDayTimingMaps(d);
-      sortDaySceneIdsByTime(d);
 
       const col = document.createElement("div");
       col.className = "dayCol";
@@ -1131,13 +769,12 @@
           <div class="t">${esc(formatDayTitle(d.date))}${d.label? " · "+esc(d.label):""}</div>
           <div class="m">Call ${esc(d.callTime||"")} · ${esc(d.location||"")}</div>
         </div>
-        <div class="muted">${(d.sceneIds||[]).length} escenas</div>
+        <div class="muted small">${(d.sceneIds||[]).length} escenas</div>
       `;
       head.addEventListener("click", ()=>{
         selectedDayId = d.id;
         renderDaysBoard();
         renderDayDetail();
-        ensureShootingSplitSections();
       });
 
       const zone = document.createElement("div");
@@ -1152,61 +789,61 @@
         const raw = e.dataTransfer.getData("application/json");
         if(!raw) return;
         const data = JSON.parse(raw);
-        if(data.type !== "scene") return;
+        if(data.type!=="scene") return;
 
-        removeSceneFromAllDays(data.sceneId);
+        const sid = data.sceneId;
+
+        // move scene into this day (remove from any other)
+        removeSceneFromAllDays(sid);
+
         ensureDayTimingMaps(d);
+        d.sceneIds.push(sid);
+        d.durations[sid] = d.durations[sid] ?? 60;
 
-        if(!d.sceneIds.includes(data.sceneId)) d.sceneIds.push(data.sceneId);
-        if(typeof d.durations[data.sceneId] !== "number") d.durations[data.sceneId] = 60;
-
+        // put at end (non-overlap)
+        const snapMin = Number(el("schedSnap")?.value || 15);
         let end = 0;
-        for(const sid of d.sceneIds){
-          const st = d.times[sid] ?? 0;
-          const du = d.durations[sid] ?? 60;
-          end = Math.max(end, st + du);
+        for(const id of d.sceneIds){
+          end = Math.max(end, (d.times[id]??0) + (d.durations[id]??60));
         }
-        d.times[data.sceneId] = end;
-        sortDaySceneIdsByTime(d);
+        d.times[sid] = snap(end, snapMin);
+        resolveOverlapsPushDown(d, snapMin);
 
         selectedDayId = d.id;
         touch();
-        renderDaysBoard();
         renderSceneBank();
+        renderDaysBoard();
         renderDayDetail();
         renderReports();
-        renderElementsExplorer();
         renderScheduleBoard();
         renderCallSheetCalendar();
-        renderCallSheet();
-        ensureShootingSplitSections();
+        renderCallSheetDetail();
       });
 
-      const ids = d.sceneIds || [];
-      if(!ids.length){
+      if(!(d.sceneIds||[]).length){
         zone.innerHTML = `<div class="muted">Soltá escenas acá…</div>`;
       }else{
-        for(const sid of ids){
+        for(const sid of d.sceneIds){
           const s = getScene(sid);
           if(!s) continue;
           const card = sceneCardNode(s, "day");
-          card.classList.remove("assigned","unassigned"); // ✅ tablero sin color
           zone.appendChild(card);
         }
       }
 
-      col.appendChild(head);
-      col.appendChild(zone);
-
-      if(d.id === selectedDayId){
+      if(d.id===selectedDayId){
         col.style.borderColor = "rgba(110,231,255,.35)";
       }
+
+      col.appendChild(head);
+      col.appendChild(zone);
       board.appendChild(col);
     }
   }
 
-  function setDayFieldHandlers(){
+  function renderDayDetail(){
     const d = selectedDayId ? getDay(selectedDayId) : null;
+
     const map = { day_date:"date", day_call:"callTime", day_location:"location", day_label:"label", day_notes:"notes" };
     for(const id in map){
       const node = el(id);
@@ -1214,94 +851,14 @@
       node.disabled = !d;
       node.value = d ? (d[map[id]] || "") : "";
     }
+
+    renderDayNeeds();
+    renderDayCast();
+    renderDayCrewPicker();
   }
 
-  function dayScenes(d){ return (d.sceneIds||[]).map(getScene).filter(Boolean); }
-
-  function renderDayCast(){
-    const wrap = el("dayCast");
-    if(!wrap) return;
-    wrap.innerHTML = "";
-    const d = selectedDayId ? getDay(selectedDayId) : null;
-    if(!d){ wrap.innerHTML = `<span class="muted">Seleccioná un día</span>`; return; }
-
-    const scenes = dayScenes(d);
-    const cast = union(scenes.flatMap(s=>s.elements?.cast || []));
-    if(!cast.length){
-      wrap.innerHTML = `<span class="muted">No hay cast cargado en breakdown.</span>`;
-      return;
-    }
-    cast.forEach(name=>{
-      const chip = document.createElement("div");
-      chip.className = "chip";
-      chip.innerHTML = `<span class="catBadge"><span class="dot" style="background:${catColors.cast}"></span>${esc(name)}</span>`;
-      wrap.appendChild(chip);
-    });
-  }
-
-  function renderDayCrewPicker(){
-    const wrap = el("dayCrewPicker");
-    if(!wrap) return;
-    wrap.innerHTML = "";
-    const d = selectedDayId ? getDay(selectedDayId) : null;
-    if(!d){ wrap.innerHTML = `<div class="muted">Seleccioná un día</div>`; return; }
-
-    const crew = state.crew
-      .map(c=>({ ...c, area: normalizeCrewArea(c.area) }))
-      .filter(c=>c.area!=="Cast");
-
-    if(!crew.length){
-      wrap.innerHTML = `<div class="muted">No cargaste equipo técnico todavía.</div>`;
-      return;
-    }
-
-    const areaIndex = new Map(crewAreas.map((a,i)=>[a,i]));
-    const sorted = crew.slice().sort((a,b)=>{
-      const ia = areaIndex.get(a.area)||999;
-      const ib = areaIndex.get(b.area)||999;
-      if(ia!==ib) return ia-ib;
-      return (a.name||"").localeCompare(b.name||"");
-    });
-
-    const selected = new Set(d.crewIds||[]);
-    let lastArea = null;
-
-    for(const c of sorted){
-      const area = c.area || "Otros";
-      if(area !== lastArea){
-        const hdr = document.createElement("div");
-        hdr.className = "crewAreaHeader";
-        hdr.textContent = area;
-        wrap.appendChild(hdr);
-        lastArea = area;
-      }
-
-      const isSel = selected.has(c.id);
-      const item = document.createElement("div");
-      item.className = "crewPickItem" + (isSel ? " selected" : "");
-      item.innerHTML = `
-        <div class="left">
-          <span class="statusDot"></span>
-          <div>
-            <div class="title">${esc(c.name||"(sin nombre)")}</div>
-            <div class="meta">${esc(c.area||"")} · ${esc(c.role||"")} ${c.phone? " · "+esc(c.phone):""}</div>
-          </div>
-        </div>
-        <div class="muted small">${isSel ? "Citado" : "No citado"}</div>
-      `;
-      item.addEventListener("click", ()=>{
-        d.crewIds = d.crewIds || [];
-        const idx = d.crewIds.indexOf(c.id);
-        if(idx>=0) d.crewIds.splice(idx,1);
-        else d.crewIds.push(c.id);
-        d.crewIds = Array.from(new Set(d.crewIds));
-        touch();
-        renderDayCrewPicker();
-        renderReports();
-        renderCallSheet();
-      });
-      wrap.appendChild(item);
-    }
+  function dayScenes(d){
+    return (d.sceneIds||[]).map(getScene).filter(Boolean);
   }
 
   function renderDayNeeds(){
@@ -1316,12 +873,13 @@
     for(const cat of cats){
       const items = union(scenes.flatMap(s=>s.elements?.[cat] || []));
       if(!items.length) continue;
+      if(cat==="cast") continue;
       needs[cat] = items;
     }
 
     const keys = Object.keys(needs);
     if(!keys.length){
-      wrap.innerHTML = `<div class="muted">No hay elementos cargados en breakdown.</div>`;
+      wrap.innerHTML = `<div class="catBlock"><div class="items">No hay elementos cargados en breakdown.</div></div>`;
       return;
     }
 
@@ -1337,280 +895,30 @@
     }
   }
 
-  function renderDayDetail(){
-    setDayFieldHandlers();
-    renderDayCast();
-    renderDayCrewPicker();
-    renderDayNeeds();
-    ensureShootingSplitSections(); // ✅ mantiene el layout correcto
-  }
+  function renderDayCast(){
+    const wrap = el("dayCast");
+    if(!wrap) return;
+    wrap.innerHTML = "";
+    const d = selectedDayId ? getDay(selectedDayId) : null;
+    if(!d){ wrap.innerHTML = `<div class="muted">Seleccioná un día</div>`; return; }
 
-  // ======= ELEMENTS EXPLORER =======
-  function populateElementsFilters(){
-    const catSel = el("elxCategory");
-    const daySel = el("elxDay");
-    if(!catSel || !daySel) return;
-
-    const prevCat = catSel.value || "all";
-    const prevDay = daySel.value || "all";
-
-    catSel.innerHTML =
-      `<option value="all">Todas las categorías</option>` +
-      cats.map(c=>`<option value="${c}">${esc(catNames[c])}</option>`).join("");
-
-    daySel.innerHTML = `
-      <option value="all">Todos los días</option>
-      <option value="unassigned">No asignadas</option>
-      ${state.shootDays.map(d=>`<option value="${esc(d.id)}">${esc(formatDayTitle(d.date))}</option>`).join("")}
-    `;
-
-    catSel.value = (prevCat === "all" || cats.includes(prevCat)) ? prevCat : "all";
-    if(prevDay === "unassigned" || prevDay === "all" || state.shootDays.some(d=>d.id===prevDay)){
-      daySel.value = prevDay;
-    }else daySel.value = "all";
-  }
-
-  function scenesForDayFilter(dayFilter){
-    if(dayFilter === "all") return state.scenes.slice();
-    if(dayFilter === "unassigned"){
-      const assigned = new Set(state.shootDays.flatMap(d=>d.sceneIds||[]));
-      return state.scenes.filter(s=>!assigned.has(s.id));
-    }
-    const d = getDay(dayFilter);
-    const ids = new Set(d?.sceneIds || []);
-    return state.scenes.filter(s=>ids.has(s.id));
-  }
-
-  function renderElementsExplorer(){
-    if(!el("elxCategory")) return;
-    populateElementsFilters();
-
-    const catFilter = el("elxCategory").value || "all";
-    const dayFilter = el("elxDay").value || "all";
-    const q = (el("elxSearch").value || "").toLowerCase();
-
-    const scenes = scenesForDayFilter(dayFilter);
-    const counts = new Map();
-
-    const pushItem = (cat, item, sceneId)=>{
-      const key = `${cat}::${item}`;
-      if(q && !item.toLowerCase().includes(q)) return;
-
-      if(!counts.has(key)){
-        counts.set(key, {count:0, sceneIds:new Set(), cat, item});
-      }
-      const obj = counts.get(key);
-      obj.count += 1;
-      obj.sceneIds.add(sceneId);
-    };
-
-    for(const s of scenes){
-      if(catFilter === "all"){
-        for(const cat of cats){
-          const items = s.elements?.[cat] || [];
-          for(const it of items){
-            const item = it.trim();
-            if(!item) continue;
-            pushItem(cat, item, s.id);
-          }
-        }
-      }else{
-        const items = s.elements?.[catFilter] || [];
-        for(const it of items){
-          const item = it.trim();
-          if(!item) continue;
-          pushItem(catFilter, item, s.id);
-        }
-      }
-    }
-
-    const listWrap = el("elxList");
-    const detailWrap = el("elxDetail");
-    listWrap.innerHTML = "";
-    detailWrap.innerHTML = "";
-
-    let entries = Array.from(counts.entries());
-    entries.sort((a,b)=>{
-      const A = a[1], B = b[1];
-      const ia = cats.indexOf(A.cat);
-      const ib = cats.indexOf(B.cat);
-      if(ia !== ib) return ia - ib;
-      return A.item.localeCompare(B.item);
-    });
-
-    if(!entries.length){
-      listWrap.innerHTML = `<div class="muted">No hay elementos para este filtro.</div>`;
+    const scenes = dayScenes(d);
+    const cast = union(scenes.flatMap(s=>s.elements?.cast || []));
+    if(!cast.length){
+      wrap.innerHTML = `<div class="catBlock"><div class="items">No hay cast cargado en breakdown.</div></div>`;
       return;
     }
 
-    for(const [key, info] of entries){
-      const row = document.createElement("div");
-      row.className = "sceneCard";
-      row.style.cursor = "pointer";
-      row.innerHTML = `
-        <div class="left">
-          <div class="title">
-            <span class="catBadge">
-              <span class="dot" style="background:${catColors[info.cat]}"></span>
-              ${esc(info.item)}
-            </span>
-          </div>
-          <div class="meta">${esc(catNames[info.cat])} · ${info.sceneIds.size} escena(s)</div>
-        </div>
-        <div class="muted">${info.count}</div>
+    for(const name of cast){
+      const chip = document.createElement("div");
+      chip.className = "catBlock";
+      chip.innerHTML = `
+        <div class="hdr"><span class="dot" style="background:${catColors.cast}"></span>${esc(name)}</div>
       `;
-      row.addEventListener("click", ()=>{
-        selectedElementKey = key;
-        renderElementDetail(key, info);
-      });
-      listWrap.appendChild(row);
-    }
-
-    if(!selectedElementKey || !counts.has(selectedElementKey)){
-      selectedElementKey = entries[0][0];
-    }
-    renderElementDetail(selectedElementKey, counts.get(selectedElementKey));
-  }
-
-  function renderElementDetail(key, info){
-    const wrap = el("elxDetail");
-    wrap.innerHTML = "";
-    const scenes = Array.from(info.sceneIds).map(getScene).filter(Boolean);
-
-    const header = document.createElement("div");
-    header.className = "catBlock";
-    header.innerHTML = `
-      <div class="hdr">
-        <span class="dot" style="background:${catColors[info.cat]}"></span>
-        ${esc(info.item)}
-      </div>
-      <div class="items">${esc(catNames[info.cat])}</div>
-    `;
-    wrap.appendChild(header);
-
-    scenes.forEach(s=>{
-      const row = document.createElement("div");
-      row.className = "sceneCard";
-      row.innerHTML = `
-        <div class="left">
-          <div class="title">#${esc(s.number||"")} — ${esc(s.slugline||"")}</div>
-          <div class="meta">${esc(s.location||"")} · ${esc(s.timeOfDay||"")}</div>
-        </div>
-        <div class="row gap">
-          <button class="btn">Abrir</button>
-        </div>
-      `;
-      row.querySelector("button").addEventListener("click", ()=>{
-        selectedSceneId = s.id;
-        showView("breakdown");
-        renderScenesTable();
-        renderSceneEditor();
-      });
-      wrap.appendChild(row);
-    });
-  }
-
-  // ======= CREW =======
-  function addCrew(){
-    state.crew.push({ id: uid("crew"), area:"Produccion", role:"", name:"", phone:"", email:"", notes:"" });
-    touch();
-    renderCrew();
-    refreshElementSuggestions();
-    renderDayDetail();
-    renderReports();
-    renderCallSheet();
-  }
-
-  function renderCrew(){
-    const crewTable = el("crewTable");
-    if(!crewTable) return;
-    const tbody = crewTable.querySelector("tbody");
-    const q = (el("crewSearch")?.value || "").trim().toLowerCase();
-    tbody.innerHTML = "";
-
-    const areaIndex = new Map(crewAreas.map((a,i)=>[a,i]));
-    let list = state.crew.map(c=>({ ...c, area: normalizeCrewArea(c.area) }));
-
-    if(q){
-      list = list.filter(c=>{
-        const hay = `${c.area} ${c.role} ${c.name} ${c.phone} ${c.email} ${c.notes}`.toLowerCase();
-        return hay.includes(q);
-      });
-    }
-
-    list.sort((a,b)=>{
-      const ia = areaIndex.get(a.area)||999;
-      const ib = areaIndex.get(b.area)||999;
-      if(ia!==ib) return ia-ib;
-      return (a.name||"").localeCompare(b.name||"");
-    });
-
-    let lastArea = null;
-
-    list.forEach(c=>{
-      const real = state.crew.find(x=>x.id===c.id);
-      if(real) real.area = c.area;
-
-      if(c.area !== lastArea){
-        const trG = document.createElement("tr");
-        trG.className = "groupRow";
-        trG.innerHTML = `<td colspan="7">${esc(c.area||"Otros")}</td>`;
-        tbody.appendChild(trG);
-        lastArea = c.area;
-      }
-
-      const tr = document.createElement("tr");
-      tr.innerHTML = `
-        <td>
-          <select class="input">
-            ${crewAreas.map(a=>`<option value="${esc(a)}" ${c.area===a?"selected":""}>${esc(a)}</option>`).join("")}
-          </select>
-        </td>
-        <td><input class="input" value="${esc(c.role||"")}" /></td>
-        <td><input class="input" value="${esc(c.name||"")}" /></td>
-        <td><input class="input" value="${esc(c.phone||"")}" /></td>
-        <td><input class="input" value="${esc(c.email||"")}" /></td>
-        <td><input class="input" value="${esc(c.notes||"")}" /></td>
-        <td><button class="btn danger">Borrar</button></td>
-      `;
-
-      const [areaSel, role, name, phone, email, notes] = tr.querySelectorAll("select,input");
-      const refreshEverywhere = ()=>{
-        refreshElementSuggestions();
-        renderDayDetail();
-        renderReports();
-        renderCallSheet();
-      };
-
-      areaSel.addEventListener("change", ()=>{ real.area = normalizeCrewArea(areaSel.value); touch(); renderCrew(); refreshEverywhere(); });
-      role.addEventListener("input", ()=>{ real.role = role.value; touch(); refreshEverywhere(); });
-      name.addEventListener("input", ()=>{ real.name = name.value; touch(); refreshEverywhere(); });
-      phone.addEventListener("input", ()=>{ real.phone = phone.value; touch(); });
-      email.addEventListener("input", ()=>{ real.email = email.value; touch(); });
-      notes.addEventListener("input", ()=>{ real.notes = notes.value; touch(); });
-
-      tr.querySelector("button").addEventListener("click", ()=>{
-        if(!confirm("Borrar integrante?")) return;
-        for(const d of state.shootDays){
-          d.crewIds = (d.crewIds||[]).filter(id=>id!==real.id);
-        }
-        state.crew = state.crew.filter(x=>x.id!==real.id);
-        touch();
-        renderCrew();
-        refreshEverywhere();
-      });
-
-      tbody.appendChild(tr);
-    });
-
-    if(!list.length){
-      const tr = document.createElement("tr");
-      tr.innerHTML = `<td colspan="7" class="muted">No hay resultados.</td>`;
-      tbody.appendChild(tr);
+      wrap.appendChild(chip);
     }
   }
 
-  // ======= REPORTES (CREW EN ORDEN DE ÁREAS) =======
   function groupCrewByArea(list){
     const map = new Map();
     for(const c of list){
@@ -1635,14 +943,303 @@
     return entries;
   }
 
+  function renderDayCrewPicker(){
+    const wrap = el("dayCrewPicker");
+    if(!wrap) return;
+    wrap.innerHTML = "";
+    const d = selectedDayId ? getDay(selectedDayId) : null;
+    if(!d){ wrap.innerHTML = `<div class="muted">Seleccioná un día</div>`; return; }
+
+    const crewAll = state.crew
+      .map(c=>({ ...c, area: normalizeCrewArea(c.area) }))
+      .filter(c=>c.area!=="Cast");
+
+    if(!crewAll.length){
+      wrap.innerHTML = `<div class="catBlock"><div class="items">No cargaste equipo técnico todavía.</div></div>`;
+      return;
+    }
+
+    const selected = new Set(d.crewIds || []);
+    const grouped = groupCrewByArea(crewAll);
+
+    for(const [area, arr] of grouped){
+      const hdr = document.createElement("div");
+      hdr.className = "crewAreaHeader";
+      hdr.textContent = area;
+      wrap.appendChild(hdr);
+
+      for(const c of arr){
+        const isSel = selected.has(c.id);
+        const item = document.createElement("div");
+        item.className = "crewPickItem" + (isSel ? " selected" : "");
+        item.innerHTML = `
+          <div class="left">
+            <span class="statusDot"></span>
+            <div>
+              <div class="title">${esc(c.name||"(sin nombre)")}</div>
+              <div class="meta">${esc(area)} · ${esc(c.role||"")} ${c.phone? " · "+esc(c.phone):""}</div>
+            </div>
+          </div>
+          <div class="muted small">${isSel ? "Citado" : "No citado"}</div>
+        `;
+        item.addEventListener("click", ()=>{
+          d.crewIds = d.crewIds || [];
+          const idx = d.crewIds.indexOf(c.id);
+          if(idx>=0) d.crewIds.splice(idx,1);
+          else d.crewIds.push(c.id);
+          d.crewIds = Array.from(new Set(d.crewIds));
+          touch();
+          renderDayCrewPicker();
+          renderReports();
+          renderCallSheetDetail();
+        });
+        wrap.appendChild(item);
+      }
+    }
+  }
+
+  // ===================== Elements explorer =====================
+  function populateElementsFilters(){
+    const catSel = el("elxCategory");
+    const daySel = el("elxDay");
+    if(!catSel || !daySel) return;
+
+    const prevCat = catSel.value || "all";
+    const prevDay = daySel.value || "all";
+
+    catSel.innerHTML =
+      `<option value="all">Todas las categorías</option>` +
+      cats.map(c=>`<option value="${c}">${esc(catNames[c])}</option>`).join("");
+
+    sortShootDaysInPlace();
+    daySel.innerHTML = `
+      <option value="all">Todos los días</option>
+      <option value="unassigned">No asignadas</option>
+      ${state.shootDays.map(d=>`<option value="${esc(d.id)}">${esc(formatDayTitle(d.date))}</option>`).join("")}
+    `;
+
+    catSel.value = (prevCat==="all" || cats.includes(prevCat)) ? prevCat : "all";
+    if(prevDay==="unassigned" || prevDay==="all" || state.shootDays.some(d=>d.id===prevDay)){
+      daySel.value = prevDay;
+    }else daySel.value = "all";
+  }
+
+  function scenesForDayFilter(dayFilter){
+    if(dayFilter==="all") return state.scenes.slice();
+    if(dayFilter==="unassigned"){
+      const assigned = new Set(state.shootDays.flatMap(d=>d.sceneIds||[]));
+      return state.scenes.filter(s=>!assigned.has(s.id));
+    }
+    const d = getDay(dayFilter);
+    const ids = new Set(d?.sceneIds || []);
+    return state.scenes.filter(s=>ids.has(s.id));
+  }
+
+  function renderElementsExplorer(){
+    if(!el("elxCategory")) return;
+    populateElementsFilters();
+
+    const catFilter = el("elxCategory").value || "all";
+    const dayFilter = el("elxDay").value || "all";
+    const q = (el("elxSearch").value || "").toLowerCase();
+
+    const scenes = scenesForDayFilter(dayFilter);
+    const counts = new Map();
+
+    function pushItem(cat, item, sceneId){
+      const key = `${cat}::${item}`;
+      if(q && !item.toLowerCase().includes(q)) return;
+      if(!counts.has(key)) counts.set(key, { cat, item, sceneIds:new Set() });
+      counts.get(key).sceneIds.add(sceneId);
+    }
+
+    for(const s of scenes){
+      if(catFilter==="all"){
+        for(const cat of cats){
+          for(const it of (s.elements?.[cat]||[])){
+            const item = (it||"").trim();
+            if(item) pushItem(cat, item, s.id);
+          }
+        }
+      }else{
+        for(const it of (s.elements?.[catFilter]||[])){
+          const item = (it||"").trim();
+          if(item) pushItem(catFilter, item, s.id);
+        }
+      }
+    }
+
+    const listWrap = el("elxList");
+    const detailWrap = el("elxDetail");
+    listWrap.innerHTML = "";
+    detailWrap.innerHTML = "";
+
+    let entries = Array.from(counts.entries()).map(([k,v])=>({ key:k, ...v }));
+    entries.sort((a,b)=>{
+      const ia = cats.indexOf(a.cat);
+      const ib = cats.indexOf(b.cat);
+      if(ia!==ib) return ia-ib;
+      return a.item.localeCompare(b.item);
+    });
+
+    if(!entries.length){
+      listWrap.innerHTML = `<div class="catBlock"><div class="items">No hay elementos para este filtro.</div></div>`;
+      return;
+    }
+
+    for(const e of entries){
+      const row = document.createElement("div");
+      row.className = "sceneCard";
+      row.style.cursor = "pointer";
+      row.innerHTML = `
+        <div class="left">
+          <div class="title">
+            <span class="catBadge"><span class="dot" style="background:${catColors[e.cat]}"></span>${esc(e.item)}</span>
+          </div>
+          <div class="meta">${esc(catNames[e.cat])} · ${e.sceneIds.size} escena(s)</div>
+        </div>
+        <div class="muted">${e.sceneIds.size}</div>
+      `;
+      row.addEventListener("click", ()=>renderElementDetail(e));
+      listWrap.appendChild(row);
+    }
+
+    renderElementDetail(entries[0]);
+
+    function renderElementDetail(info){
+      detailWrap.innerHTML = "";
+      const header = document.createElement("div");
+      header.className = "catBlock";
+      header.innerHTML = `
+        <div class="hdr"><span class="dot" style="background:${catColors[info.cat]}"></span>${esc(info.item)}</div>
+        <div class="items">${esc(catNames[info.cat])}</div>
+      `;
+      detailWrap.appendChild(header);
+
+      const scenesList = Array.from(info.sceneIds).map(getScene).filter(Boolean);
+      for(const s of scenesList){
+        const r = document.createElement("div");
+        r.className = "sceneCard";
+        r.innerHTML = `
+          <div class="left">
+            <div class="title">#${esc(s.number||"")} — ${esc(s.slugline||"")}</div>
+            <div class="meta">${esc(s.location||"")} · ${esc(s.timeOfDay||"")}</div>
+          </div>
+          <button class="btn">Abrir</button>
+        `;
+        r.querySelector("button").addEventListener("click", ()=>{
+          selectedSceneId = s.id;
+          showView("breakdown");
+          renderScenesTable();
+          renderSceneEditor();
+        });
+        detailWrap.appendChild(r);
+      }
+    }
+  }
+
+  // ===================== Crew =====================
+  function addCrew(){
+    state.crew.push({ id: uid("crew"), area:"Produccion", role:"", name:"", phone:"", email:"", notes:"" });
+    touch();
+    renderCrew();
+    refreshElementSuggestions();
+    renderDayDetail();
+    renderReports();
+    renderCallSheetDetail();
+  }
+
+  function renderCrew(){
+    const table = el("crewTable");
+    if(!table) return;
+    const tbody = table.querySelector("tbody");
+    const q = (el("crewSearch")?.value||"").toLowerCase();
+    tbody.innerHTML = "";
+
+    let list = state.crew.map(c=>({ ...c, area: normalizeCrewArea(c.area) }));
+    if(q){
+      list = list.filter(c=>{
+        const hay = `${c.area} ${c.role} ${c.name} ${c.phone} ${c.email} ${c.notes}`.toLowerCase();
+        return hay.includes(q);
+      });
+    }
+    const idx = new Map(crewAreas.map((a,i)=>[a,i]));
+    list.sort((a,b)=>{
+      const ia = idx.get(a.area)||999;
+      const ib = idx.get(b.area)||999;
+      if(ia!==ib) return ia-ib;
+      return (a.name||"").localeCompare(b.name||"");
+    });
+
+    let lastArea = null;
+
+    for(const c of list){
+      const real = state.crew.find(x=>x.id===c.id);
+      if(real) real.area = c.area;
+
+      if(c.area !== lastArea){
+        const trG = document.createElement("tr");
+        trG.className = "groupRow";
+        trG.innerHTML = `<td colspan="7">${esc(c.area)}</td>`;
+        tbody.appendChild(trG);
+        lastArea = c.area;
+      }
+
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
+        <td>
+          <select class="input">
+            ${crewAreas.map(a=>`<option value="${esc(a)}" ${c.area===a?"selected":""}>${esc(a)}</option>`).join("")}
+          </select>
+        </td>
+        <td><input class="input" value="${esc(c.role||"")}" /></td>
+        <td><input class="input" value="${esc(c.name||"")}" /></td>
+        <td><input class="input" value="${esc(c.phone||"")}" /></td>
+        <td><input class="input" value="${esc(c.email||"")}" /></td>
+        <td><input class="input" value="${esc(c.notes||"")}" /></td>
+        <td><button class="btn danger">Borrar</button></td>
+      `;
+      const [areaSel, role, name, phone, email, notes] = tr.querySelectorAll("select,input");
+      areaSel.addEventListener("change", ()=>{ real.area = normalizeCrewArea(areaSel.value); touch(); renderCrew(); refreshElementSuggestions(); renderReports(); renderCallSheetDetail(); });
+      role.addEventListener("input", ()=>{ real.role = role.value; touch(); renderReports(); renderCallSheetDetail(); });
+      name.addEventListener("input", ()=>{ real.name = name.value; touch(); refreshElementSuggestions(); renderReports(); renderCallSheetDetail(); });
+      phone.addEventListener("input", ()=>{ real.phone = phone.value; touch(); });
+      email.addEventListener("input", ()=>{ real.email = email.value; touch(); });
+      notes.addEventListener("input", ()=>{ real.notes = notes.value; touch(); });
+
+      tr.querySelector("button").addEventListener("click", ()=>{
+        if(!confirm("Borrar integrante?")) return;
+        for(const d of state.shootDays){
+          d.crewIds = (d.crewIds||[]).filter(id=>id!==real.id);
+        }
+        state.crew = state.crew.filter(x=>x.id!==real.id);
+        touch();
+        renderCrew();
+        refreshElementSuggestions();
+        renderDayDetail();
+        renderReports();
+        renderCallSheetDetail();
+      });
+
+      tbody.appendChild(tr);
+    }
+
+    if(!list.length){
+      const tr = document.createElement("tr");
+      tr.innerHTML = `<td colspan="7" class="muted">No hay resultados.</td>`;
+      tbody.appendChild(tr);
+    }
+  }
+
+  // ===================== Reports =====================
   function renderReports(){
     const board = el("reportsBoard");
     if(!board) return;
     board.innerHTML = "";
-
     sortShootDaysInPlace();
 
     for(const d of state.shootDays){
+      ensureDayTimingMaps(d);
       const col = document.createElement("div");
       col.className = "reportCol";
 
@@ -1665,47 +1262,51 @@
         .map(c=>({ ...c, area: normalizeCrewArea(c.area) }))
         .filter(c=>c.area!=="Cast");
 
-      const crewGrouped = groupCrewByArea(crewAll);
+      const grouped = groupCrewByArea(crewAll);
 
+      // Escenas
       const scenesBox = document.createElement("div");
       scenesBox.className = "catBlock";
       scenesBox.innerHTML = `
         <div class="hdr"><span class="dot" style="background:var(--cat-props)"></span>Escenas</div>
-        <div class="items">${scenes.length ? scenes.map(s=>`<div>#${esc(s.number)} ${esc(s.slugline)}</div>`).join("") : `<div class="muted">—</div>`}</div>
+        <div class="items">${scenes.length ? scenes.map(s=>`<div>#${esc(s.number)} ${esc(s.slugline)}</div>`).join("") : `<div>—</div>`}</div>
       `;
       body.appendChild(scenesBox);
 
+      // Cast
       const castBox = document.createElement("div");
       castBox.className = "catBlock";
       castBox.innerHTML = `
         <div class="hdr"><span class="dot" style="background:${catColors.cast}"></span>Cast</div>
-        <div class="items">${cast.length ? cast.map(n=>`<div>${esc(n)}</div>`).join("") : `<div class="muted">—</div>`}</div>
+        <div class="items">${cast.length ? cast.map(n=>`<div>${esc(n)}</div>`).join("") : `<div>—</div>`}</div>
       `;
       body.appendChild(castBox);
 
+      // Crew (en orden)
       const crewBox = document.createElement("div");
       crewBox.className = "catBlock";
       crewBox.innerHTML = `<div class="hdr"><span class="dot" style="background:var(--cat-sound)"></span>Crew citado</div>`;
       const crewItems = document.createElement("div");
       crewItems.className = "items";
+
       if(!crewAll.length){
-        crewItems.innerHTML = `<div class="muted">—</div>`;
+        crewItems.innerHTML = `<div>—</div>`;
       }else{
-        crewItems.innerHTML = crewGrouped.map(([area, arr])=>{
-          return `
-            <div class="repCrewArea">
-              <div class="repCrewAreaT">${esc(area)}</div>
-              <div class="repCrewAreaL">
-                ${arr.map(c=>`<div>${esc(c.name)}${c.role? ` (${esc(c.role)})`:""}</div>`).join("")}
-              </div>
+        crewItems.innerHTML = grouped.map(([area, arr])=>`
+          <div class="repCrewArea">
+            <div class="repCrewAreaT">${esc(area)}</div>
+            <div class="repCrewAreaL">
+              ${arr.map(c=>`<div>${esc(c.name)}${c.role? ` (${esc(c.role)})`:""}</div>`).join("")}
             </div>
-          `;
-        }).join("");
+          </div>
+        `).join("");
       }
       crewBox.appendChild(crewItems);
       body.appendChild(crewBox);
 
+      // Needs por categoría (uno abajo del otro)
       for(const cat of cats){
+        if(cat==="cast") continue;
         const items = union(scenes.flatMap(s=>s.elements?.[cat]||[]));
         if(!items.length) continue;
         const box = document.createElement("div");
@@ -1723,24 +1324,11 @@
     }
   }
 
-  // ======= CRONOGRAMA (se mantiene) =======
-  function sceneCatsWithItems(scene){
-    const list = [];
-    for(const cat of cats){
-      const items = scene.elements?.[cat] || [];
-      if(items.length) list.push(cat);
-    }
-    return list;
-  }
-
+  // ===================== Schedule (drag + resize) =====================
   function renderScheduleBoard(){
     const board = el("schedBoard");
     if(!board) return;
     board.innerHTML = "";
-
-    const zoom = Number(el("schedZoom")?.value || 90);
-    const snapMin = Number(el("schedSnap")?.value || 15);
-    const pxPerMin = zoom / 60;
 
     sortShootDaysInPlace();
 
@@ -1749,13 +1337,14 @@
       return;
     }
 
+    const zoom = Number(el("schedZoom")?.value || 90);
+    const pxPerMin = zoom / 60;
+
     for(const d of state.shootDays){
       ensureDayTimingMaps(d);
-      sortDaySceneIdsByTime(d);
 
       const dayWrap = document.createElement("div");
       dayWrap.className = "schedDay";
-      dayWrap.dataset.dayId = d.id;
 
       const head = document.createElement("div");
       head.className = "schedHead";
@@ -1768,11 +1357,11 @@
       grid.className = "schedGrid";
       grid.dataset.dayId = d.id;
 
-      const gridMin = computeDayGridMinutes(d);
-      grid.style.height = `${Math.ceil(gridMin * pxPerMin)}px`;
+      // grid height fixed to 24h (no más “post-00:00 loop raro”)
+      grid.style.height = `${Math.ceil(DAY_SPAN_MIN * pxPerMin)}px`;
 
-      const callBase = minutesFromHHMM(d.callTime||"08:00");
-      const hours = Math.ceil(gridMin / 60);
+      // hour lines
+      const hours = 24;
       for(let h=0; h<=hours; h++){
         const y = h * 60 * pxPerMin;
         const line = document.createElement("div");
@@ -1783,19 +1372,25 @@
         const lab = document.createElement("div");
         lab.className = "hourLabel";
         lab.style.top = `${y}px`;
-        lab.textContent = fmtClock(callBase + h*60);
+        lab.textContent = hhmmFromMinutes(minutesFromHHMM(d.callTime||"08:00")+h*60);
         grid.appendChild(lab);
       }
 
+      // blocks
       for(const sid of d.sceneIds){
         const s = getScene(sid);
         if(!s) continue;
 
-        const startMin = d.times[sid] ?? 0;
-        const durMin = d.durations[sid] ?? 60;
+        const startMin = clamp(d.times[sid] ?? 0, 0, DAY_SPAN_MIN-1);
+        const durMin   = clamp(d.durations[sid] ?? 60, 5, DAY_SPAN_MIN);
 
         const top = startMin * pxPerMin;
-        const height = Math.max(32, durMin * pxPerMin);
+        const height = Math.max(34, durMin * pxPerMin);
+
+        const involved = sceneCatsWithItems(s);
+        const ticks = involved.length
+          ? `<div class="schedTicks">${involved.map(cat=>`<span class="tick" style="background:${catColors[cat]}"></span>`).join("")}</div>`
+          : "";
 
         const block = document.createElement("div");
         block.className = "schedBlock";
@@ -1803,20 +1398,21 @@
         block.dataset.dayId = d.id;
         block.style.top = `${top}px`;
         block.style.height = `${height}px`;
-
-        const involved = sceneCatsWithItems(s);
-        const ticks = involved.length
-          ? `<div class="schedTicks">${involved.map(cat=>`<span class="tick" style="background:${catColors[cat]}"></span>`).join("")}</div>`
-          : "";
-
         block.innerHTML = `
           ${ticks}
           <div class="title">#${esc(s.number||"")} — ${esc(s.slugline||"")}</div>
-          <div class="meta">${esc(fmtClock(callBase + startMin))} · ${durMin} min</div>
+          <div class="meta">${esc(fmtClockFromCall(d.callTime, startMin))} · ${durMin} min</div>
           <div class="resize" title="Cambiar duración"></div>
         `;
 
         attachSceneHover(block, s);
+
+        block.addEventListener("dblclick", ()=>{
+          selectedSceneId = s.id;
+          showView("breakdown");
+          renderScenesTable();
+          renderSceneEditor();
+        });
 
         grid.appendChild(block);
       }
@@ -1825,9 +1421,180 @@
       dayWrap.appendChild(grid);
       board.appendChild(dayWrap);
     }
+
+    bindScheduleDnD();
   }
 
-  // ======= CALLSHEET (se mantiene como estaba en tu versión anterior “buena”) =======
+  function bindScheduleDnD(){
+    const board = el("schedBoard");
+    if(!board) return;
+
+    board.onpointerdown = (e)=>{
+      const block = e.target.closest(".schedBlock");
+      if(!block) return;
+
+      const isResize = !!e.target.closest(".resize");
+      const dayId = block.dataset.dayId;
+      const sceneId = block.dataset.sceneId;
+      const d = getDay(dayId);
+      if(!d) return;
+
+      const snapMin = Number(el("schedSnap")?.value || 15);
+      const zoom = Number(el("schedZoom")?.value || 90);
+      const pxPerMin = zoom/60;
+
+      ensureDayTimingMaps(d);
+
+      const grid = block.closest(".schedGrid");
+      const gridRect = grid.getBoundingClientRect();
+
+      const startMin0 = d.times[sceneId] ?? 0;
+      const dur0 = d.durations[sceneId] ?? 60;
+
+      // offset within block for moving
+      const blockRect = block.getBoundingClientRect();
+      const offsetY = e.clientY - blockRect.top;
+
+      schedDrag = {
+        mode: isResize ? "resize" : "move",
+        block,
+        dayId,
+        sceneId,
+        startMin0,
+        dur0,
+        offsetY,
+        gridRect,
+        snapMin,
+        pxPerMin
+      };
+
+      hideHoverTip();
+      block.setPointerCapture(e.pointerId);
+    };
+
+    board.onpointermove = (e)=>{
+      if(!schedDrag) return;
+      const { mode, dayId, sceneId, snapMin, pxPerMin } = schedDrag;
+
+      const targetGrid = document.elementFromPoint(e.clientX, e.clientY)?.closest(".schedGrid");
+      const targetDayId = targetGrid?.dataset?.dayId || dayId;
+      const targetDay = getDay(targetDayId);
+      if(!targetDay) return;
+
+      ensureDayTimingMaps(targetDay);
+
+      const gridRect = targetGrid ? targetGrid.getBoundingClientRect() : schedDrag.gridRect;
+      const y = e.clientY - gridRect.top;
+
+      if(mode==="move"){
+        const rawTopPx = y - schedDrag.offsetY;
+        let newStart = snap(rawTopPx / pxPerMin, snapMin);
+        newStart = clamp(newStart, 0, Math.max(0, DAY_SPAN_MIN - (targetDay.durations[sceneId] ?? schedDrag.dur0)));
+        // preview only (no re-render full)
+        schedDrag.block.style.top = `${newStart * pxPerMin}px`;
+      }else{
+        // resize
+        const currentStart = (getDay(dayId)?.times?.[sceneId] ?? schedDrag.startMin0);
+        const rawH = y - (gridRect.top + currentStart*pxPerMin);
+        let newDur = snap(rawH / pxPerMin, snapMin);
+        newDur = clamp(newDur, snapMin, DAY_SPAN_MIN - currentStart);
+
+        // live update durations + push down overlaps
+        const d = getDay(dayId);
+        if(!d) return;
+        d.durations[sceneId] = newDur;
+        resolveOverlapsPushDown(d, snapMin);
+        // update visuals for that day grid (all blocks)
+        updateScheduleDayDOM(dayId);
+      }
+    };
+
+    board.onpointerup = (e)=>{
+      if(!schedDrag) return;
+      const { mode, dayId, sceneId, snapMin, pxPerMin } = schedDrag;
+
+      const targetGrid = document.elementFromPoint(e.clientX, e.clientY)?.closest(".schedGrid");
+      const targetDayId = targetGrid?.dataset?.dayId || dayId;
+
+      const fromDay = getDay(dayId);
+      const toDay = getDay(targetDayId);
+      if(!fromDay || !toDay){
+        schedDrag = null;
+        renderScheduleBoard();
+        return;
+      }
+
+      ensureDayTimingMaps(fromDay);
+      ensureDayTimingMaps(toDay);
+
+      if(mode==="move"){
+        const gridRect = targetGrid ? targetGrid.getBoundingClientRect() : schedDrag.gridRect;
+        const y = e.clientY - gridRect.top;
+        const rawTopPx = y - schedDrag.offsetY;
+
+        let newStart = snap(rawTopPx / pxPerMin, snapMin);
+        const dur = (toDay.durations[sceneId] ?? fromDay.durations[sceneId] ?? 60);
+        newStart = clamp(newStart, 0, Math.max(0, DAY_SPAN_MIN - dur));
+
+        if(targetDayId !== dayId){
+          // move scene between days
+          fromDay.sceneIds = (fromDay.sceneIds||[]).filter(x=>x!==sceneId);
+          delete fromDay.times[sceneId];
+          // keep duration if exists
+          const keepDur = (fromDay.durations?.[sceneId] ?? dur);
+          delete fromDay.durations[sceneId];
+
+          if(!toDay.sceneIds.includes(sceneId)) toDay.sceneIds.push(sceneId);
+          toDay.durations[sceneId] = keepDur;
+          toDay.times[sceneId] = newStart;
+
+          resolveOverlapsPushDown(toDay, snapMin);
+        }else{
+          fromDay.times[sceneId] = newStart;
+          resolveOverlapsPushDown(fromDay, snapMin);
+        }
+      }
+
+      // commit
+      touch();
+      schedDrag = null;
+
+      // resync everything
+      renderScheduleBoard();
+      renderSceneBank();
+      renderDaysBoard();
+      renderDayDetail();
+      renderReports();
+      renderCallSheetCalendar();
+      renderCallSheetDetail();
+    };
+  }
+
+  function updateScheduleDayDOM(dayId){
+    const d = getDay(dayId);
+    if(!d) return;
+    const snapMin = Number(el("schedSnap")?.value || 15);
+    const zoom = Number(el("schedZoom")?.value || 90);
+    const pxPerMin = zoom/60;
+
+    // keep times/durations valid and non-overlapping
+    resolveOverlapsPushDown(d, snapMin);
+
+    const grid = document.querySelector(`.schedGrid[data-day-id="${CSS.escape(dayId)}"]`);
+    if(!grid) return;
+
+    for(const block of grid.querySelectorAll(".schedBlock")){
+      const sid = block.dataset.sceneId;
+      const start = d.times[sid] ?? 0;
+      const dur = d.durations[sid] ?? 60;
+      block.style.top = `${start * pxPerMin}px`;
+      block.style.height = `${Math.max(34, dur * pxPerMin)}px`;
+      const meta = block.querySelector(".meta");
+      if(meta) meta.textContent = `${fmtClockFromCall(d.callTime, start)} · ${dur} min`;
+    }
+  }
+
+  // ===================== Call sheets =====================
   function renderCallSheetCalendar(){
     const grid = el("calGrid");
     const title = el("calTitle");
@@ -1835,11 +1602,12 @@
 
     const y = calCursor.year;
     const m = calCursor.month;
+
     title.textContent = new Intl.DateTimeFormat("es-AR",{month:"long",year:"numeric"}).format(new Date(y,m,1));
     grid.innerHTML = "";
 
     const first = new Date(y,m,1);
-    const startDow = (first.getDay()+6)%7;
+    const startDow = (first.getDay()+6)%7; // monday=0
     const daysInMonth = new Date(y,m+1,0).getDate();
 
     const shootByDate = new Map();
@@ -1850,8 +1618,8 @@
     for(let i=0;i<startDow;i++){
       const cell = document.createElement("div");
       cell.className = "calCell";
-      cell.style.opacity = "0";
-      cell.style.pointerEvents = "none";
+      cell.style.opacity="0";
+      cell.style.pointerEvents="none";
       grid.appendChild(cell);
     }
 
@@ -1860,157 +1628,376 @@
       const hasShoot = shootByDate.has(ds);
       const cell = document.createElement("div");
       cell.className = "calCell" + (hasShoot ? " hasShoot" : "");
-      const isSel = hasShoot && (callSheetDayId === shootByDate.get(ds));
-      if(isSel) cell.classList.add("selected");
+      if(hasShoot && callSheetDayId === shootByDate.get(ds)) cell.classList.add("selected");
       cell.innerHTML = `<div class="d">${day}</div><div class="tag">${hasShoot ? "Rodaje" : ""}</div>`;
       cell.addEventListener("click", ()=>{
-        if(hasShoot){
-          callSheetDayId = shootByDate.get(ds);
-          renderCallSheetCalendar();
-          renderCallSheet();
-        }
+        if(!hasShoot) return;
+        callSheetDayId = shootByDate.get(ds);
+        renderCallSheetCalendar();
+        renderCallSheetDetail();
       });
       grid.appendChild(cell);
     }
   }
 
-  function renderCallSheet(){
-    const wrap = el("callSheetWrap");
+  function renderCallSheetDetail(){
+    const wrap = el("callSheetDetail");
     if(!wrap) return;
     wrap.innerHTML = "";
+
     const d = callSheetDayId ? getDay(callSheetDayId) : (selectedDayId ? getDay(selectedDayId) : null);
-    if(!d){ wrap.innerHTML = `<div class="muted">Elegí un día con rodaje.</div>`; return; }
-    const card = document.createElement("div");
-    card.className = "card";
-    card.innerHTML = `<div class="cardContent"><div class="muted">Call Sheet listo (usá “Imprimir”).</div></div>`;
-    wrap.appendChild(card);
+    if(!d){
+      wrap.innerHTML = `<div class="catBlock"><div class="items">Elegí un día con rodaje.</div></div>`;
+      return;
+    }
+    ensureDayTimingMaps(d);
+
+    const scenes = (d.sceneIds||[]).map(getScene).filter(Boolean);
+    const cast = union(scenes.flatMap(s=>s.elements?.cast||[]));
+
+    const crewAll = (d.crewIds||[])
+      .map(id=>state.crew.find(c=>c.id===id))
+      .filter(Boolean)
+      .map(c=>({ ...c, area: normalizeCrewArea(c.area) }))
+      .filter(c=>c.area!=="Cast");
+
+    const crewGrouped = groupCrewByArea(crewAll);
+
+    // Header
+    const header = document.createElement("div");
+    header.className = "catBlock";
+    header.innerHTML = `
+      <div class="hdr"><span class="dot" style="background:var(--cat-props)"></span>${esc(state.meta.title||"Proyecto")}</div>
+      <div class="items">
+        <div><b>Día:</b> ${esc(formatDayTitle(d.date))}${d.label? " · "+esc(d.label):""}</div>
+        <div><b>Call:</b> ${esc(d.callTime||"")} &nbsp; <b>Locación:</b> ${esc(d.location||"")}</div>
+        ${d.notes ? `<div style="margin-top:8px;"><b>Notas:</b> ${esc(d.notes)}</div>` : ""}
+      </div>
+    `;
+    wrap.appendChild(header);
+
+    // Scenes schedule (ordered by time)
+    const snapMin = Number(el("schedSnap")?.value || 15);
+    resolveOverlapsPushDown(d, snapMin);
+
+    const scenesBox = document.createElement("div");
+    scenesBox.className = "catBlock";
+    scenesBox.innerHTML = `<div class="hdr"><span class="dot" style="background:var(--cat-vehicles)"></span>Escenas</div>`;
+    const list = document.createElement("div");
+    list.className = "items";
+    if(!scenes.length){
+      list.innerHTML = `<div>—</div>`;
+    }else{
+      const ordered = d.sceneIds.map(getScene).filter(Boolean);
+      list.innerHTML = ordered.map(s=>{
+        const st = d.times[s.id] ?? 0;
+        const du = d.durations[s.id] ?? 60;
+        return `<div><b>${esc(fmtClockFromCall(d.callTime, st))}</b> · #${esc(s.number)} ${esc(s.slugline)} <span class="muted">(${du}m)</span></div>`;
+      }).join("");
+    }
+    scenesBox.appendChild(list);
+    wrap.appendChild(scenesBox);
+
+    // Cast
+    const castBox = document.createElement("div");
+    castBox.className = "catBlock";
+    castBox.innerHTML = `
+      <div class="hdr"><span class="dot" style="background:${catColors.cast}"></span>Cast</div>
+      <div class="items">${cast.length ? cast.map(n=>`<div>${esc(n)}</div>`).join("") : "<div>—</div>"}</div>
+    `;
+    wrap.appendChild(castBox);
+
+    // Crew
+    const crewBox = document.createElement("div");
+    crewBox.className = "catBlock";
+    crewBox.innerHTML = `<div class="hdr"><span class="dot" style="background:var(--cat-sound)"></span>Crew</div>`;
+    const crewItems = document.createElement("div");
+    crewItems.className = "items";
+    if(!crewAll.length){
+      crewItems.innerHTML = `<div>—</div>`;
+    }else{
+      crewItems.innerHTML = crewGrouped.map(([area, arr])=>`
+        <div style="margin-top:10px;">
+          <div style="font-weight:900; margin-bottom:6px;">${esc(area)}</div>
+          ${arr.map(c=>`<div>${esc(c.name)}${c.role? ` (${esc(c.role)})`:""}${c.phone? ` · ${esc(c.phone)}`:""}</div>`).join("")}
+        </div>
+      `).join("");
+    }
+    crewBox.appendChild(crewItems);
+    wrap.appendChild(crewBox);
+
+    // Needs
+    for(const cat of cats){
+      if(cat==="cast") continue;
+      const items = union(scenes.flatMap(s=>s.elements?.[cat]||[]));
+      if(!items.length) continue;
+      const box = document.createElement("div");
+      box.className = "catBlock";
+      box.innerHTML = `
+        <div class="hdr"><span class="dot" style="background:${catColors[cat]}"></span>${esc(catNames[cat])}</div>
+        <div class="items">${items.map(x=>`<div>${esc(x)}</div>`).join("")}</div>
+      `;
+      wrap.appendChild(box);
+    }
   }
 
-  // ======= SETTINGS (JSONBIN) =======
+  // ===================== Bank collapse =====================
+  function applyBankCollapsedUI(){
+    const layout = el("shootingLayout");
+    if(!layout) return;
+    const collapsed = localStorage.getItem("gb_bank_collapsed")==="1";
+    layout.classList.toggle("bankCollapsed", collapsed);
+    el("bankDock")?.classList.toggle("hidden", !collapsed);
+  }
+  function toggleBank(){
+    const collapsed = localStorage.getItem("gb_bank_collapsed")==="1";
+    localStorage.setItem("gb_bank_collapsed", collapsed ? "0" : "1");
+    const btn = el("btnToggleBank");
+    if(btn) btn.textContent = collapsed ? "⟨" : "⟨"; // when expanded it still shows collapse
+    applyBankCollapsedUI();
+  }
+  function expandBank(){
+    localStorage.setItem("gb_bank_collapsed","0");
+    applyBankCollapsedUI();
+  }
+
+  // ===================== Settings (JSONBin) =====================
   function loadCfgToUI(){
     const cfg = StorageLayer.loadCfg();
-    if(el("cfg_binId")) el("cfg_binId").value = cfg.binId || "";
-    if(el("cfg_accessKey")) el("cfg_accessKey").value = cfg.accessKey || "";
-    if(el("cfg_autosync")) el("cfg_autosync").value = cfg.autosync || "off";
+    el("cfg_binId").value = cfg.binId || "";
+    el("cfg_accessKey").value = cfg.accessKey || "";
+    el("cfg_autosync").value = cfg.autosync || "off";
+    el("cfg_resetKey").value = cfg.resetKey || "";
   }
-  async function saveCfgFromUI(){
+  function saveCfgFromUI(){
     const cfg = StorageLayer.loadCfg();
-    cfg.binId = (el("cfg_binId")?.value||"").trim();
-    cfg.accessKey = (el("cfg_accessKey")?.value||"").trim();
-    cfg.autosync = el("cfg_autosync")?.value || "off";
+    cfg.binId = (el("cfg_binId").value||"").trim();
+    cfg.accessKey = (el("cfg_accessKey").value||"").trim();
+    cfg.autosync = el("cfg_autosync").value || "off";
+    cfg.resetKey = (el("cfg_resetKey").value||"").trim();
     StorageLayer.saveCfg(cfg);
     toast("Config guardada ✅");
   }
   async function testCfg(){
     const cfg = StorageLayer.loadCfg();
-    if(!cfg.binId || !cfg.accessKey) return toast("Falta BIN ID o Access Key");
+    if(!cfg.binId || !cfg.accessKey) return toast("Falta Bin ID o Access Key");
     try{
       await StorageLayer.jsonbinGet(cfg.binId, cfg.accessKey);
       toast("Conexión JSONBin OK ✅");
     }catch(err){
-      toast("Conexión falló ❌");
       console.error(err);
+      toast("Conexión falló ❌");
     }
   }
+  async function pullRemote(){
+    const cfg = StorageLayer.loadCfg();
+    if(!cfg.binId || !cfg.accessKey) return toast("Falta Bin ID o Access Key");
+    try{
+      const rec = await StorageLayer.jsonbinGet(cfg.binId, cfg.accessKey);
+      if(!rec || !rec.meta) return toast("Remoto vacío o inválido");
+      state = rec;
+      touch();
+      toast("Remoto cargado ✅");
+      hydrateAll();
+    }catch(err){
+      console.error(err);
+      toast("No pude traer remoto ❌");
+    }
+  }
+  async function pushRemote(){
+    const cfg = StorageLayer.loadCfg();
+    if(!cfg.binId || !cfg.accessKey) return toast("Falta Bin ID o Access Key");
+    try{
+      await StorageLayer.jsonbinPut(cfg.binId, cfg.accessKey, state);
+      toast("Estado subido ✅");
+      updateSyncPill("JSONBin");
+    }catch(err){
+      console.error(err);
+      toast("No pude subir ❌");
+    }
+  }
+  async function resetApp(){
+    const cfg = StorageLayer.loadCfg();
+    const want = (el("resetKeyInput").value||"").trim();
+    if(!cfg.resetKey){
+      toast("Primero definí una clave de reset");
+      return;
+    }
+    if(want !== cfg.resetKey){
+      toast("Clave incorrecta ❌");
+      return;
+    }
+    if(!confirm("Esto borra TODO. ¿Seguro?")) return;
 
-  // ======= EVENTS =======
+    // local
+    StorageLayer.hardResetLocal();
+
+    // remote best-effort
+    if(cfg.binId && cfg.accessKey){
+      try{ await StorageLayer.jsonbinPut(cfg.binId, cfg.accessKey, defaultState()); }catch{}
+    }
+
+    state = defaultState();
+    selectedSceneId = null;
+    selectedDayId = null;
+    callSheetDayId = null;
+    touch();
+    hydrateAll();
+    toast("Reset OK ✅");
+  }
+
+  // ===================== Bind events =====================
   function bindEvents(){
     document.querySelectorAll(".navBtn").forEach(b=>{
       b.addEventListener("click", ()=>{
         const v = b.dataset.view;
-        if(!v) return;
-        showView(v);
-
-        if(v === "elements") renderElementsExplorer();
-        if(v === "shooting"){ renderSceneBank(); renderDaysBoard(); renderDayDetail(); }
-        if(v === "crew") renderCrew();
-        if(v === "reports") renderReports();
-        if(v === "schedule") renderScheduleBoard();
-        if(v === "settings") loadCfgToUI();
-        if(v === "callsheet"){ renderCallSheetCalendar(); renderCallSheet(); }
+        if(v) showView(v);
       });
     });
 
-    // Breakdown
+    // Breakdown buttons
     el("btnAddScene")?.addEventListener("click", addScene);
-    el("btnDeleteScene")?.addEventListener("click", deleteScene);
     el("btnDuplicateScene")?.addEventListener("click", duplicateScene);
-
+    el("btnDeleteScene")?.addEventListener("click", deleteScene);
     el("sceneSearch")?.addEventListener("input", renderScenesTable);
     el("sceneFilterTOD")?.addEventListener("change", renderScenesTable);
 
     ["number","slugline","location","timeOfDay","pages","summary","notes"].forEach(k=>{
       const node = el(`scene_${k}`);
-      if(!node) return;
-      node.addEventListener("input", ()=>{
+      node?.addEventListener("input", ()=>{
         const s = selectedSceneId ? getScene(selectedSceneId) : null;
         if(!s) return;
-        s[k] = (k==="pages") ? Number(node.value||0) : (k==="timeOfDay" ? normalizeTOD(node.value) : node.value);
+        if(k==="pages") s[k] = Number(node.value||0);
+        else if(k==="timeOfDay") s[k] = normalizeTOD(node.value);
+        else s[k] = node.value;
         touch();
         renderScenesTable();
         renderSceneBank();
         renderDaysBoard();
+        renderDayDetail();
         renderElementsExplorer();
-        refreshElementSuggestions();
-        renderScheduleBoard();
         renderReports();
+        renderScheduleBoard();
+        renderCallSheetDetail();
       });
     });
 
-    el("btnAddSceneElement")?.addEventListener("click", addSceneElement);
     el("elCategory")?.addEventListener("change", refreshElementSuggestions);
+    el("btnAddSceneElement")?.addEventListener("click", addSceneElement);
 
-    el("btnImportScenes")?.addEventListener("click", importScenesTable);
-    el("btnParseScript")?.addEventListener("click", importScript);
+    // Imports
+    el("btnImportScenes")?.addEventListener("click", ()=>{
+      const txt = el("sceneImportText").value || "";
+      const rows = window.U.parseTableText(txt);
+      if(!rows.length) return toast("No hay nada para importar");
+      let start = 0;
+      if(rows[0] && window.U.isHeaderRow(rows[0])) start = 1;
+
+      let added = 0;
+      for(let i=start;i<rows.length;i++){
+        const r = rows[i];
+        if(!r.length) continue;
+        state.scenes.push({
+          id: uid("scene"),
+          number: r[0]||"",
+          slugline: r[1]||"",
+          location: r[2]||"",
+          timeOfDay: normalizeTOD(r[3]||""),
+          pages: Number(r[4]||0),
+          summary: r[5]||"",
+          notes:"",
+          elements: Object.fromEntries(cats.map(c=>[c,[]]))
+        });
+        added++;
+      }
+      if(added){
+        selectedSceneId = state.scenes[state.scenes.length-1].id;
+        touch();
+        toast(`Importadas ${added} escenas ✅`);
+        renderScenesTable();
+        renderSceneEditor();
+        renderSceneBank();
+      }
+    });
+
+    el("btnParseScript")?.addEventListener("click", ()=>{
+      const txt = el("scriptImportText").value || "";
+      const keys = el("scriptKeywords").value || "";
+      const scenes = parseScreenplayToScenes(txt, keys);
+      if(!scenes.length) return toast("No detecté escenas (revisá INT./EXT. por línea).");
+      state.scenes.push(...scenes);
+      selectedSceneId = state.scenes[state.scenes.length-1].id;
+      touch();
+      toast(`Cargadas ${scenes.length} escenas ✅`);
+      renderScenesTable();
+      renderSceneEditor();
+      renderSceneBank();
+    });
 
     // Shooting
     el("btnAddShootDay")?.addEventListener("click", addShootDay);
     el("btnDeleteShootDay")?.addEventListener("click", deleteShootDay);
-
     el("bankSearch")?.addEventListener("input", renderSceneBank);
     el("bankFilter")?.addEventListener("change", renderSceneBank);
 
     const dayMap = { day_date:"date", day_call:"callTime", day_location:"location", day_label:"label", day_notes:"notes" };
-    Object.keys(dayMap).forEach(id=>{
-      const node = el(id);
-      if(!node) return;
-      node.addEventListener("input", ()=>{
+    for(const id in dayMap){
+      el(id)?.addEventListener("input", ()=>{
         const d = selectedDayId ? getDay(selectedDayId) : null;
         if(!d) return;
-
-        if(id === "day_call"){
-          d.callTime = roundTimeToStep(node.value, 15);
-          node.value = d.callTime;
-        }else{
-          d[dayMap[id]] = node.value;
-        }
-
+        d[dayMap[id]] = el(id).value;
         sortShootDaysInPlace();
         touch();
         renderDaysBoard();
         renderDayDetail();
-        renderSceneBank();
-        renderScheduleBoard();
         renderReports();
-        ensureShootingSplitSections();
+        renderScheduleBoard();
+        renderCallSheetCalendar();
+        renderCallSheetDetail();
       });
-    });
+    }
 
     el("day_call_minus")?.addEventListener("click", ()=>{
       const d = selectedDayId ? getDay(selectedDayId) : null;
       if(!d) return;
-      d.callTime = roundTimeToStep(addMinutesHHMM(d.callTime||"08:00", -15), 15);
-      if(el("day_call")) el("day_call").value = d.callTime;
+      const step = 15;
+      d.callTime = hhmmFromMinutes(minutesFromHHMM(d.callTime||"08:00") - step);
+      el("day_call").value = d.callTime;
       touch();
-      renderDaysBoard(); renderReports(); renderScheduleBoard();
+      renderDaysBoard(); renderScheduleBoard(); renderReports(); renderCallSheetDetail();
     });
     el("day_call_plus")?.addEventListener("click", ()=>{
       const d = selectedDayId ? getDay(selectedDayId) : null;
       if(!d) return;
-      d.callTime = roundTimeToStep(addMinutesHHMM(d.callTime||"08:00", +15), 15);
-      if(el("day_call")) el("day_call").value = d.callTime;
+      const step = 15;
+      d.callTime = hhmmFromMinutes(minutesFromHHMM(d.callTime||"08:00") + step);
+      el("day_call").value = d.callTime;
       touch();
-      renderDaysBoard(); renderReports(); renderScheduleBoard();
+      renderDaysBoard(); renderScheduleBoard(); renderReports(); renderCallSheetDetail();
+    });
+
+    el("btnOpenCallSheet")?.addEventListener("click", ()=>{
+      callSheetDayId = selectedDayId;
+      showView("callsheet");
+      renderCallSheetCalendar();
+      renderCallSheetDetail();
+    });
+
+    // Bank collapse
+    el("btnToggleBank")?.addEventListener("click", ()=>{
+      // collapse
+      localStorage.setItem("gb_bank_collapsed","1");
+      applyBankCollapsedUI();
+    });
+    el("btnToggleBankDock")?.addEventListener("click", expandBank);
+
+    // Schedule controls
+    el("schedZoom")?.addEventListener("change", renderScheduleBoard);
+    el("schedSnap")?.addEventListener("change", ()=>{
+      // re-snap / resolve quickly
+      for(const d of state.shootDays) resolveOverlapsPushDown(d, Number(el("schedSnap").value||15));
+      touch();
+      renderScheduleBoard();
     });
 
     // Elements
@@ -2025,124 +2012,44 @@
     // Reports
     el("btnRefreshReports")?.addEventListener("click", renderReports);
 
+    // Call sheet calendar nav
+    el("calPrev")?.addEventListener("click", ()=>{
+      calCursor.month -= 1;
+      if(calCursor.month < 0){ calCursor.month = 11; calCursor.year -= 1; }
+      renderCallSheetCalendar();
+    });
+    el("calNext")?.addEventListener("click", ()=>{
+      calCursor.month += 1;
+      if(calCursor.month > 11){ calCursor.month = 0; calCursor.year += 1; }
+      renderCallSheetCalendar();
+    });
+
+    el("btnPrintCallSheet")?.addEventListener("click", ()=>window.print());
+
     // Settings
     el("btnSaveCfg")?.addEventListener("click", saveCfgFromUI);
     el("btnTestCfg")?.addEventListener("click", testCfg);
+    el("btnPullRemote")?.addEventListener("click", pullRemote);
+    el("btnPushRemote")?.addEventListener("click", pushRemote);
+    el("btnResetApp")?.addEventListener("click", resetApp);
 
-    // title
+    // Project title
     el("projectTitle")?.addEventListener("input", ()=>{
       state.meta.title = el("projectTitle").value || "Proyecto";
       touch();
+      renderCallSheetDetail();
     });
-
-    window.addEventListener("resize", window.U.debounce(syncSceneBankHeight, 120));
   }
 
-  // ======= CSS EXTRA =======
-  function ensureExtraStyles(){
-    document.querySelectorAll("#gb_extra_styles_v10").forEach(s=>s.remove());
-    const css = `
-/* ===== extras v10 ===== */
-
-/* headers flex para meter botones sin superponer */
-.gbFlexHeader{ display:flex; align-items:center; gap:10px; }
-.gbFlexHeader .cardTitle{ margin:0; }
-
-.gbColTitle{
-  font-weight:900;
-  opacity:.9;
-  margin-bottom:8px;
-}
-
-/* Detalle del día: 3 columnas */
-#gbDetailDayCard .cardContent{ padding-top: 12px; }
-.dayDetail3col{
-  display:grid;
-  grid-template-columns: 1.05fr 1fr 1fr;
-  gap: 14px;
-  align-items:start;
-}
-.dayDetail3col .col{
-  display:flex;
-  flex-direction:column;
-  gap: 12px;
-  min-width:0;
-}
-
-/* Colapso banco (host) */
-.gbBankCollapsed{ overflow:hidden; }
-
-/* Cronograma: tiritas arriba */
-.schedTicks{
-  position:absolute;
-  top:6px;
-  left:10px;
-  display:flex;
-  gap:6px;
-  z-index:3;
-  pointer-events:none;
-}
-.schedTicks .tick{
-  width:14px;
-  height:4px;
-  border-radius:3px;
-  opacity:.95;
-}
-
-/* Reportes: crew agrupado */
-.repCrewArea{ margin-top:10px; }
-.repCrewAreaT{ font-weight:900; margin-bottom:6px; opacity:.95; }
-.repCrewAreaL{ display:flex; flex-direction:column; gap:6px; }
-`;
-    const style = document.createElement("style");
-    style.id = "gb_extra_styles_v10";
-    style.textContent = css;
-    document.head.appendChild(style);
-  }
-
-  // ======= INIT / HYDRATE =======
-  function hydrateUI(){
-    renderCatSelects();
+  // ===================== Hydrate all =====================
+  function hydrateAll(){
+    renderCatSelect();
     refreshElementSuggestions();
 
-    if(el("projectTitle")) el("projectTitle").value = state.meta.title || "Proyecto";
+    el("projectTitle").value = state.meta.title || "Proyecto";
+    el("savedAtText").textContent = new Date(state.meta.updatedAt).toLocaleString("es-AR");
 
-    sortShootDaysInPlace();
-
-    renderScenesTable();
-    renderSceneEditor();
-    renderSceneBank();
-    renderDaysBoard();
-    renderDayDetail();
-    renderElementsExplorer();
-    renderCrew();
-    renderReports();
-    renderScheduleBoard();
-    renderCallSheetCalendar();
-    renderCallSheet();
-
-    ensureShootingSplitSections();
-    ensureSceneBankCollapsible();
-    syncSceneBankHeight();
-  }
-
-  function init(){
-    ensureExtraStyles();
-
-    const local = StorageLayer.loadLocal();
-    state = (local && local.meta) ? local : defaultState();
-
-    state.shootDays = state.shootDays || [];
-    state.crew = (state.crew || []).map(c=>({ ...c, area: normalizeCrewArea(c.area) }));
-    state.scenes = state.scenes || [];
-
-    for(const d of state.shootDays){
-      d.sceneIds = d.sceneIds || [];
-      d.crewIds = d.crewIds || [];
-      ensureDayTimingMaps(d);
-      sortDaySceneIdsByTime(d);
-    }
-
+    // ensure defaults
     if(!state.scenes.length){
       state.scenes.push({
         id: uid("scene"),
@@ -2166,17 +2073,46 @@
         notes:"",
         sceneIds:[],
         crewIds:[],
-        durations:{},
-        times:{}
+        times:{},
+        durations:{}
       });
     }
 
-    selectedSceneId = state.scenes[0]?.id || null;
-    selectedDayId = state.shootDays[0]?.id || null;
+    // normalize crew
+    state.crew = (state.crew||[]).map(c=>({ ...c, area: normalizeCrewArea(c.area) }));
+
+    sortShootDaysInPlace();
+    for(const d of state.shootDays) ensureDayTimingMaps(d);
+
+    selectedSceneId = selectedSceneId || state.scenes[0]?.id || null;
+    selectedDayId   = selectedDayId   || state.shootDays[0]?.id || null;
+    callSheetDayId  = callSheetDayId  || selectedDayId;
+
+    renderScenesTable();
+    renderSceneEditor();
+    renderSceneBank();
+    renderDaysBoard();
+    renderDayDetail();
+    renderElementsExplorer();
+    renderCrew();
+    renderReports();
+    renderScheduleBoard();
+    renderCallSheetCalendar();
+    renderCallSheetDetail();
+    applyBankCollapsedUI();
+  }
+
+  // ===================== Init =====================
+  function init(){
+    const local = StorageLayer.loadLocal();
+    state = (local && local.meta) ? local : defaultState();
+
+    selectedSceneId = state.scenes?.[0]?.id || null;
+    selectedDayId = state.shootDays?.[0]?.id || null;
     callSheetDayId = selectedDayId;
 
     bindEvents();
-    hydrateUI();
+    hydrateAll();
     showView("breakdown");
   }
 
