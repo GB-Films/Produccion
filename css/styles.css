@@ -176,7 +176,7 @@ select option{
   color:var(--text);
 }
 
-/* ✅ Compact selects para no comerse el buscador */
+/* Compact selects */
 .input.compact{
   width: 160px;
   flex: 0 0 160px;
@@ -209,7 +209,12 @@ select option{
 .small{ font-size:12px; }
 .spacer{ height:12px; }
 
-.tableWrap{ border:1px solid var(--border); border-radius:16px; overflow:auto; max-height:520px; }
+.tableWrap{
+  border:1px solid var(--border);
+  border-radius:16px;
+  overflow:auto;
+  max-height:520px;
+}
 .table{
   width:100%;
   border-collapse:collapse;
@@ -219,7 +224,14 @@ select option{
   border-bottom:1px solid var(--border);
   font-size:13px;
 }
-.table th{ color:var(--muted); font-weight:800; text-align:left; background: rgba(0,0,0,.18); position:sticky; top:0; }
+.table th{
+  color:var(--muted);
+  font-weight:800;
+  text-align:left;
+  background: rgba(0,0,0,.18);
+  position:sticky;
+  top:0;
+}
 tr.selected td{ background: rgba(110,231,255,.10); }
 tr.groupRow td{
   background: rgba(110,231,255,.08);
@@ -265,57 +277,51 @@ tr.groupRow td{
   box-shadow: 0 0 0 2px rgba(0,0,0,.25);
 }
 
-/* ✅ Collapsible cards */
-.collapsible .cardHeader{
-  user-select:none;
-}
-.collapsible.collapsed .cardContent{
-  display:none;
-}
-.collapsible.collapsed .cardHeader{
-  border-bottom:none;
-}
+/* Collapsible cards */
+.collapsible .cardHeader{ user-select:none; }
+.collapsible.collapsed .cardContent{ display:none; }
+.collapsible.collapsed .cardHeader{ border-bottom:none; }
 
-/* ====== Shooting Layout ====== */
+/* ===================== FIX 1: Plan de Rodaje sin scroll de hoja ===================== */
+#view-shooting{ overflow:hidden; } /* la hoja no scrollea por Tablero */
 .shootingLayout{
+  height:100%;
+  min-height:0;
   display:grid;
   grid-template-columns: 360px 1fr;
   gap:14px;
-  height:calc(100vh - 28px);
+}
+.shootingLayout .col{
+  min-height:0;
+  display:flex;
+  flex-direction:column;
+  gap:14px; /* ✅ separación real entre tarjetas */
+}
+
+/* Banco: ocupa todo el alto y scrollea solo adentro */
+.bankCard{ flex:1 1 auto; min-height:0; }
+.bankCard .cardContent{
+  display:flex;
+  flex-direction:column;
   min-height:0;
 }
-.shootingLayout .col{ min-height:0; }
-
 .bankList{
   margin-top:10px;
   display:flex;
   flex-direction:column;
   gap:10px;
   overflow:auto;
-  max-height: calc(100vh - 260px);
+  flex:1 1 auto;
+  min-height:0;
   padding-right:4px;
 }
 
-.sceneCard{
-  border:1px solid var(--border);
-  border-radius:16px;
-  padding:10px 12px;
-  background: rgba(255,255,255,.03);
-  display:flex;
-  align-items:center;
-  justify-content:space-between;
-  gap:10px;
-}
-.sceneCard .title{ font-weight:900; }
-.sceneCard .meta{ font-size:12px; color:var(--muted); margin-top:4px; }
-.sceneCard .dragHandle{ cursor:grab; color:var(--muted); font-weight:900; }
-.sceneCard.assigned{ border-color: rgba(110,231,255,.45); }
-.sceneCard.unassigned{ border-color: rgba(255,92,92,.55); }
-
-/* ✅ Tablero con scroll independiente (no estira la página) */
+/* Tablero: scroll propio, altura fija (no max-height “a veces sí a veces no”) */
+#daysBoardCard{ flex:0 0 auto; }
 .daysBoardWrap{
-  overflow: auto;
-  max-height: min(55vh, 520px);
+  height: clamp(220px, 38vh, 520px); /* ✅ SIEMPRE scroll independiente */
+  overflow:auto;
+  overscroll-behavior: contain;
   padding-bottom:8px;
   scrollbar-gutter: stable both-edges;
 }
@@ -323,6 +329,17 @@ tr.groupRow td{
   display:flex;
   gap:12px;
   min-height: 240px;
+}
+
+/* Detalle: ocupa el resto del alto y scrollea adentro */
+#dayDetailCard{
+  flex:1 1 auto;
+  min-height:0;
+}
+#dayDetailCard .cardContent{
+  overflow:auto;
+  min-height:0;
+  overscroll-behavior: contain;
 }
 
 .dayCol{
@@ -343,6 +360,7 @@ tr.groupRow td{
 }
 .dayHeader .t{ font-weight:900; }
 .dayHeader .m{ color:var(--muted); font-size:12px; margin-top:4px; }
+
 .dropZone{
   padding:10px;
   display:flex;
@@ -398,16 +416,7 @@ tr.groupRow td{
 .crewPickItem.selected .statusDot{ background: rgba(113,255,122,.95); }
 .crewPickItem .left{ display:flex; gap:10px; }
 
-.catBlock{
-  border:1px solid var(--border);
-  border-radius:16px;
-  padding:10px 12px;
-  background: rgba(255,255,255,.02);
-  margin-bottom:10px;
-}
-.catBlock .hdr{ display:flex; align-items:center; gap:10px; font-weight:900; }
-.catBlock .items{ margin-top:8px; color:var(--muted); font-size:12px; line-height:1.5; }
-
+/* Banco colapsado */
 .bankDock{
   display:flex;
   align-items:center;
@@ -427,7 +436,24 @@ tr.groupRow td{
 .shootingLayout.bankCollapsed #bankDock{ display:flex; }
 .shootingLayout.bankCollapsed #btnToggleBank{ display:none; }
 
-/* ====== Breakdown elements grid ====== */
+/* Scene cards */
+.sceneCard{
+  border:1px solid var(--border);
+  border-radius:16px;
+  padding:10px 12px;
+  background: rgba(255,255,255,.03);
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:10px;
+}
+.sceneCard .title{ font-weight:900; }
+.sceneCard .meta{ font-size:12px; color:var(--muted); margin-top:4px; }
+.sceneCard .dragHandle{ cursor:grab; color:var(--muted); font-weight:900; }
+.sceneCard.assigned{ border-color: rgba(110,231,255,.45); }
+.sceneCard.unassigned{ border-color: rgba(255,92,92,.55); }
+
+/* Breakdown elements grid */
 .sceneCatRow{
   border:1px solid var(--border);
   border-radius:16px;
@@ -464,8 +490,61 @@ tr.groupRow td{
   font-weight:900;
 }
 
-/* ====== Schedule ====== */
-/* ✅ scroll lateral siempre visible */
+/* ===================== FIX 2: Breakdown lista escenas usa el alto disponible ===================== */
+#sceneListCard{
+  display:flex;
+  flex-direction:column;
+  min-height:0;
+}
+#sceneListCard .cardContent{
+  display:flex;
+  flex-direction:column;
+  min-height:0;
+  gap:12px;
+}
+#sceneListCard .tableWrap{
+  flex:1 1 auto;
+  min-height:0;
+  max-height:none;   /* ✅ adiós scroll prematuro */
+}
+
+/* ===================== FIX 3: Equipo Técnico usa el alto total (sin max-height 520) ===================== */
+#view-crew{ overflow:hidden; }
+#crewCard{
+  height:100%;
+  display:flex;
+  flex-direction:column;
+  min-height:0;
+}
+#crewCard .cardContent{
+  display:flex;
+  flex-direction:column;
+  min-height:0;
+}
+#crewCard .tableWrap{
+  flex:1 1 auto;
+  min-height:0;
+  max-height:none;  /* ✅ adiós scroll antes de tiempo */
+}
+
+/* ===================== Cronograma ===================== */
+.scheduleContent{
+  display:flex;
+  flex-direction:column;
+  gap:10px;
+}
+
+.schedScrollTop{
+  height:14px;
+  overflow-x:scroll;
+  overflow-y:hidden;
+  scrollbar-gutter: stable both-edges;
+  border:1px solid var(--border);
+  border-radius:12px;
+  background: rgba(0,0,0,.18);
+}
+.schedScrollTopInner{ height:1px; }
+
 .schedBoard{
   display:flex;
   gap:12px;
@@ -473,7 +552,9 @@ tr.groupRow td{
   overflow-y: auto;
   padding-bottom:14px;
   scrollbar-gutter: stable both-edges;
+  overscroll-behavior: contain;
 }
+
 .schedDay{
   width:360px;
   flex:0 0 auto;
@@ -516,7 +597,7 @@ tr.groupRow td{
   border:1px solid var(--border);
   border-radius:16px;
   background: rgba(17,31,54,.92);
-  padding:12px 12px 12px 12px;
+  padding:12px;
   cursor:grab;
   user-select:none;
   touch-action:none;
@@ -552,7 +633,7 @@ tr.groupRow td{
   touch-action:none;
 }
 
-/* ====== Reports ====== */
+/* Reports */
 .reportsBoard{
   display:flex;
   gap:12px;
@@ -579,7 +660,7 @@ tr.groupRow td{
 .repCrewAreaT{ font-weight:900; margin-bottom:6px; opacity:.95; }
 .repCrewAreaL{ display:flex; flex-direction:column; gap:6px; }
 
-/* ====== Call sheet calendar ====== */
+/* Call sheet calendar */
 .calGrid{
   display:grid;
   grid-template-columns: repeat(7, 1fr);
@@ -599,7 +680,7 @@ tr.groupRow td{
 .calCell .d{ font-weight:900; }
 .calCell .tag{ margin-top:6px; color:var(--muted); font-size:12px; }
 
-/* ====== Print ====== */
+/* Print */
 @media print{
   body{ background:#fff; color:#000; }
   .sidebar, .noPrint, #toast, #hoverTip { display:none !important; }
