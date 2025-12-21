@@ -43,6 +43,7 @@
   // schedule resize only
   let resizing = null; // {sceneId, dayId, startY, startDur, pxPerMin, snapMin}
   let nativeDragActive = false;
+  let scheduleDirty = false;
 
   let calCursor = { year: new Date().getFullYear(), month: new Date().getMonth() };
 
@@ -72,6 +73,7 @@
 
   function toast(msg){
     const t = el("toast");
+    if(!t) return;
     t.textContent = msg;
     t.style.display="block";
     clearTimeout(toast._t);
@@ -80,7 +82,7 @@
 
   function defaultState(){
     return {
-      meta: { version: 6, title:"Proyecto", updatedAt: new Date().toISOString() },
+      meta: { version: 7, title:"Proyecto", updatedAt: new Date().toISOString() },
       scenes: [],
       shootDays: [],
       crew: []
@@ -90,8 +92,10 @@
   function touch(){
     state.meta.updatedAt = new Date().toISOString();
     StorageLayer.saveLocal(state);
-    el("savedAtText").textContent = new Date(state.meta.updatedAt).toLocaleString("es-AR");
-    el("statusText").textContent = "Guardado";
+    const savedAt = el("savedAtText");
+    if(savedAt) savedAt.textContent = new Date(state.meta.updatedAt).toLocaleString("es-AR");
+    const status = el("statusText");
+    if(status) status.textContent = "Guardado";
     saveDebouncedRemote();
   }
 
@@ -111,6 +115,7 @@
 
     if(name === "shooting"){
       requestAnimationFrame(()=>syncSceneBankHeight());
+      requestAnimationFrame(()=>ensureDayTopTwoColumns());
     }
     if(name === "schedule"){
       requestAnimationFrame(()=>renderScheduleBoard());
@@ -187,12 +192,14 @@
   // ---------- tooltip ----------
   function showHoverTip(html, x, y){
     const tip = el("hoverTip");
+    if(!tip) return;
     tip.innerHTML = html;
     tip.style.display = "block";
     moveHoverTip(x,y);
   }
   function moveHoverTip(x,y){
     const tip = el("hoverTip");
+    if(!tip) return;
     const pad = 16;
     const w = tip.offsetWidth || 420;
     const h = tip.offsetHeight || 200;
@@ -208,6 +215,7 @@
   }
   function hideHoverTip(){
     const tip = el("hoverTip");
+    if(!tip) return;
     tip.style.display = "none";
     tip.innerHTML = "";
   }
@@ -237,7 +245,8 @@
       showHoverTip(buildSceneTooltipHTML(scene), e.clientX, e.clientY);
     });
     node.addEventListener("mousemove", (e)=>{
-      if(el("hoverTip").style.display === "block") moveHoverTip(e.clientX, e.clientY);
+      const tip = el("hoverTip");
+      if(tip && tip.style.display === "block") moveHoverTip(e.clientX, e.clientY);
     });
     node.addEventListener("mouseleave", ()=>hideHoverTip());
   }
@@ -309,7 +318,6 @@
     const mi = String(mm%60).padStart(2,"0");
     return `${String(h).padStart(2,"0")}:${mi}`;
   }
-  // ✅ para que NO “reinicie” en 00:00 sin avisar
   function fmtClock(totalMinutes){
     const days = Math.floor(totalMinutes / (24*60));
     const base = hhmmFromMinutes(totalMinutes);
@@ -361,29 +369,23 @@
     return maxEnd;
   }
 
-  function findNonOverlappingStart(d, sceneId, startMin, durMin, snapMin){
+  // ✅ Empujar escenas hacia abajo para que nunca se superpongan
+  // No "arrastra para arriba" (si achicás duración, deja huecos)
+  function resolveDayOverlapsPushDown(d, snapMin){
     ensureDayTimingMaps(d);
-    let start = Math.max(0, startMin);
+    sortDaySceneIdsByTime(d);
 
-    for(let guard=0; guard<200; guard++){
-      let clashEnd = null;
-      for(const sid of d.sceneIds){
-        if(sid === sceneId) continue;
-        const st = d.times[sid] ?? 0;
-        const du = d.durations[sid] ?? 60;
-        const a0 = start;
-        const a1 = start + durMin;
-        const b0 = st;
-        const b1 = st + du;
-        const overlap = (a0 < b1) && (a1 > b0);
-        if(overlap){
-          clashEnd = Math.max(clashEnd ?? 0, b1);
-        }
+    let cursorEnd = 0;
+    for(const sid of d.sceneIds){
+      let st = d.times[sid] ?? 0;
+      const du = d.durations[sid] ?? 60;
+
+      if(st < cursorEnd){
+        st = snap(cursorEnd, snapMin);
+        d.times[sid] = st;
       }
-      if(clashEnd === null) break;
-      start = snap(clashEnd, snapMin);
+      cursorEnd = st + du;
     }
-    return start;
   }
 
   // ----------- Script parser (INT./EXT.) -----------
@@ -496,9 +498,11 @@
   }
 
   function renderScenesTable(){
-    const tbody = el("sceneTable").querySelector("tbody");
-    const q = (el("sceneSearch").value||"").toLowerCase();
-    const tod = (el("sceneFilterTOD").value||"");
+    const sceneTable = el("sceneTable");
+    if(!sceneTable) return;
+    const tbody = sceneTable.querySelector("tbody");
+    const q = (el("sceneSearch")?.value||"").toLowerCase();
+    const tod = (el("sceneFilterTOD")?.value||"");
     tbody.innerHTML = "";
 
     const list = state.scenes.filter(s=>{
@@ -529,7 +533,8 @@
 
   function renderSceneEditor(){
     const s = selectedSceneId ? getScene(selectedSceneId) : null;
-    el("selectedSceneHint").textContent = s ? `Editando escena #${s.number}` : "Seleccioná una escena";
+    const hint = el("selectedSceneHint");
+    if(hint) hint.textContent = s ? `Editando escena #${s.number}` : "Seleccioná una escena";
 
     const fields = ["number","slugline","location","timeOfDay","pages","summary","notes"];
     for(const f of fields){
@@ -545,6 +550,7 @@
 
   function renderSceneElementsGrid(){
     const wrap = el("sceneElementsGrid");
+    if(!wrap) return;
     wrap.innerHTML = "";
     const s = selectedSceneId ? getScene(selectedSceneId) : null;
     if(!s) return;
@@ -675,9 +681,9 @@
     const s = selectedSceneId ? getScene(selectedSceneId) : null;
     if(!s) return;
 
-    const cat = el("elCategory").value;
-    let item = (el("elItem").value||"").trim();
-    if(!item) return;
+    const cat = el("elCategory")?.value;
+    let item = (el("elItem")?.value||"").trim();
+    if(!cat || !item) return;
 
     if(cat === "cast"){
       const roster = getCastRoster();
@@ -728,7 +734,7 @@
     s.elements[cat] = s.elements[cat] || [];
     if(!s.elements[cat].includes(item)) s.elements[cat].push(item);
 
-    el("elItem").value="";
+    if(el("elItem")) el("elItem").value="";
     touch();
     refreshElementSuggestions();
     renderSceneElementsGrid();
@@ -740,7 +746,7 @@
   }
 
   function importScenesTable(){
-    const txt = el("sceneImportText").value || "";
+    const txt = el("sceneImportText")?.value || "";
     const rows = window.U.parseTableText(txt);
     if(!rows.length) return toast("No hay nada para importar");
 
@@ -779,8 +785,8 @@
   }
 
   function importScript(){
-    const txt = el("scriptImportText").value || "";
-    const keys = el("scriptKeywords").value || "";
+    const txt = el("scriptImportText")?.value || "";
+    const keys = el("scriptKeywords")?.value || "";
     const scenes = parseScreenplayToScenes(txt, keys);
     if(!scenes.length) return toast("No detecté escenas. Chequeá que cada INT./EXT. esté en su propia línea.");
 
@@ -822,6 +828,7 @@
     renderScheduleBoard();
     renderCallSheetCalendar();
     syncSceneBankHeight();
+    ensureDayTopTwoColumns();
   }
 
   function deleteShootDay(){
@@ -841,6 +848,7 @@
     renderCallSheetCalendar();
     renderCallSheet();
     syncSceneBankHeight();
+    ensureDayTopTwoColumns();
   }
 
   function sceneAssignedDayId(sceneId){
@@ -857,7 +865,7 @@
     node.draggable = true;
     node.dataset.sceneId = s.id;
 
-    // ✅ color SOLO en Banco de Escenas
+    // color SOLO en Banco de Escenas
     if(mode === "bank"){
       const isAssigned = !!sceneAssignedDayId(s.id);
       node.classList.add(isAssigned ? "assigned" : "unassigned");
@@ -934,26 +942,8 @@
     for(const d of state.shootDays){
       d.sceneIds = (d.sceneIds||[]).filter(x=>x!==sceneId);
       if(d.times) delete d.times[sceneId];
-      // duraciones: las dejamos para conservar si vuelve a ese día
+      // duraciones: se conservan para si vuelve
     }
-  }
-
-  function addSceneToDayEnd(sceneId, targetDayId){
-    const day = getDay(targetDayId);
-    if(!day) return;
-    ensureDayTimingMaps(day);
-
-    if(!day.sceneIds.includes(sceneId)) day.sceneIds.push(sceneId);
-    if(typeof day.durations[sceneId] !== "number") day.durations[sceneId] = 60;
-
-    let end = 0;
-    for(const sid of day.sceneIds){
-      const st = day.times[sid] ?? 0;
-      const du = day.durations[sid] ?? 60;
-      end = Math.max(end, st + du);
-    }
-    day.times[sceneId] = end;
-    sortDaySceneIdsByTime(day);
   }
 
   function renderDaysBoard(){
@@ -985,6 +975,7 @@
         renderDaysBoard();
         renderDayDetail();
         syncSceneBankHeight();
+        ensureDayTopTwoColumns();
       });
 
       const zone = document.createElement("div");
@@ -1002,7 +993,20 @@
         if(data.type !== "scene") return;
 
         removeSceneFromAllDays(data.sceneId);
-        addSceneToDayEnd(data.sceneId, d.id);
+        ensureDayTimingMaps(d);
+
+        if(!d.sceneIds.includes(data.sceneId)) d.sceneIds.push(data.sceneId);
+        if(typeof d.durations[data.sceneId] !== "number") d.durations[data.sceneId] = 60;
+
+        // al final del día
+        let end = 0;
+        for(const sid of d.sceneIds){
+          const st = d.times[sid] ?? 0;
+          const du = d.durations[sid] ?? 60;
+          end = Math.max(end, st + du);
+        }
+        d.times[data.sceneId] = end;
+        sortDaySceneIdsByTime(d);
 
         selectedDayId = d.id;
         touch();
@@ -1015,6 +1019,7 @@
         renderCallSheetCalendar();
         renderCallSheet();
         syncSceneBankHeight();
+        ensureDayTopTwoColumns();
       });
 
       const ids = d.sceneIds || [];
@@ -1056,6 +1061,7 @@
 
   function renderDayCast(){
     const wrap = el("dayCast");
+    if(!wrap) return;
     wrap.innerHTML = "";
     const d = selectedDayId ? getDay(selectedDayId) : null;
     if(!d){ wrap.innerHTML = `<span class="muted">Seleccioná un día</span>`; return; }
@@ -1078,6 +1084,7 @@
 
   function renderDayCrewPicker(){
     const wrap = el("dayCrewPicker");
+    if(!wrap) return;
     wrap.innerHTML = "";
     const d = selectedDayId ? getDay(selectedDayId) : null;
     if(!d){ wrap.innerHTML = `<div class="muted">Seleccioná un día</div>`; return; }
@@ -1143,6 +1150,7 @@
 
   function renderDayNeeds(){
     const wrap = el("dayNeeds");
+    if(!wrap) return;
     wrap.innerHTML = "";
     const d = selectedDayId ? getDay(selectedDayId) : null;
     if(!d){ wrap.innerHTML = `<div class="muted">Seleccioná un día</div>`; return; }
@@ -1180,6 +1188,7 @@
     renderDayCrewPicker();
     renderDayNeeds();
     syncSceneBankHeight();
+    ensureDayTopTwoColumns();
   }
 
   // ----------- Elements explorer -----------
@@ -1362,7 +1371,9 @@
   }
 
   function renderCrew(){
-    const tbody = el("crewTable").querySelector("tbody");
+    const crewTable = el("crewTable");
+    if(!crewTable) return;
+    const tbody = crewTable.querySelector("tbody");
     const q = (el("crewSearch")?.value || "").trim().toLowerCase();
     tbody.innerHTML = "";
 
@@ -1450,14 +1461,16 @@
   }
 
   // ----------- Schedule (Cronograma) -----------
-  function scenePrimaryCat(scene){
+  function sceneCatsWithItems(scene){
+    const list = [];
     for(const cat of cats){
-      if((scene.elements?.[cat]||[]).length) return cat;
+      const items = scene.elements?.[cat] || [];
+      if(items.length) list.push(cat);
     }
-    return "cast";
+    return list.length ? list : ["cast"];
   }
 
-  // ✅ Drag & drop nativo (como antes)
+  // Drag & drop nativo
   function handleSchedDrop(e, targetDayId, gridEl){
     e.preventDefault();
     const raw = e.dataTransfer.getData("application/json");
@@ -1475,12 +1488,10 @@
 
     ensureDayTimingMaps(toDay);
 
-    // mantener duración (prioridad: en el target si ya existía, sino desde el origen, sino 60)
     const durKeep =
       (typeof toDay.durations?.[sceneId] === "number") ? toDay.durations[sceneId] :
       (typeof fromDay?.durations?.[sceneId] === "number") ? fromDay.durations[sceneId] : 60;
 
-    // calcular startMin por Y
     const zoom = Number(el("schedZoom")?.value || 90);
     const snapMin = Number(el("schedSnap")?.value || 15);
     const pxPerMin = zoom / 60;
@@ -1494,11 +1505,10 @@
     if(!toDay.sceneIds.includes(sceneId)) toDay.sceneIds.push(sceneId);
 
     toDay.durations[sceneId] = durKeep;
+    toDay.times[sceneId] = Math.max(0, desiredStart);
 
-    // evitar overlaps (si querés permitir overlaps lo saco)
-    const safeStart = findNonOverlappingStart(toDay, sceneId, desiredStart, durKeep, snapMin);
-    toDay.times[sceneId] = safeStart;
-
+    // ✅ empujar hacia abajo para evitar superposición
+    resolveDayOverlapsPushDown(toDay, snapMin);
     sortDaySceneIdsByTime(toDay);
 
     touch();
@@ -1546,7 +1556,7 @@
       grid.className = "schedGrid";
       grid.dataset.dayId = d.id;
 
-      // drop handlers en TODO el día
+      // drop handlers
       const onDragOver = (e)=>{ e.preventDefault(); dayWrap.classList.add("dropTarget"); };
       const onDragLeave = ()=>dayWrap.classList.remove("dropTarget");
       const onDrop = (e)=>{
@@ -1573,7 +1583,7 @@
         const lab = document.createElement("div");
         lab.className = "hourLabel";
         lab.style.top = `${y}px`;
-        lab.textContent = fmtClock(callBase + h*60); // ✅ sin wrap silencioso
+        lab.textContent = fmtClock(callBase + h*60);
         grid.appendChild(lab);
       }
 
@@ -1586,7 +1596,7 @@
         const durMin = d.durations[sid] ?? 60;
 
         const top = startMin * pxPerMin;
-        const height = Math.max(24, durMin * pxPerMin);
+        const height = Math.max(32, durMin * pxPerMin);
 
         const block = document.createElement("div");
         block.className = "schedBlock";
@@ -1595,11 +1605,15 @@
         block.style.top = `${top}px`;
         block.style.height = `${height}px`;
 
-        const pcat = scenePrimaryCat(s);
-        const barColor = catColors[pcat] || "var(--cat-cast)";
+        // ✅ múltiples líneas por categoría con elementos
+        const involved = sceneCatsWithItems(s);
+        const lineH = 3;
+        const linesHtml = involved.map(cat=>`<div class="schedLine" style="background:${catColors[cat]}"></div>`).join("");
+        const linesWrap = `<div class="schedLines" style="height:${lineH*involved.length}px">${linesHtml}</div>`;
+        block.style.paddingTop = `${8 + (lineH*involved.length)}px`;
 
         block.innerHTML = `
-          <div class="bar" style="background:${barColor}"></div>
+          ${linesWrap}
           <div class="title">#${esc(s.number||"")} — ${esc(s.slugline||"")}</div>
           <div class="meta">${esc(fmtClock(callBase + startMin))} · ${durMin} min</div>
           <div class="resize" title="Cambiar duración"></div>
@@ -1615,7 +1629,7 @@
           renderSceneEditor();
         });
 
-        // ✅ draggable nativo
+        // draggable nativo
         block.draggable = true;
         block.addEventListener("dragstart", (e)=>{
           nativeDragActive = true;
@@ -1631,12 +1645,13 @@
           document.querySelectorAll(".schedDay").forEach(n=>n.classList.remove("dropTarget"));
         });
 
-        // resize con mouse (no con drag)
+        // resize
         block.addEventListener("mousedown", (e)=>{
           if(e.button !== 0) return;
           const isResize = e.target && e.target.classList.contains("resize");
           if(!isResize) return;
           resizing = { sceneId:sid, dayId:d.id, startY:e.clientY, startDur:durMin, pxPerMin, snapMin };
+          scheduleDirty = false;
           e.preventDefault();
         });
 
@@ -1658,8 +1673,15 @@
     const deltaMin = snap(dy / resizing.pxPerMin, resizing.snapMin);
     const newDur = Math.max(15, resizing.startDur + deltaMin);
 
+    if(d.durations[resizing.sceneId] === newDur) return;
+
     d.durations[resizing.sceneId] = newDur;
-    touch();
+
+    // ✅ empujar todas las que siguen hacia abajo para evitar superposición
+    resolveDayOverlapsPushDown(d, resizing.snapMin);
+    sortDaySceneIdsByTime(d);
+
+    scheduleDirty = true;
     renderScheduleBoard();
     renderReports();
     renderCallSheet();
@@ -1669,9 +1691,21 @@
     if(!resizing) return;
     resizing = null;
     document.querySelectorAll(".schedDay").forEach(n=>n.classList.remove("dropTarget"));
+    if(scheduleDirty){
+      touch();
+      renderDaysBoard();
+      renderSceneBank();
+      renderCallSheetCalendar();
+      scheduleDirty = false;
+    }
   }
 
   // ----------- Reports -----------
+  function linesDiv(items, empty="—"){
+    if(!items || !items.length) return `<div class="rLines"><div class="muted">${esc(empty)}</div></div>`;
+    return `<div class="rLines">${items.map(x=>`<div>${esc(x)}</div>`).join("")}</div>`;
+  }
+
   function renderReports(){
     const board = el("reportsBoard");
     if(!board) return;
@@ -1701,21 +1735,21 @@
       scenesBox.className = "catBlock";
       scenesBox.innerHTML = `
         <div class="hdr"><span class="dot" style="background:var(--cat-props)"></span>Escenas</div>
-        <div class="items">${esc(scenes.map(s=>`#${s.number} ${s.slugline}`).join(" · ") || "—")}</div>
+        <div class="items">${linesDiv(scenes.map(s=>`#${s.number} ${s.slugline}`))}</div>
       `;
 
       const castBox = document.createElement("div");
       castBox.className = "catBlock";
       castBox.innerHTML = `
         <div class="hdr"><span class="dot" style="background:${catColors.cast}"></span>Cast</div>
-        <div class="items">${esc(cast.join(", ") || "—")}</div>
+        <div class="items">${linesDiv(cast)}</div>
       `;
 
       const crewBox = document.createElement("div");
       crewBox.className = "catBlock";
       crewBox.innerHTML = `
         <div class="hdr"><span class="dot" style="background:var(--cat-sound)"></span>Crew citado</div>
-        <div class="items">${esc(crew.map(c=>`${c.area}: ${c.name}${c.role? " ("+c.role+")":""}`).join(" · ") || "—")}</div>
+        <div class="items">${linesDiv(crew.map(c=>`${c.area}: ${c.name}${c.role? " ("+c.role+")":""}`))}</div>
       `;
 
       body.appendChild(scenesBox);
@@ -1729,7 +1763,7 @@
         box.className = "catBlock";
         box.innerHTML = `
           <div class="hdr"><span class="dot" style="background:${catColors[cat]}"></span>${esc(catNames[cat])}</div>
-          <div class="items">${esc(items.join(", "))}</div>
+          <div class="items">${linesDiv(items)}</div>
         `;
         body.appendChild(box);
       }
@@ -1791,6 +1825,30 @@
     }
   }
 
+  function groupCrewByArea(list){
+    const map = new Map();
+    for(const c of list){
+      const a = c.area || "Otros";
+      if(!map.has(a)) map.set(a, []);
+      map.get(a).push(c);
+    }
+    const order = new Map(crewAreas.map((a,i)=>[a,i]));
+    const entries = Array.from(map.entries()).sort((a,b)=>{
+      const ia = order.get(a[0]) ?? 999;
+      const ib = order.get(b[0]) ?? 999;
+      return ia-ib;
+    });
+    for(const [,arr] of entries){
+      arr.sort((x,y)=>{
+        const rx=(x.role||"").toLowerCase();
+        const ry=(y.role||"").toLowerCase();
+        if(rx!==ry) return rx.localeCompare(ry);
+        return (x.name||"").localeCompare(y.name||"");
+      });
+    }
+    return entries;
+  }
+
   function renderCallSheet(){
     const wrap = el("callSheetWrap");
     if(!wrap) return;
@@ -1805,62 +1863,122 @@
     ensureDayTimingMaps(d);
     sortDaySceneIdsByTime(d);
 
-    const scenes = (d.sceneIds||[]).map(getScene).filter(Boolean);
-    const cast = union(scenes.flatMap(s=>s.elements?.cast||[]));
-    const crew = (d.crewIds||[]).map(id=>state.crew.find(c=>c.id===id)).filter(Boolean);
-
+    const proj = state.meta.title || "Proyecto";
+    const dayTitle = formatDayTitle(d.date);
     const callBase = minutesFromHHMM(d.callTime||"08:00");
 
-    const card = document.createElement("div");
-    card.className = "card";
+    const scenes = (d.sceneIds||[]).map(getScene).filter(Boolean);
+    const cast = union(scenes.flatMap(s=>s.elements?.cast||[]));
+    const crewAll = (d.crewIds||[]).map(id=>state.crew.find(c=>c.id===id)).filter(Boolean);
+    const crew = crewAll.filter(c=>String(c.area||"").trim().toLowerCase()!=="cast");
+    const crewByArea = groupCrewByArea(crew);
 
-    const sceneLines = scenes.map(s=>{
+    // schedule rows
+    const schedRows = scenes.map(s=>{
       const st = d.times[s.id] ?? 0;
       const du = d.durations[s.id] ?? 60;
-      return `• ${fmtClock(callBase + st)} (${du}m) — #${s.number} ${s.slugline}`;
-    }).join("<br/>");
+      const t0 = fmtClock(callBase + st);
+      const t1 = fmtClock(callBase + st + du);
+      return `
+        <tr>
+          <td class="csT">${esc(t0)}</td>
+          <td class="csT">${esc(t1)}</td>
+          <td class="csT">${esc(du)}m</td>
+          <td>
+            <div class="csScene"><b>#${esc(s.number||"")}</b> ${esc(s.slugline||"")}</div>
+            <div class="csMeta">${esc(s.location||"")} · ${esc(s.timeOfDay||"")} ${s.pages? "· Pág "+esc(String(s.pages)):""}</div>
+          </td>
+        </tr>
+      `;
+    }).join("");
 
+    // needs by category
     let needsHTML = "";
     for(const cat of cats){
       const items = union(scenes.flatMap(s=>s.elements?.[cat]||[]));
       if(!items.length) continue;
       needsHTML += `
-        <div class="catBlock">
-          <div class="hdr"><span class="dot" style="background:${catColors[cat]}"></span>${esc(catNames[cat])}</div>
-          <div class="items">${esc(items.join(", "))}</div>
+        <div class="csNeed">
+          <div class="csNeedHdr"><span class="dot" style="background:${catColors[cat]}"></span>${esc(catNames[cat])}</div>
+          <div class="csNeedBody">${items.map(it=>`<span class="csPill">${esc(it)}</span>`).join("")}</div>
         </div>
       `;
     }
     if(!needsHTML) needsHTML = `<div class="muted">Sin necesidades cargadas.</div>`;
 
+    // crew html
+    const crewHTML = crewByArea.map(([area, arr])=>{
+      return `
+        <div class="csCrewBlock">
+          <div class="csCrewHdr">${esc(area)}</div>
+          <div class="csCrewList">
+            ${arr.map(c=>`<div class="csCrewItem"><b>${esc(c.name||"")}</b>${c.role? `<span class="muted"> — ${esc(c.role)}</span>`:""}</div>`).join("")}
+          </div>
+        </div>
+      `;
+    }).join("") || `<div class="muted">—</div>`;
+
+    const castHTML = cast.length
+      ? `<div class="csCastList">${cast.map(n=>`<span class="csPill csPillCast">${esc(n)}</span>`).join("")}</div>`
+      : `<div class="muted">—</div>`;
+
+    const notes = (d.notes||"").trim();
+
+    const card = document.createElement("div");
+    card.className = "card csPage";
+
     card.innerHTML = `
-      <div class="cardHeader">
-        <h2>Call Sheet — ${esc(formatDayTitle(d.date))}${d.label? " · "+esc(d.label):""}</h2>
-        <div class="pill">Call ${esc(d.callTime||"")} · ${esc(d.location||"")}</div>
+      <div class="csHeader">
+        <div class="csBrand">
+          <div class="csProj">${esc(proj)}</div>
+          <div class="csSub">${esc(dayTitle)}${d.label? " · "+esc(d.label):""}</div>
+        </div>
+        <div class="csRight">
+          <div class="csKey"><span class="k">Call</span> <span class="v">${esc(d.callTime||"")}</span></div>
+          <div class="csKey"><span class="k">Locación</span> <span class="v">${esc(d.location||"—")}</span></div>
+        </div>
       </div>
 
-      <div class="grid2" style="grid-template-columns:1fr 1fr;">
-        <div>
-          <div class="catBlock">
-            <div class="hdr"><span class="dot" style="background:var(--cat-props)"></span>Escenas</div>
-            <div class="items">${sceneLines || "—"}</div>
-          </div>
+      <div class="csSection">
+        <div class="csH">Schedule</div>
+        <table class="csTable">
+          <thead>
+            <tr><th>Inicio</th><th>Fin</th><th>Dur</th><th>Escena</th></tr>
+          </thead>
+          <tbody>
+            ${schedRows || `<tr><td colspan="4" class="muted">—</td></tr>`}
+          </tbody>
+        </table>
+      </div>
 
-          <div class="catBlock">
-            <div class="hdr"><span class="dot" style="background:${catColors.cast}"></span>Cast citado</div>
-            <div class="items">${esc(cast.join(", ") || "—")}</div>
-          </div>
-
-          <div class="catBlock">
-            <div class="hdr"><span class="dot" style="background:var(--cat-sound)"></span>Crew citado</div>
-            <div class="items">${esc(crew.map(c=>`${c.area}: ${c.name}${c.role? " ("+c.role+")":""}`).join(" · ") || "—")}</div>
-          </div>
+      <div class="csGrid2">
+        <div class="csSection">
+          <div class="csH">Cast citado</div>
+          ${castHTML}
         </div>
+        <div class="csSection">
+          <div class="csH">Crew citado</div>
+          ${crewHTML}
+        </div>
+      </div>
 
-        <div>
-          <h3 class="h3">Necesidades</h3>
+      <div class="csSection">
+        <div class="csH">Necesidades</div>
+        <div class="csNeeds">
           ${needsHTML}
         </div>
+      </div>
+
+      ${notes ? `
+        <div class="csSection">
+          <div class="csH">Notas</div>
+          <div class="csNotes">${esc(notes)}</div>
+        </div>
+      ` : ""}
+
+      <div class="csFooter">
+        <div class="csSign"><div class="line"></div><div class="lbl">Producción</div></div>
+        <div class="csSign"><div class="line"></div><div class="lbl">Dirección</div></div>
       </div>
     `;
 
@@ -1870,16 +1988,16 @@
   // ----------- Settings (JSONBin + reset) -----------
   function loadCfgToUI(){
     const cfg = StorageLayer.loadCfg();
-    el("cfg_binId").value = cfg.binId || "";
-    el("cfg_accessKey").value = cfg.accessKey || "";
-    el("cfg_autosync").value = cfg.autosync || "off";
+    if(el("cfg_binId")) el("cfg_binId").value = cfg.binId || "";
+    if(el("cfg_accessKey")) el("cfg_accessKey").value = cfg.accessKey || "";
+    if(el("cfg_autosync")) el("cfg_autosync").value = cfg.autosync || "off";
   }
 
   async function saveCfgFromUI(){
     const cfg = StorageLayer.loadCfg();
-    cfg.binId = el("cfg_binId").value.trim();
-    cfg.accessKey = el("cfg_accessKey").value.trim();
-    cfg.autosync = el("cfg_autosync").value;
+    cfg.binId = (el("cfg_binId")?.value||"").trim();
+    cfg.accessKey = (el("cfg_accessKey")?.value||"").trim();
+    cfg.autosync = el("cfg_autosync")?.value || "off";
     StorageLayer.saveCfg(cfg);
     toast("Config guardada ✅");
   }
@@ -1929,16 +2047,16 @@
   }
 
   async function setResetKey(){
-    const k1 = el("cfg_resetKey").value;
-    const k2 = el("cfg_resetKeyConfirm").value;
+    const k1 = el("cfg_resetKey")?.value;
+    const k2 = el("cfg_resetKeyConfirm")?.value;
     if(!k1 || k1.length < 4) return toast("Clave muy corta");
     if(k1 !== k2) return toast("Las claves no coinciden");
     const hash = await StorageLayer.sha256(k1);
     const cfg = StorageLayer.loadCfg();
     cfg.resetKeyHash = hash;
     StorageLayer.saveCfg(cfg);
-    el("cfg_resetKey").value = "";
-    el("cfg_resetKeyConfirm").value = "";
+    if(el("cfg_resetKey")) el("cfg_resetKey").value = "";
+    if(el("cfg_resetKeyConfirm")) el("cfg_resetKeyConfirm").value = "";
     toast("Clave seteada ✅");
   }
 
@@ -1956,6 +2074,143 @@
     hydrateUI();
   }
 
+  // ----------- Layout helpers (sin tocar HTML) -----------
+  function ensureExtraStyles(){
+    if(document.getElementById("gb_extra_styles_v7")) return;
+    const css = `
+/* ===== extras v7 ===== */
+
+/* Cronograma: líneas de color por categoría */
+.schedBlock{ position:absolute; left:48px; right:10px; border-radius:12px; overflow:hidden; }
+.schedLines{ position:absolute; left:0; top:0; right:0; display:flex; flex-direction:column; z-index:2; }
+.schedLine{ height:3px; }
+
+/* Reports: listas verticales */
+.rLines{ display:flex; flex-direction:column; gap:6px; }
+.rLines > div{ line-height:1.25; }
+
+/* Crew: headers con más contraste */
+.groupRow td{
+  background: rgba(110,231,255,.14) !important;
+  color: rgba(235,246,255,.95) !important;
+  font-weight: 800 !important;
+  letter-spacing: .2px;
+}
+.crewAreaHeader{
+  margin-top: 10px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: rgba(110,231,255,.14);
+  color: rgba(235,246,255,.95);
+  font-weight: 800;
+}
+
+/* Plan de rodaje: top en 2 columnas */
+.dayTopTwoCol{ display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom: 10px; }
+.dayTopTwoCol .col{ display:flex; flex-direction:column; gap:10px; }
+
+/* Call Sheet: look pro */
+.csPage{ padding: 18px; }
+.csHeader{ display:flex; justify-content:space-between; gap:18px; align-items:flex-start; margin-bottom: 14px; }
+.csProj{ font-size: 20px; font-weight: 900; letter-spacing: .2px; }
+.csSub{ opacity:.85; margin-top: 2px; }
+.csRight{ text-align:right; display:flex; flex-direction:column; gap:6px; }
+.csKey .k{ opacity:.75; margin-right: 8px; }
+.csKey .v{ font-weight: 800; }
+.csSection{ margin-top: 14px; }
+.csH{ font-weight: 900; letter-spacing:.2px; margin-bottom: 8px; }
+.csGrid2{ display:grid; grid-template-columns: 1fr 1fr; gap:14px; }
+.csTable{ width:100%; border-collapse: collapse; }
+.csTable th, .csTable td{ border-bottom: 1px solid rgba(255,255,255,.10); padding: 8px 8px; vertical-align: top; }
+.csTable th{ text-align:left; font-weight:900; opacity:.9; }
+.csT{ white-space: nowrap; font-weight: 900; }
+.csScene{ line-height:1.2; }
+.csMeta{ opacity:.75; font-size: 12px; margin-top: 2px; }
+.csNeeds{ display:flex; flex-direction:column; gap:10px; }
+.csNeed{ border:1px solid rgba(255,255,255,.10); border-radius: 12px; padding: 10px; }
+.csNeedHdr{ font-weight: 900; display:flex; align-items:center; gap:8px; margin-bottom: 8px; }
+.csNeedBody{ display:flex; flex-wrap:wrap; gap:6px; }
+.csPill{ display:inline-block; padding:6px 8px; border-radius: 999px; border:1px solid rgba(255,255,255,.14); background: rgba(255,255,255,.06); font-size: 12px; }
+.csPillCast{ border-color: rgba(110,231,255,.25); }
+.csCrewHdr{ font-weight: 900; margin-bottom: 6px; padding: 6px 8px; border-radius: 10px; background: rgba(110,231,255,.10); }
+.csCrewList{ display:flex; flex-direction:column; gap:6px; }
+.csNotes{ white-space: pre-wrap; opacity: .92; }
+.csFooter{ display:flex; gap:16px; margin-top: 18px; }
+.csSign{ flex:1; }
+.csSign .line{ height:1px; background: rgba(255,255,255,.35); margin-bottom: 6px; }
+.csSign .lbl{ font-size: 12px; opacity: .75; }
+
+/* PRINT: solo call sheet, sin calendario */
+@media print{
+  body{ background:#fff !important; color:#000 !important; }
+  header, nav, .sidebar, #syncCorner, #toast, .navBtn, .btn, .tabs, #callSheetCalendar, #calWrap { display:none !important; }
+  #view-callsheet{ display:block !important; }
+  #callSheetWrap{ padding: 0 !important; }
+  .card{ box-shadow:none !important; border: 1px solid #000 !important; }
+  .csTable th, .csTable td{ border-bottom: 1px solid #000 !important; }
+  .csNeed{ border: 1px solid #000 !important; }
+  .csPill{ border: 1px solid #000 !important; background: transparent !important; }
+  .csCrewHdr{ background: transparent !important; border: 1px solid #000 !important; }
+  .csSign .line{ background:#000 !important; }
+}
+`;
+    const style = document.createElement("style");
+    style.id = "gb_extra_styles_v7";
+    style.textContent = css;
+    document.head.appendChild(style);
+  }
+
+  function fieldWrapFor(input){
+    if(!input) return null;
+    return input.closest(".field") || input.closest(".formRow") || input.parentElement;
+  }
+
+  // ✅ rearmar el top de Detalle del día en 2 columnas (sin tocar HTML)
+  function ensureDayTopTwoColumns(){
+    const date = el("day_date");
+    const call = el("day_call");
+    const loc = el("day_location");
+    const label = el("day_label");
+    const notes = el("day_notes");
+    if(!date || !call || !loc || !label || !notes) return;
+
+    // Si ya existe, listo
+    const already = date.closest(".dayTopTwoCol");
+    if(already) return;
+
+    // Buscar un contenedor común razonable (el más chico que contiene a todos)
+    const nodes = [date, call, loc, label, notes];
+    let root = date.parentElement;
+    while(root && !nodes.every(n=>root.contains(n))) root = root.parentElement;
+    if(!root) return;
+
+    // crear wrapper
+    const wrapper = document.createElement("div");
+    wrapper.className = "dayTopTwoCol";
+    const c1 = document.createElement("div"); c1.className = "col";
+    const c2 = document.createElement("div"); c2.className = "col";
+    wrapper.append(c1,c2);
+
+    const wDate = fieldWrapFor(date);
+    const wCall = fieldWrapFor(call);
+    const wLoc = fieldWrapFor(loc);
+    const wLabel = fieldWrapFor(label);
+    const wNotes = fieldWrapFor(notes);
+    if(!wDate || !wCall || !wLoc || !wLabel || !wNotes) return;
+
+    // Insertar wrapper antes del primer campo top
+    root.insertBefore(wrapper, wDate);
+
+    // Mover a col 1: Fecha + Call time
+    c1.appendChild(wDate);
+    if(wCall !== wDate) c1.appendChild(wCall);
+
+    // Mover a col 2: Locación + Nombre + Notas
+    c2.appendChild(wLoc);
+    if(wLabel !== wLoc) c2.appendChild(wLabel);
+    if(wNotes !== wLabel && wNotes !== wLoc) c2.appendChild(wNotes);
+  }
+
   // ----------- Events / init -----------
   function bindEvents(){
     document.querySelectorAll(".navBtn").forEach(b=>{
@@ -1965,7 +2220,7 @@
         showView(v);
 
         if(v === "elements") renderElementsExplorer();
-        if(v === "shooting"){ renderSceneBank(); renderDaysBoard(); renderDayDetail(); }
+        if(v === "shooting"){ renderSceneBank(); renderDaysBoard(); renderDayDetail(); ensureDayTopTwoColumns(); }
         if(v === "crew") renderCrew();
         if(v === "reports") renderReports();
         if(v === "schedule") renderScheduleBoard();
@@ -2005,10 +2260,10 @@
     el("elCategory")?.addEventListener("change", refreshElementSuggestions);
 
     el("btnImportScenes")?.addEventListener("click", importScenesTable);
-    el("btnClearImport")?.addEventListener("click", ()=>{ el("sceneImportText").value=""; });
+    el("btnClearImport")?.addEventListener("click", ()=>{ if(el("sceneImportText")) el("sceneImportText").value=""; });
 
     el("btnParseScript")?.addEventListener("click", importScript);
-    el("btnClearScript")?.addEventListener("click", ()=>{ el("scriptImportText").value=""; });
+    el("btnClearScript")?.addEventListener("click", ()=>{ if(el("scriptImportText")) el("scriptImportText").value=""; });
 
     // Shooting
     el("btnAddShootDay")?.addEventListener("click", addShootDay);
@@ -2042,6 +2297,7 @@
         renderCallSheetCalendar();
         renderCallSheet();
         syncSceneBankHeight();
+        ensureDayTopTwoColumns();
       });
     });
 
@@ -2050,7 +2306,7 @@
       const d = selectedDayId ? getDay(selectedDayId) : null;
       if(!d) return;
       d.callTime = roundTimeToStep(addMinutesHHMM(d.callTime||"08:00", -15), 15);
-      el("day_call").value = d.callTime;
+      if(el("day_call")) el("day_call").value = d.callTime;
       touch();
       renderDaysBoard();
       renderScheduleBoard();
@@ -2061,7 +2317,7 @@
       const d = selectedDayId ? getDay(selectedDayId) : null;
       if(!d) return;
       d.callTime = roundTimeToStep(addMinutesHHMM(d.callTime||"08:00", +15), 15);
-      el("day_call").value = d.callTime;
+      if(el("day_call")) el("day_call").value = d.callTime;
       touch();
       renderDaysBoard();
       renderScheduleBoard();
@@ -2097,6 +2353,7 @@
         for(const sid of d.sceneIds){
           d.durations[sid] = 60;
         }
+        resolveDayOverlapsPushDown(d, Number(el("schedSnap")?.value || 15));
       }
       touch();
       renderScheduleBoard();
@@ -2141,7 +2398,7 @@
     renderCatSelects();
     refreshElementSuggestions();
 
-    el("projectTitle").value = state.meta.title || "Proyecto";
+    if(el("projectTitle")) el("projectTitle").value = state.meta.title || "Proyecto";
 
     sortShootDaysInPlace();
 
@@ -2158,9 +2415,12 @@
     renderCallSheet();
 
     syncSceneBankHeight();
+    ensureDayTopTwoColumns();
   }
 
   function init(){
+    ensureExtraStyles();
+
     const local = StorageLayer.loadLocal();
     state = (local && local.meta) ? local : defaultState();
 
