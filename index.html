@@ -41,41 +41,7 @@
 
       <!-- ================= BREAKDOWN ================= -->
       <section id="view-breakdown" class="view">
-        <div class="grid2">
-          <div class="card">
-            <div class="cardHeader">
-              <h2 class="cardTitle">Cargar guion (INT./EXT.)</h2>
-            </div>
-            <div class="cardContent">
-              <div class="row gap">
-                <textarea id="scriptImportText" class="textarea" placeholder="Pegá el guion acá…"></textarea>
-              </div>
-              <div class="row gap alignEnd">
-                <div class="field grow">
-                  <label>Keywords extra (opcional)</label>
-                  <input id="scriptKeywords" class="input" placeholder="Ej: EST., PLANO, MONTAGE" />
-                </div>
-                <button id="btnParseScript" class="btn primary">Detectar escenas</button>
-              </div>
-              <div class="muted small">
-                Tip: cada escena debe empezar con una línea que arranque en <b>INT.</b> o <b>EXT.</b>
-              </div>
-            </div>
-          </div>
-
-          <div class="card">
-            <div class="cardHeader">
-              <h2 class="cardTitle">Importar tabla de escenas</h2>
-            </div>
-            <div class="cardContent">
-              <textarea id="sceneImportText" class="textarea" placeholder="Nro<TAB>Slugline<TAB>Locación<TAB>Momento del día<TAB>Páginas<TAB>Resumen"></textarea>
-              <div class="row gap alignEnd">
-                <button id="btnImportScenes" class="btn">Importar</button>
-              </div>
-            </div>
-          </div>
-        </div>
-
+        <!-- PRIMERO: Escenas + Editor -->
         <div class="grid2">
           <div class="card">
             <div class="cardHeader">
@@ -90,7 +56,7 @@
             <div class="cardContent">
               <div class="row gap">
                 <input id="sceneSearch" class="input grow" placeholder="Buscar escena…" />
-                <select id="sceneFilterTOD" class="input">
+                <select id="sceneFilterTOD" class="input compact">
                   <option value="">TOD</option>
                   <option value="Día">Día</option>
                   <option value="Noche">Noche</option>
@@ -173,6 +139,44 @@
             </div>
           </div>
         </div>
+
+        <!-- ABAJO: importación (secundaria) + colapsable -->
+        <div class="grid2">
+          <div class="card collapsible collapsed" data-collapse-key="bd_script">
+            <div class="cardHeader">
+              <h2 class="cardTitle">Cargar guion (INT./EXT.)</h2>
+              <button class="btn icon collapseBtn" data-collapse-btn="bd_script" title="Expandir/colapsar">▸</button>
+            </div>
+            <div class="cardContent">
+              <div class="row gap">
+                <textarea id="scriptImportText" class="textarea" placeholder="Pegá el guion acá…"></textarea>
+              </div>
+              <div class="row gap alignEnd">
+                <div class="field grow">
+                  <label>Keywords extra (opcional)</label>
+                  <input id="scriptKeywords" class="input" placeholder="Ej: EST., PLANO, MONTAGE" />
+                </div>
+                <button id="btnParseScript" class="btn primary">Detectar escenas</button>
+              </div>
+              <div class="muted small">
+                Tip: cada escena debe empezar con una línea que arranque en <b>INT.</b> o <b>EXT.</b>
+              </div>
+            </div>
+          </div>
+
+          <div class="card collapsible collapsed" data-collapse-key="bd_table">
+            <div class="cardHeader">
+              <h2 class="cardTitle">Importar tabla de escenas</h2>
+              <button class="btn icon collapseBtn" data-collapse-btn="bd_table" title="Expandir/colapsar">▸</button>
+            </div>
+            <div class="cardContent">
+              <textarea id="sceneImportText" class="textarea" placeholder="Nro<TAB>Slugline<TAB>Locación<TAB>Momento del día<TAB>Páginas<TAB>Resumen"></textarea>
+              <div class="row gap alignEnd">
+                <button id="btnImportScenes" class="btn">Importar</button>
+              </div>
+            </div>
+          </div>
+        </div>
       </section>
 
       <!-- ================= PLAN DE RODAJE ================= -->
@@ -189,7 +193,7 @@
               <div class="cardContent" id="sceneBankBody">
                 <div class="row gap">
                   <input id="bankSearch" class="input grow" placeholder="Buscar…" />
-                  <select id="bankFilter" class="input">
+                  <select id="bankFilter" class="input compact">
                     <option value="all">Todas</option>
                     <option value="unassigned">No asignadas</option>
                   </select>
@@ -293,7 +297,7 @@
             <h2 class="cardTitle">Cronograma</h2>
             <div class="row gap">
               <label class="row gap small muted">Zoom
-                <select id="schedZoom" class="input">
+                <select id="schedZoom" class="input compact">
                   <option value="60">Bajo</option>
                   <option value="90" selected>Medio</option>
                   <option value="120">Grande</option>
@@ -301,7 +305,7 @@
                 </select>
               </label>
               <label class="row gap small muted">Snap
-                <select id="schedSnap" class="input">
+                <select id="schedSnap" class="input compact">
                   <option value="5">5 min</option>
                   <option value="10">10 min</option>
                   <option value="15" selected>15 min</option>

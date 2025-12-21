@@ -176,6 +176,15 @@ select option{
   color:var(--text);
 }
 
+/* ✅ Compact selects para no comerse el buscador */
+.input.compact{
+  width: 160px;
+  flex: 0 0 160px;
+}
+@media (max-width:1200px){
+  .input.compact{ width: 140px; flex-basis:140px; }
+}
+
 .textarea{
   min-height:160px;
   resize:vertical;
@@ -256,6 +265,17 @@ tr.groupRow td{
   box-shadow: 0 0 0 2px rgba(0,0,0,.25);
 }
 
+/* ✅ Collapsible cards */
+.collapsible .cardHeader{
+  user-select:none;
+}
+.collapsible.collapsed .cardContent{
+  display:none;
+}
+.collapsible.collapsed .cardHeader{
+  border-bottom:none;
+}
+
 /* ====== Shooting Layout ====== */
 .shootingLayout{
   display:grid;
@@ -292,12 +312,19 @@ tr.groupRow td{
 .sceneCard.assigned{ border-color: rgba(110,231,255,.45); }
 .sceneCard.unassigned{ border-color: rgba(255,92,92,.55); }
 
-.daysBoardWrap{ overflow-x:auto; padding-bottom:6px; }
+/* ✅ Tablero con scroll independiente (no estira la página) */
+.daysBoardWrap{
+  overflow: auto;
+  max-height: min(55vh, 520px);
+  padding-bottom:8px;
+  scrollbar-gutter: stable both-edges;
+}
 .daysBoard{
   display:flex;
   gap:12px;
   min-height: 240px;
 }
+
 .dayCol{
   width:320px;
   border:1px solid var(--border);
@@ -438,11 +465,14 @@ tr.groupRow td{
 }
 
 /* ====== Schedule ====== */
+/* ✅ scroll lateral siempre visible */
 .schedBoard{
   display:flex;
   gap:12px;
-  overflow:auto;
-  padding-bottom:6px;
+  overflow-x: scroll;
+  overflow-y: auto;
+  padding-bottom:14px;
+  scrollbar-gutter: stable both-edges;
 }
 .schedDay{
   width:360px;
