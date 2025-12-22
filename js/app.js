@@ -96,6 +96,13 @@
   function getScene(id){ return state.scenes.find(s=>s.id===id) || null; }
   function getDay(id){ return state.shootDays.find(d=>d.id===id) || null; }
   function union(arr){ return Array.from(new Set((arr||[]).filter(Boolean))); }
+  function fmtPages(n){
+    const v = Math.round((Number(n)||0) * 100) / 100;
+    const s = String(v);
+    return s.includes(".") ? s.replace(/\.?0+$/,"" ) : s;
+  }
+
+
 
   function normalizeTOD(raw){
     const t = (raw||"").trim().toLowerCase();
@@ -1316,16 +1323,13 @@
 
       const head = document.createElement("div");
       head.className = "reportHead";
-      head.innerHTML = `
-        <div class="t">${esc(formatDayTitle(d.date))}${d.label? " · "+esc(d.label):""}</div>
-        <div class="m">Call ${esc(d.callTime||"")} · ${esc(d.location||"")}</div>
-      `;
 
       const body = document.createElement("div");
       body.className = "reportBody";
 
       const scenes = (d.sceneIds||[]).map(getScene).filter(Boolean);
       const cast = union(scenes.flatMap(s=>s.elements?.cast||[]));
+      const pages = scenes.reduce((acc, s)=> acc + (Number(s.pages)||0), 0);
 
       const crewAll = (d.crewIds||[])
         .map(id=>state.crew.find(c=>c.id===id))
@@ -1334,6 +1338,17 @@
         .filter(c=>c.area!=="Cast");
 
       const grouped = groupCrewByArea(crewAll);
+
+      head.innerHTML = `
+        <div class="t">${esc(formatDayTitle(d.date))}${d.label? " · "+esc(d.label):""}</div>
+        <div class="m">Call ${esc(d.callTime||"")} · ${esc(d.location||"")}</div>
+        <div class="kpiRow">
+          <span class="kpi"><b>${scenes.length}</b> escenas</span>
+          <span class="kpi"><b>${fmtPages(pages)}</b> pág</span>
+          <span class="kpi"><b>${cast.length}</b> cast</span>
+          <span class="kpi"><b>${crewAll.length}</b> crew</span>
+        </div>
+      `;
 
       const scenesBox = document.createElement("div");
       scenesBox.className = "catBlock";
@@ -1734,12 +1749,19 @@
     const crewGrouped = groupCrewByArea(crewAll);
 
     const header = document.createElement("div");
-    header.className = "catBlock";
+    header.className = "catBlock callHeader";
+    const pages = scenes.reduce((acc, s)=> acc + (Number(s.pages)||0), 0);
     header.innerHTML = `
       <div class="hdr"><span class="dot" style="background:var(--cat-props)"></span>${esc(state.meta.title||"Proyecto")}</div>
       <div class="items">
         <div><b>Día:</b> ${esc(formatDayTitle(d.date))}${d.label? " · "+esc(d.label):""}</div>
         <div><b>Call:</b> ${esc(d.callTime||"")} &nbsp; <b>Locación:</b> ${esc(d.location||"")}</div>
+        <div class="kpiRow" style="margin-top:10px;">
+          <span class="kpi"><b>${scenes.length}</b> escenas</span>
+          <span class="kpi"><b>${fmtPages(pages)}</b> pág</span>
+          <span class="kpi"><b>${cast.length}</b> cast</span>
+          <span class="kpi"><b>${crewAll.length}</b> crew</span>
+        </div>
         ${d.notes ? `<div style="margin-top:8px;"><b>Notas:</b> ${esc(d.notes)}</div>` : ""}
       </div>
     `;
@@ -1749,7 +1771,7 @@
     resolveOverlapsPushDown(d, snapMin);
 
     const scenesBox = document.createElement("div");
-    scenesBox.className = "catBlock";
+    scenesBox.className = "catBlock callScenes";
     scenesBox.innerHTML = `<div class="hdr"><span class="dot" style="background:var(--cat-vehicles)"></span>Escenas</div>`;
     const list = document.createElement("div");
     list.className = "items";
@@ -1767,7 +1789,7 @@
     wrap.appendChild(scenesBox);
 
     const castBox = document.createElement("div");
-    castBox.className = "catBlock";
+    castBox.className = "catBlock callCast";
     castBox.innerHTML = `
       <div class="hdr"><span class="dot" style="background:${catColors.cast}"></span>Cast</div>
       <div class="items">${cast.length ? cast.map(n=>`<div>${esc(n)}</div>`).join("") : "<div>—</div>"}</div>
@@ -1775,7 +1797,7 @@
     wrap.appendChild(castBox);
 
     const crewBox = document.createElement("div");
-    crewBox.className = "catBlock";
+    crewBox.className = "catBlock callCrew";
     crewBox.innerHTML = `<div class="hdr"><span class="dot" style="background:var(--cat-sound)"></span>Crew</div>`;
     const crewItems = document.createElement("div");
     crewItems.className = "items";
