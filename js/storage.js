@@ -2,6 +2,10 @@ window.StorageLayer = (function(){
   const KEY_STATE = "gb_prod_state_v1";
   const KEY_CFG   = "gb_prod_cfg_v1";
 
+  // JSONBin (fixed for this repo)
+  const DEFAULT_BIN_ID = "6945d8e2ae596e708fa5c4d9";
+  const DEFAULT_ACCESS_KEY = "$2a$10$nzjX1kWtm5vCMZj8qtlSoeP/kUp77ZWnpFE6kWIcnBqe1fDL1lkDi";
+
   function loadLocal(){
     try{
       const raw = localStorage.getItem(KEY_STATE);
@@ -13,15 +17,20 @@ window.StorageLayer = (function(){
   }
 
   function loadCfg(){
+    // Always return fixed credentials and autosync ON
     try{
-      const raw = localStorage.getItem(KEY_CFG);
-      return raw ? JSON.parse(raw) : { binId:"", accessKey:"", autosync:"off", resetKey:"" };
+      // keep a copy in localStorage for forward compatibility / visibility
+      const safe = { binId: DEFAULT_BIN_ID, accessKey: DEFAULT_ACCESS_KEY, autosync: "on" };
+      localStorage.setItem(KEY_CFG, JSON.stringify(safe));
+      return safe;
     }catch{
-      return { binId:"", accessKey:"", autosync:"off", resetKey:"" };
+      return { binId: DEFAULT_BIN_ID, accessKey: DEFAULT_ACCESS_KEY, autosync: "on" };
     }
   }
-  function saveCfg(cfg){
-    localStorage.setItem(KEY_CFG, JSON.stringify(cfg));
+  function saveCfg(_cfg){
+    // Ignore custom cfg; keep it fixed
+    const safe = { binId: DEFAULT_BIN_ID, accessKey: DEFAULT_ACCESS_KEY, autosync: "on" };
+    localStorage.setItem(KEY_CFG, JSON.stringify(safe));
   }
 
   async function jsonbinGet(binId, accessKey){
@@ -47,6 +56,7 @@ window.StorageLayer = (function(){
   }
 
   function hardResetLocal(){
+    // still used internally for rare recovery scripts
     localStorage.removeItem(KEY_STATE);
   }
 

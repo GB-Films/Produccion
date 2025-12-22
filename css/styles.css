@@ -147,7 +147,8 @@ body{
   justify-content:space-between;
   gap:10px;
 }
-.cardTitle{ margin:0; font-size:16px; letter-spacing:.2px; font-weight:950; line-height:1.15; }
+.cardTitle{ margin:0; font-size:16px; letter-spacing:.6px; font-weight:950; line-height:1.15; text-transform:uppercase; }
+.cardTitle .keepcase{ text-transform:none; letter-spacing:0; font-weight:inherit; }
 
 /* Crew expand details */
 .crewAreaCell{ display:flex; align-items:center; gap:10px; }

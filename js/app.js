@@ -71,9 +71,7 @@
   }
 
   const autosyncDebounced = window.U.debounce(async ()=>{
-    const cfg = StorageLayer.loadCfg();
-    if(cfg.autosync !== "on") return;
-    if(!cfg.binId || !cfg.accessKey) return;
+    const cfg = StorageLayer.loadCfg();    if(!cfg.binId || !cfg.accessKey) return;
     try{
       await StorageLayer.jsonbinPut(cfg.binId, cfg.accessKey, state);
       updateSyncPill("JSONBin");
@@ -1265,8 +1263,8 @@
     }
     const idx = new Map(crewAreas.map((a,i)=>[a,i]));
     list.sort((a,b)=>{
-      const ia = idx.get(a.area)||999;
-      const ib = idx.get(b.area)||999;
+      const ia = (idx.get(a.area) ?? 999);
+      const ib = (idx.get(b.area) ?? 999);
       if(ia!==ib) return ia-ib;
       return (a.name||"").localeCompare(b.name||"");
     });
@@ -1923,19 +1921,17 @@
   // Settings JSONBin
   function loadCfgToUI(){
     const cfg = StorageLayer.loadCfg();
-    el("cfg_binId").value = cfg.binId || "";
-    el("cfg_accessKey").value = cfg.accessKey || "";
-    el("cfg_autosync").value = cfg.autosync || "off";
-    el("cfg_resetKey").value = cfg.resetKey || "";
+    const bin = el("cfg_binId");
+    const key = el("cfg_accessKey");
+    const au  = el("cfg_autosync");
+    if(bin){ bin.value = cfg.binId || ""; bin.setAttribute("readonly","readonly"); }
+    if(key){ key.value = cfg.accessKey || ""; key.setAttribute("readonly","readonly"); }
+    if(au){ au.value = "on"; au.setAttribute("disabled","disabled"); }
   }
   function saveCfgFromUI(){
-    const cfg = StorageLayer.loadCfg();
-    cfg.binId = (el("cfg_binId").value||"").trim();
-    cfg.accessKey = (el("cfg_accessKey").value||"").trim();
-    cfg.autosync = el("cfg_autosync").value || "off";
-    cfg.resetKey = (el("cfg_resetKey").value||"").trim();
-    StorageLayer.saveCfg(cfg);
-    toast("Config guardada ✅");
+    // Config fija (credenciales embebidas + autosync ON)
+    StorageLayer.saveCfg(StorageLayer.loadCfg());
+    toast("Config fija (Autosync ON) ✅");
   }
   async function testCfg(){
     const cfg = StorageLayer.loadCfg();
@@ -1975,17 +1971,6 @@
       toast("No pude subir ❌");
     }
   }
-  async function resetApp(){
-    const cfg = StorageLayer.loadCfg();
-    const want = (el("resetKeyInput").value||"").trim();
-    if(!cfg.resetKey){ toast("Primero definí una clave de reset"); return; }
-    if(want !== cfg.resetKey){ toast("Clave incorrecta ❌"); return; }
-    if(!confirm("Esto borra TODO. ¿Seguro?")) return;
-
-    StorageLayer.hardResetLocal();
-    if(cfg.binId && cfg.accessKey){
-      try{ await StorageLayer.jsonbinPut(cfg.binId, cfg.accessKey, defaultState()); }catch{}
-    }
 
     state = defaultState();
     selectedSceneId = null;
@@ -2176,7 +2161,6 @@
     el("btnTestCfg")?.addEventListener("click", testCfg);
     el("btnPullRemote")?.addEventListener("click", pullRemote);
     el("btnPushRemote")?.addEventListener("click", pushRemote);
-    el("btnResetApp")?.addEventListener("click", resetApp);
 
     el("projectTitle")?.addEventListener("input", ()=>{
       state.meta.title = el("projectTitle").value || "Proyecto";
