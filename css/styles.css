@@ -283,40 +283,31 @@ tr.groupRow td{
 .collapsible.collapsed .cardHeader{ border-bottom:none; }
 
 /* ===================== FIX 1: Plan de Rodaje sin scroll de hoja ===================== */
-#view-shooting{ overflow-y:auto; overflow-x:hidden; } /* la hoja scrollea hasta el final del Detalle */
+#view-shooting{ overflow:auto; } /* la hoja no scrollea por Tablero */
 .shootingLayout{
   min-height:0;
   display:grid;
-  grid-template-columns: clamp(280px, 26vw, 360px) minmax(0, 1fr);
+  grid-template-columns: 360px 1fr;
   gap:14px;
-  align-items:start;
 }
+
+/* Banco: fijo en pantalla con scroll interno */
+#bankCol{ position:sticky; top:0; align-self:start; height: calc(100vh - 28px); }
+#bankCol .bankCard{ height:100%; }
 .shootingLayout .col{
   min-height:0;
   display:flex;
   flex-direction:column;
   gap:14px; /* ✅ separación real entre tarjetas */
-
-  min-width:0;
 }
 
-
-/* Banco pegado arriba (mientras la hoja scrollea) */
-#bankCol{
-  position: sticky;
-  top: 0;
-  align-self: start;
-}
-/* Banco: altura fija (1 pantalla) y scrollea solo adentro */
-.bankCard{
-  height: calc(100vh - 40px);
-  max-height: calc(100vh - 40px);
-  min-height: 340px;
-}
+/* Banco: ocupa todo el alto y scrollea solo adentro */
+.bankCard{ flex:1 1 auto; min-height:0; }
 .bankCard .cardContent{
   display:flex;
   flex-direction:column;
   min-height:0;
+  overflow:hidden;
 }
 .bankList{
   margin-top:10px;
@@ -332,10 +323,9 @@ tr.groupRow td{
 /* Tablero: scroll propio, altura fija (no max-height “a veces sí a veces no”) */
 #daysBoardCard{ flex:0 0 auto; }
 .daysBoardWrap{
-  height: clamp(220px, 38vh, 520px);
-  max-width: 100%;
-  min-width: 0;
-  overflow: auto; /* ✅ scroll independiente (incluye lateral) */
+height: clamp(220px, 38vh, 520px); /* ✅ SIEMPRE scroll independiente */
+  overflow-x:auto;
+  overflow-y:auto;
   overscroll-behavior: contain;
   padding-bottom:8px;
   scrollbar-gutter: stable both-edges;
@@ -344,12 +334,16 @@ tr.groupRow td{
   display:flex;
   gap:12px;
   min-height: 240px;
-  width: max-content; /* permite scroll horizontal interno */
 }
 
-/* Detalle: sin scroll interno (la hoja scrollea y se ve completo) */
-#dayDetailCard{ flex:0 0 auto; }
-#dayDetailCard .cardContent{ overflow: visible; }
+/* Detalle: ocupa el resto del alto y scrollea adentro */
+#dayDetailCard{
+  flex:1 1 auto;
+  min-height:0;
+}
+#dayDetailCard .cardContent{
+  overflow: visible;
+}
 
 .dayCol{
   width:320px;
@@ -427,7 +421,6 @@ tr.groupRow td{
 
 /* Banco colapsado */
 .bankDock{
-  order:-1;
   display:flex;
   align-items:center;
   justify-content:center;
@@ -441,8 +434,10 @@ tr.groupRow td{
 .shootingLayout.bankCollapsed{
   grid-template-columns: 64px 1fr;
 }
-.shootingLayout.bankCollapsed .bankCard{ display:none; }
+.shootingLayout.bankCollapsed #sceneBankBody{ display:none; }
+.shootingLayout.bankCollapsed #sceneBankHeader .cardTitle{ display:none; }
 .shootingLayout.bankCollapsed #bankDock{ display:flex; }
+.shootingLayout.bankCollapsed #btnToggleBank{ display:none; }
 
 /* Scene cards */
 .sceneCard{
@@ -458,7 +453,7 @@ tr.groupRow td{
 .sceneCard .title{ font-weight:900; }
 .sceneCard .meta{ font-size:12px; color:var(--muted); margin-top:4px; }
 .sceneCard .dragHandle{ cursor:grab; color:var(--muted); font-weight:900; }
-.sceneCard.assigned{ border-color: rgba(110,231,255,.45); }
+.sceneCard.assigned{ border-color: rgba(113,255,122,.55); }
 .sceneCard.unassigned{ border-color: rgba(255,92,92,.55); }
 
 /* Breakdown elements grid */
@@ -701,166 +696,16 @@ tr.groupRow td{
   .schedBoard, .reportsBoard{ overflow:visible; }
 }
 
-/* Plan de Rodaje: cards derecha a ancho disponible */
-#daysBoardCard, #dayDetailCard{ width:100%; max-width:100%; min-width:0; }
+
+/* Plan de Rodaje: evitar overflow horizontal */
+#daysBoardCard, #dayDetailCard{ max-width:100%; }
+#daysBoardWrap{ max-width:100%; }
 
 
-/* ===================== RESTORE REPORTES & CALLS (v1) ===================== */
-.reportHead{
-  padding:10px 12px;
-  border-bottom:1px solid var(--border);
-  background: linear-gradient(180deg, rgba(255,255,255,.05), rgba(255,255,255,.01));
-}
-.reportHead .t{ font-weight:900; }
-.reportHead .m{ color:var(--muted); font-size:12px; margin-top:4px; }
-.reportBody{
-  padding:12px;
-  overflow:auto;
-  flex:1 1 auto;
-  min-height:0;
-  overscroll-behavior: contain;
-}
-
-.repCrewArea{ margin-top:10px; }
-.repCrewAreaT{ font-weight:900; margin-bottom:6px; opacity:.95; }
-.repCrewAreaL{ display:flex; flex-direction:column; gap:6px; }
-
-/* Call sheet calendar */
-#view-callsheet{ overflow:hidden; }
-#view-callsheet .grid2{ height:100%; margin-bottom:0; }
-#callCalCard, #callDetailCard{
-  height:100%;
-  display:flex;
-  flex-direction:column;
-  min-height:0;
-}
-#callCalCard .cardContent, #callDetailCard .cardContent{
-  flex:1 1 auto;
-  min-height:0;
-  overflow:auto;
-  overscroll-behavior: contain;
-}
-
-.calGrid{
-  display:grid;
-  grid-template-columns: repeat(7, 1fr);
-  gap:8px;
-}
-.calCell{
-  border:1px solid var(--border);
-  border-radius:14px;
-  padding:10px;
-  background: rgba(255,255,255,.02);
-  cursor:pointer;
-  min-height:64px;
-  transition: transform .08s ease, border-color .08s ease;
-}
-.calCell:hover{ border-color:var(--border2); }
-.calCell:active{ transform: scale(.99); }
-.calCell.hasShoot{ border-color: rgba(110,231,255,.40); }
-.calCell.selected{ outline:2px solid rgba(110,231,255,.35); }
-.calCell .d{ font-weight:900; }
-.calCell .tag{ margin-top:6px; color:var(--muted); font-size:12px; }
-
-/* ===================== Reportes + Call Sheets: bloques visuales ===================== */
-.catBlock{
-  border:1px solid var(--border);
-  border-radius:16px;
-  overflow:hidden;
-  background: rgba(0,0,0,.14);
-  margin-top:10px;
-}
-.catBlock .hdr{
-  padding:10px 12px;
-  display:flex;
-  align-items:center;
-  gap:10px;
-  font-weight:900;
-  border-bottom:1px solid var(--border);
-  background: rgba(255,255,255,.03);
-}
-.catBlock .items{
-  padding:10px 12px;
-  display:flex;
-  flex-direction:column;
-  gap:6px;
-  font-size:13px;
-}
-
-.kpiRow{
-  margin-top:10px;
-  display:flex;
-  flex-wrap:wrap;
-  gap:8px;
-}
-.kpi{
-  display:inline-flex;
-  align-items:center;
-  gap:8px;
-  padding:6px 10px;
-  border-radius:999px;
-  border:1px solid var(--border);
-  background: rgba(0,0,0,.18);
-  font-size:12px;
-  color:var(--muted);
-  white-space:nowrap;
-}
-.kpi b{ color:var(--text); }
-
-/* Call sheet layout (desktop) */
-#callSheetDetail{
-  display:grid;
-  grid-template-columns: 1.2fr .8fr;
-  gap:12px;
-}
-#callSheetDetail .catBlock{ margin-top:0; }
-#callSheetDetail .callHeader{ grid-column: 1 / -1; }
-#callSheetDetail .callCrew{ grid-column: 1 / -1; }
-@media (max-width:1200px){
-  #callSheetDetail{ grid-template-columns: 1fr; }
-}
-
-/* Scrollbars visibles (Chrome/Edge) */
-.daysBoardWrap::-webkit-scrollbar,
-.bankList::-webkit-scrollbar,
-.reportsBoard::-webkit-scrollbar,
-.reportBody::-webkit-scrollbar,
-#callCalCard .cardContent::-webkit-scrollbar,
-#callDetailCard .cardContent::-webkit-scrollbar,
-#sceneEditorCard .cardContent::-webkit-scrollbar{
-  height:12px;
-  width:12px;
-}
-.daysBoardWrap::-webkit-scrollbar-thumb,
-.bankList::-webkit-scrollbar-thumb,
-.reportsBoard::-webkit-scrollbar-thumb,
-.reportBody::-webkit-scrollbar-thumb,
-#callCalCard .cardContent::-webkit-scrollbar-thumb,
-#callDetailCard .cardContent::-webkit-scrollbar-thumb,
-#sceneEditorCard .cardContent::-webkit-scrollbar-thumb{
-  background: rgba(255,255,255,.18);
-  border-radius:999px;
-  border:3px solid rgba(0,0,0,.18);
-}
-.daysBoardWrap::-webkit-scrollbar-track,
-.bankList::-webkit-scrollbar-track,
-.reportsBoard::-webkit-scrollbar-track,
-.reportBody::-webkit-scrollbar-track,
-#callCalCard .cardContent::-webkit-scrollbar-track,
-#callDetailCard .cardContent::-webkit-scrollbar-track,
-#sceneEditorCard .cardContent::-webkit-scrollbar-track{
-  background: rgba(0,0,0,.12);
-}
-
-/* Print */
-@media print{
-  body{ background:#fff; color:#000; }
-  .sidebar, .noPrint, #toast, #hoverTip { display:none !important; }
-  .shell{ grid-template-columns: 1fr; }
-  .main{ padding:0; }
-  .view{ height:auto; overflow:visible; }
-  .card{ box-shadow:none; border:1px solid #ddd; background:#fff; }
-  .cardHeader{ border-bottom:1px solid #ddd; }
-  .muted{ color:#333; }
-  .schedBoard, .reportsBoard{ overflow:visible; }
-}
+/* Cronograma: scrollbar horizontal siempre visible abajo */
+#view-schedule{ overflow:hidden; }
+#scheduleCard{ height:100%; display:flex; flex-direction:column; min-height:0; }
+#scheduleCard .cardContent{ flex:1 1 auto; min-height:0; }
+.scheduleContent{ flex:1 1 auto; min-height:0; }
+.schedBoard{ flex:1 1 auto; min-height:0; order:1; }
+.schedScrollTop{ order:2; margin-top:8px; }
