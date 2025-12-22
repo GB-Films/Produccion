@@ -1972,14 +1972,6 @@
     }
   }
 
-    state = defaultState();
-    selectedSceneId = null;
-    selectedDayId = null;
-    callSheetDayId = null;
-    touch();
-    hydrateAll();
-    toast("Reset OK ✅");
-  }
 
   // Bind events (igual que antes, pero llamamos setupScheduleTopScrollbar después de render schedule)
   function bindEvents(){
