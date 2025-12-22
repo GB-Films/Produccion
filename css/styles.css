@@ -606,18 +606,30 @@ tr.groupRow td{
 }
 .schedScrollTopInner{ height:1px; }
 
+.schedWrap{
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-gutter: stable both-edges;
+  overscroll-behavior: contain;
+}
+
+/* Scroll horizontal real (oculto). Lo controlamos con el “dock” de abajo */
 .schedBoard{
   display:flex;
   gap:12px;
-  overflow-x: scroll;
-  overflow-y: auto;
-  padding-bottom:14px;
-  scrollbar-gutter: stable both-edges;
-  overscroll-behavior: contain;
-  flex: 1 1 auto;
+  overflow-x: auto;
+  overflow-y: visible;
+  padding-bottom: 22px; /* espacio para que no tape el dock */
+  flex: 0 0 auto;
   min-height: 0;
-  order: 1;
+  overscroll-behavior: contain;
+
+  /* ocultar este scrollbar: queremos ver solo el de abajo */
+  scrollbar-width: none;
 }
+.schedBoard::-webkit-scrollbar{ height:0; }
 
 .schedDay{
   width:360px;
@@ -879,6 +891,7 @@ tr.groupRow td{
 /* Scrollbars visibles (Chrome/Edge) */
 .daysBoardWrap::-webkit-scrollbar,
 .bankList::-webkit-scrollbar,
+.schedWrap::-webkit-scrollbar,
 .reportsBoard::-webkit-scrollbar,
 .reportBody::-webkit-scrollbar,
 #callCalCard .cardContent::-webkit-scrollbar,
@@ -889,6 +902,7 @@ tr.groupRow td{
 }
 .daysBoardWrap::-webkit-scrollbar-thumb,
 .bankList::-webkit-scrollbar-thumb,
+.schedWrap::-webkit-scrollbar-thumb,
 .reportsBoard::-webkit-scrollbar-thumb,
 .reportBody::-webkit-scrollbar-thumb,
 #callCalCard .cardContent::-webkit-scrollbar-thumb,
@@ -900,6 +914,7 @@ tr.groupRow td{
 }
 .daysBoardWrap::-webkit-scrollbar-track,
 .bankList::-webkit-scrollbar-track,
+.schedWrap::-webkit-scrollbar-track,
 .reportsBoard::-webkit-scrollbar-track,
 .reportBody::-webkit-scrollbar-track,
 #callCalCard .cardContent::-webkit-scrollbar-track,
