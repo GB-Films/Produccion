@@ -96,6 +96,13 @@
   function getScene(id){ return state.scenes.find(s=>s.id===id) || null; }
   function getDay(id){ return state.shootDays.find(d=>d.id===id) || null; }
   function union(arr){ return Array.from(new Set((arr||[]).filter(Boolean))); }
+  function fmtPages(n){
+    const v = Math.round((Number(n)||0) * 100) / 100;
+    const s = String(v);
+    return s.includes(".") ? s.replace(/\.?0+$/,"" ) : s;
+  }
+
+
 
   function normalizeTOD(raw){
     const t = (raw||"").trim().toLowerCase();
@@ -354,33 +361,6 @@
     if(name==="settings"){ loadCfgToUI(); }
   }
 
-
-
-  // Abrir una escena directamente en Breakdown (para editar) y dejarla visible
-  function openSceneInBreakdown(sceneId){
-    if(!sceneId) return;
-    const s = getScene(sceneId);
-    if(!s) return;
-
-    // limpiar filtros para evitar que “desaparezca”
-    const q = el("sceneSearch"); if(q) q.value = "";
-    const tod = el("sceneFilterTOD"); if(tod) tod.value = "";
-
-    selectedSceneId = sceneId;
-    showView("breakdown");
-    renderScenesTable();
-    renderSceneEditor();
-
-    // scroll + focus (en el próximo frame para asegurar DOM)
-    requestAnimationFrame(()=>{
-      const tr = el("sceneTable")?.querySelector(`tbody tr[data-scene-id="${sceneId}"]`);
-      if(tr) tr.scrollIntoView({ block:"center" });
-      const slug = el("scene_slugline");
-      if(slug){ slug.focus(); try{ slug.select(); }catch{} }
-    });
-  }
-
-
   // ======= Script parser (INT/EXT) =======
   function parseScreenplayToScenes(text, extraKeywordsCsv=""){
     const rawLines = (text||"").split(/\r?\n/);
@@ -527,7 +507,6 @@
     for(const s of list){
       const tr = document.createElement("tr");
       tr.className = (s.id===selectedSceneId) ? "selected" : "";
-      tr.dataset.sceneId = s.id;
       tr.innerHTML = `
         <td>${esc(s.number||"")}</td>
         <td>${esc(s.slugline||"")}</td>
@@ -543,6 +522,39 @@
       tbody.appendChild(tr);
     }
   }
+
+  function scrollSelectedSceneIntoView(){
+    const table = el("sceneTable");
+    if(!table) return;
+    const row = table.querySelector("tbody tr.selected");
+    if(!row) return;
+
+    // scrollea el contenedor de la tabla (no la hoja completa)
+    row.scrollIntoView({ block:"center", inline:"nearest" });
+  }
+
+  function jumpToSceneInBreakdown(sceneId){
+    // aseguramos que la escena exista
+    const s = state.scenes.find(x=>x.id===sceneId);
+    if(!s) return;
+
+    selectedSceneId = sceneId;
+
+    // si había filtros activos, los limpiamos para que la escena aparezca sí o sí
+    const q = el("sceneSearch"); if(q) q.value = "";
+    const tod = el("sceneFilterTOD"); if(tod) tod.value = "";
+
+    showView("breakdown");
+    renderScenesTable();
+    renderSceneEditor();
+
+    // después del render, llevamos la lista a la fila seleccionada
+    requestAnimationFrame(()=>{
+      scrollSelectedSceneIntoView();
+      el("scene_slugline")?.focus();
+    });
+  }
+
 
   function renderSceneEditor(){
     const s = selectedSceneId ? state.scenes.find(x=>x.id===selectedSceneId) : null;
@@ -751,9 +763,10 @@
 
     attachSceneHover(node, scene);
 
+    // Doble click: abrir en Breakdown para editar
     node.addEventListener("dblclick", (e)=>{
       e.stopPropagation();
-      openSceneInBreakdown(scene.id);
+      jumpToSceneInBreakdown(scene.id);
     });
 
     node.addEventListener("dragstart", (e)=>{
@@ -1316,16 +1329,13 @@
 
       const head = document.createElement("div");
       head.className = "reportHead";
-      head.innerHTML = `
-        <div class="t">${esc(formatDayTitle(d.date))}${d.label? " · "+esc(d.label):""}</div>
-        <div class="m">Call ${esc(d.callTime||"")} · ${esc(d.location||"")}</div>
-      `;
 
       const body = document.createElement("div");
       body.className = "reportBody";
 
       const scenes = (d.sceneIds||[]).map(getScene).filter(Boolean);
       const cast = union(scenes.flatMap(s=>s.elements?.cast||[]));
+      const pages = scenes.reduce((acc, s)=> acc + (Number(s.pages)||0), 0);
 
       const crewAll = (d.crewIds||[])
         .map(id=>state.crew.find(c=>c.id===id))
@@ -1334,6 +1344,17 @@
         .filter(c=>c.area!=="Cast");
 
       const grouped = groupCrewByArea(crewAll);
+
+      head.innerHTML = `
+        <div class="t">${esc(formatDayTitle(d.date))}${d.label? " · "+esc(d.label):""}</div>
+        <div class="m">Call ${esc(d.callTime||"")} · ${esc(d.location||"")}</div>
+        <div class="kpiRow">
+          <span class="kpi"><b>${scenes.length}</b> escenas</span>
+          <span class="kpi"><b>${fmtPages(pages)}</b> pág</span>
+          <span class="kpi"><b>${cast.length}</b> cast</span>
+          <span class="kpi"><b>${crewAll.length}</b> crew</span>
+        </div>
+      `;
 
       const scenesBox = document.createElement("div");
       scenesBox.className = "catBlock";
@@ -1469,9 +1490,7 @@
 
         attachSceneHover(block, s);
 
-        block.addEventListener("dblclick", ()=>{
-          openSceneInBreakdown(s.id);
-        });
+        block.addEventListener("dblclick", ()=> jumpToSceneInBreakdown(s.id));
 
         grid.appendChild(block);
       }
@@ -1523,15 +1542,33 @@
         offsetY,
         gridRect,
         snapMin,
-        pxPerMin
+        pxPerMin,
+        pointerId: e.pointerId,
+        startClientX: e.clientX,
+        startClientY: e.clientY,
+        moved: false,
+        captured: false
       };
 
       hideHoverTip();
-      block.setPointerCapture(e.pointerId);
+      // Importante: no capturamos el puntero aún; lo hacemos recién cuando hay drag real.
+
     };
 
     board.onpointermove = (e)=>{
       if(!schedDrag) return;
+
+      // Umbral de drag: si no se movió, no hacemos nada (así el doble click funciona)
+      if(!schedDrag.moved){
+        const dx = e.clientX - schedDrag.startClientX;
+        const dy = e.clientY - schedDrag.startClientY;
+        if(Math.abs(dx) < 4 && Math.abs(dy) < 4) return;
+        schedDrag.moved = true;
+        if(!schedDrag.captured){
+          try{ schedDrag.block.setPointerCapture(schedDrag.pointerId); }catch(_){ }
+          schedDrag.captured = true;
+        }
+      }
 
       const { mode, dayId, sceneId, snapMin, pxPerMin } = schedDrag;
 
@@ -1578,6 +1615,16 @@
     board.onpointerup = (e)=>{
       if(!schedDrag) return;
       const { mode, dayId, sceneId, snapMin, pxPerMin } = schedDrag;
+
+      // Si fue solo un click (sin drag), no re-renderizamos (permite doble click)
+      if(mode === "move" && !schedDrag.moved){
+        schedDrag = null;
+        return;
+      }
+      if(mode === "resize" && !schedDrag.moved){
+        schedDrag = null;
+        return;
+      }
 
       if(mode === "resize"){
         touch();
@@ -1736,12 +1783,19 @@
     const crewGrouped = groupCrewByArea(crewAll);
 
     const header = document.createElement("div");
-    header.className = "catBlock";
+    header.className = "catBlock callHeader";
+    const pages = scenes.reduce((acc, s)=> acc + (Number(s.pages)||0), 0);
     header.innerHTML = `
       <div class="hdr"><span class="dot" style="background:var(--cat-props)"></span>${esc(state.meta.title||"Proyecto")}</div>
       <div class="items">
         <div><b>Día:</b> ${esc(formatDayTitle(d.date))}${d.label? " · "+esc(d.label):""}</div>
         <div><b>Call:</b> ${esc(d.callTime||"")} &nbsp; <b>Locación:</b> ${esc(d.location||"")}</div>
+        <div class="kpiRow" style="margin-top:10px;">
+          <span class="kpi"><b>${scenes.length}</b> escenas</span>
+          <span class="kpi"><b>${fmtPages(pages)}</b> pág</span>
+          <span class="kpi"><b>${cast.length}</b> cast</span>
+          <span class="kpi"><b>${crewAll.length}</b> crew</span>
+        </div>
         ${d.notes ? `<div style="margin-top:8px;"><b>Notas:</b> ${esc(d.notes)}</div>` : ""}
       </div>
     `;
@@ -1751,7 +1805,7 @@
     resolveOverlapsPushDown(d, snapMin);
 
     const scenesBox = document.createElement("div");
-    scenesBox.className = "catBlock";
+    scenesBox.className = "catBlock callScenes";
     scenesBox.innerHTML = `<div class="hdr"><span class="dot" style="background:var(--cat-vehicles)"></span>Escenas</div>`;
     const list = document.createElement("div");
     list.className = "items";
@@ -1769,7 +1823,7 @@
     wrap.appendChild(scenesBox);
 
     const castBox = document.createElement("div");
-    castBox.className = "catBlock";
+    castBox.className = "catBlock callCast";
     castBox.innerHTML = `
       <div class="hdr"><span class="dot" style="background:${catColors.cast}"></span>Cast</div>
       <div class="items">${cast.length ? cast.map(n=>`<div>${esc(n)}</div>`).join("") : "<div>—</div>"}</div>
@@ -1777,7 +1831,7 @@
     wrap.appendChild(castBox);
 
     const crewBox = document.createElement("div");
-    crewBox.className = "catBlock";
+    crewBox.className = "catBlock callCrew";
     crewBox.innerHTML = `<div class="hdr"><span class="dot" style="background:var(--cat-sound)"></span>Crew</div>`;
     const crewItems = document.createElement("div");
     crewItems.className = "items";
