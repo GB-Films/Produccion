@@ -40,6 +40,9 @@
   let selectedDayId = null;
   let callSheetDayId = null;
 
+  // Crew table: which rows are expanded to show assigned shoot days
+  let expandedCrewIds = new Set();
+
   let calCursor = { year: new Date().getFullYear(), month: new Date().getMonth() };
   let schedDrag = null;
 
@@ -100,6 +103,11 @@
     const v = Math.round((Number(n)||0) * 100) / 100;
     const s = String(v);
     return s.includes(".") ? s.replace(/\.?0+$/,"" ) : s;
+  }
+
+  function daysForCrew(crewId){
+    sortShootDaysInPlace();
+    return (state.shootDays||[]).filter(d=> (d.crewIds||[]).includes(crewId));
   }
 
 
@@ -1240,6 +1248,14 @@
     const q = (el("crewSearch")?.value||"").toLowerCase();
     tbody.innerHTML = "";
 
+    // Helper: which shoot days include this crew member
+    function crewDays(crewId){
+      sortShootDaysInPlace();
+      return state.shootDays
+        .filter(d => (d.crewIds||[]).includes(crewId))
+        .map(d => ({ id:d.id, date:d.date, label:d.label, location:d.location, callTime:d.callTime }));
+    }
+
     let list = state.crew.map(c=>({ ...c, area: normalizeCrewArea(c.area) }));
     if(q){
       list = list.filter(c=>{
@@ -1272,9 +1288,12 @@
       const tr = document.createElement("tr");
       tr.innerHTML = `
         <td>
-          <select class="input">
-            ${crewAreas.map(a=>`<option value="${esc(a)}" ${c.area===a?"selected":""}>${esc(a)}</option>`).join("")}
-          </select>
+          <div class="crewAreaCell">
+            <button class="btn icon crewExpander" title="Ver días">▸</button>
+            <select class="input">
+              ${crewAreas.map(a=>`<option value="${esc(a)}" ${c.area===a?"selected":""}>${esc(a)}</option>`).join("")}
+            </select>
+          </div>
         </td>
         <td><input class="input" value="${esc(c.role||"")}" /></td>
         <td><input class="input" value="${esc(c.name||"")}" /></td>
@@ -1283,6 +1302,20 @@
         <td><input class="input" value="${esc(c.notes||"")}" /></td>
         <td><button class="btn danger">Borrar</button></td>
       `;
+
+      const expBtn = tr.querySelector(".crewExpander");
+      if(expBtn){
+        const open = expandedCrewIds.has(real.id);
+        expBtn.textContent = open ? "▾" : "▸";
+        expBtn.addEventListener("click", (e)=>{
+          e.preventDefault();
+          e.stopPropagation();
+          if(expandedCrewIds.has(real.id)) expandedCrewIds.delete(real.id);
+          else expandedCrewIds.add(real.id);
+          renderCrew();
+        });
+      }
+
       const [areaSel, role, name, phone, email, notes] = tr.querySelectorAll("select,input");
       areaSel.addEventListener("change", ()=>{ real.area = normalizeCrewArea(areaSel.value); touch(); renderCrew(); refreshElementSuggestions(); renderReports(); renderCallSheetDetail(); });
       role.addEventListener("input", ()=>{ real.role = role.value; touch(); renderReports(); renderCallSheetDetail(); });
@@ -1291,7 +1324,8 @@
       email.addEventListener("input", ()=>{ real.email = email.value; touch(); });
       notes.addEventListener("input", ()=>{ real.notes = notes.value; touch(); });
 
-      tr.querySelector("button").addEventListener("click", ()=>{
+      const delBtn = tr.querySelector("button.btn.danger");
+      delBtn?.addEventListener("click", ()=>{
         if(!confirm("Borrar integrante?")) return;
         for(const d of state.shootDays){
           d.crewIds = (d.crewIds||[]).filter(id=>id!==real.id);
@@ -1306,6 +1340,30 @@
       });
 
       tbody.appendChild(tr);
+
+      // Expanded detail row (days in shooting plan)
+      if(expandedCrewIds.has(real.id)){
+        const days = crewDays(real.id);
+        const trD = document.createElement("tr");
+        trD.className = "crewDetailRow";
+
+        const daysHtml = days.length
+          ? `<div class="crewDayPills">${days.map(d=>{
+                const title = `${formatDayTitle(d.date)}${d.label ? " · "+(d.label||"") : ""}`;
+                return `<span class="pill">${esc(title)}</span>`;
+              }).join("")}</div>`
+          : `<div class="muted small">No está asignado a ningún día del Plan de Rodaje.</div>`;
+
+        trD.innerHTML = `
+          <td colspan="7">
+            <div class="crewDetailBox">
+              <div class="muted small" style="margin-bottom:8px;">Días donde está cargado</div>
+              ${daysHtml}
+            </div>
+          </td>
+        `;
+        tbody.appendChild(trD);
+      }
     }
 
     if(!list.length){
@@ -1975,6 +2033,15 @@
 
     el("elCategory")?.addEventListener("change", refreshElementSuggestions);
     el("btnAddSceneElement")?.addEventListener("click", addSceneElement);
+
+    // Enter also adds element (same as clicking Agregar)
+    el("elItem")?.addEventListener("keydown", (e)=>{
+      if(e.isComposing) return;
+      if(e.key === "Enter"){
+        e.preventDefault();
+        addSceneElement();
+      }
+    });
 
     el("btnImportScenes")?.addEventListener("click", ()=>{
       const txt = el("sceneImportText").value || "";

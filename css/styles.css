@@ -147,7 +147,32 @@ body{
   justify-content:space-between;
   gap:10px;
 }
-.cardTitle{ margin:0; font-size:14px; letter-spacing:.2px; font-weight:900; }
+.cardTitle{ margin:0; font-size:16px; letter-spacing:.2px; font-weight:950; line-height:1.15; }
+
+/* Crew expand details */
+.crewAreaCell{ display:flex; align-items:center; gap:10px; }
+.crewExpander{
+  width:28px;
+  height:28px;
+  padding:0;
+  border-radius:10px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+}
+.crewDetailRow td{
+  padding:10px 12px;
+  background: rgba(255,255,255,.02);
+  border-top: 1px solid var(--border);
+}
+.crewDetailBox{
+  border: 1px solid var(--border);
+  background: rgba(0,0,0,.18);
+  border-radius: 14px;
+  padding: 10px;
+}
+.crewDayPills{ display:flex; flex-wrap:wrap; gap:8px; }
+.crewDayPills .pill{ background: rgba(255,255,255,.04); }
 .cardContent{ padding:14px; }
 
 .row{ display:flex; }
