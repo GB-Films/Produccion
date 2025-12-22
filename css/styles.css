@@ -373,7 +373,8 @@ tr.groupRow td{
   max-width: 100%;
   min-width: 0;
   overflow: auto; /* ✅ scroll independiente (incluye lateral) */
-  overscroll-behavior: contain;
+  overscroll-behavior-x: contain;
+  overscroll-behavior-y: auto;
   padding-bottom:8px;
   scrollbar-gutter: stable both-edges;
 }
@@ -595,7 +596,8 @@ tr.groupRow td{
 }
 
 .schedScrollTop{
-  height:14px;
+  height:22px;
+  min-height:22px;
   overflow-x:scroll;
   overflow-y:hidden;
   scrollbar-gutter: stable both-edges;
@@ -612,7 +614,8 @@ tr.groupRow td{
   overflow-y: auto;
   overflow-x: hidden;
   scrollbar-gutter: stable both-edges;
-  overscroll-behavior: contain;
+  overscroll-behavior-x: contain;
+  overscroll-behavior-y: auto;
 }
 
 /* Scroll horizontal real (oculto). Lo controlamos con el “dock” de abajo */
@@ -624,7 +627,8 @@ tr.groupRow td{
   padding-bottom: 22px; /* espacio para que no tape el dock */
   flex: 0 0 auto;
   min-height: 0;
-  overscroll-behavior: contain;
+  overscroll-behavior-x: contain;
+  overscroll-behavior-y: auto;
 
   /* ocultar este scrollbar: queremos ver solo el de abajo */
   scrollbar-width: none;
@@ -786,7 +790,8 @@ tr.groupRow td{
   overflow:auto;
   flex:1 1 auto;
   min-height:0;
-  overscroll-behavior: contain;
+  overscroll-behavior-x: contain;
+  overscroll-behavior-y: auto;
 }
 
 .repCrewArea{ margin-top:10px; }
@@ -806,7 +811,8 @@ tr.groupRow td{
   flex:1 1 auto;
   min-height:0;
   overflow:auto;
-  overscroll-behavior: contain;
+  overscroll-behavior-x: contain;
+  overscroll-behavior-y: auto;
 }
 
 .calGrid{

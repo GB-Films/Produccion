@@ -422,6 +422,35 @@
     top.scrollLeft = board.scrollLeft;
   }
 
+// ======= NUEVO: Scroll vertical con ruedita en cualquier lado (Cronograma) =======
+function setupScheduleWheelScroll(){
+  const view = el("view-schedule");
+  const wrap = el("schedWrap");
+  if(!view || !wrap) return;
+
+  if(view.dataset.wheelBound === "1") return;
+  view.dataset.wheelBound = "1";
+
+  // Nota: usamos un listener NO pasivo para poder evitar que el wheel “muera”
+  // cuando el cursor está sobre elementos no-scrollables dentro del cronograma.
+  view.addEventListener("wheel", (e)=>{
+    if(view.classList.contains("hidden")) return;
+
+    const tag = (e.target && e.target.tagName) ? e.target.tagName.toUpperCase() : "";
+    if(tag === "SELECT" || tag === "INPUT" || tag === "TEXTAREA") return;
+
+    // Si el usuario está forzando horizontal (Shift) o es principalmente horizontal, no lo tocamos.
+    if(e.shiftKey) return;
+    if(Math.abs(e.deltaX) > Math.abs(e.deltaY)) return;
+
+    const maxScroll = wrap.scrollHeight - wrap.clientHeight;
+    if(maxScroll <= 1) return;
+
+    wrap.scrollTop += e.deltaY;
+    e.preventDefault();
+  }, { passive:false });
+}
+
   function showView(name){
     views.forEach(v=>{
       const node = el(`view-${v}`);
@@ -2304,6 +2333,7 @@
     callSheetDayId = selectedDayId;
 
     bindEvents();
+    setupScheduleWheelScroll();
     hydrateAll();
     showView("breakdown");
 
