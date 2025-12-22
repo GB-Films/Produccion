@@ -40,6 +40,13 @@
   let selectedDayId = null;
   let callSheetDayId = null;
 
+  // Sync safety:
+  // - We do an initial pull from JSONBin when possible (especially on first run)
+  // - We avoid pushing until that initial sync decision is made
+  let syncReady = false;
+  let bootHadLocal = false;
+  let bootAppliedRemote = false;
+
   // Crew table: which rows are expanded to show assigned shoot days
   let expandedCrewIds = new Set();
 
@@ -67,7 +74,7 @@
     if(saved) saved.textContent = new Date(state.meta.updatedAt).toLocaleString("es-AR");
     const st = el("statusText");
     if(st) st.textContent = "Guardado";
-    autosyncDebounced();
+    if(syncReady) autosyncDebounced();
   }
 
   const autosyncDebounced = window.U.debounce(async ()=>{
@@ -101,6 +108,73 @@
     const v = Math.round((Number(n)||0) * 100) / 100;
     const s = String(v);
     return s.includes(".") ? s.replace(/\.?0+$/,"" ) : s;
+  }
+
+  function isValidState(s){
+    return !!(s && s.meta && Array.isArray(s.scenes) && Array.isArray(s.shootDays) && Array.isArray(s.crew));
+  }
+  function isEmptyState(s){
+    return !(s?.scenes?.length || s?.shootDays?.length || s?.crew?.length);
+  }
+  function tsUpdatedAt(s){
+    const t = Date.parse(s?.meta?.updatedAt || "");
+    return Number.isFinite(t) ? t : 0;
+  }
+
+  async function initRemoteSync(){
+    if(initRemoteSync._running) return;
+    initRemoteSync._running = true;
+    syncReady = false;
+    // Decide whether to adopt remote data, but DO NOT push on init.
+    const cfg = StorageLayer.loadCfg();
+    if(!cfg.binId || !cfg.accessKey){
+      syncReady = true;
+      initRemoteSync._running = false;
+      updateSyncPill("Local");
+      return;
+    }
+
+    try{
+      const remote = await StorageLayer.jsonbinGet(cfg.binId, cfg.accessKey);
+      const remoteOK = isValidState(remote);
+
+      if(remoteOK){
+        const remoteHasData = !isEmptyState(remote);
+        const localHasData  = !isEmptyState(state);
+
+        let shouldAdoptRemote = false;
+
+        // First run (no local) and remote has data => always adopt remote
+        if(!bootHadLocal && remoteHasData) shouldAdoptRemote = true;
+
+        // If local is empty but remote isn't => adopt remote
+        if(!localHasData && remoteHasData) shouldAdoptRemote = true;
+
+        // Otherwise adopt the newest by updatedAt
+        if(!shouldAdoptRemote && tsUpdatedAt(remote) > tsUpdatedAt(state)) shouldAdoptRemote = true;
+
+        if(shouldAdoptRemote){
+          state = remote;
+          bootAppliedRemote = true;
+          StorageLayer.saveLocal(state);
+          selectedSceneId = null;
+          selectedDayId = null;
+          callSheetDayId = null;
+          hydrateAll();
+          toast("Cargué remoto ✅");
+        }
+
+        updateSyncPill("JSONBin");
+      }else{
+        updateSyncPill("Local");
+      }
+    }catch(err){
+      // Offline or blocked: stay local
+      updateSyncPill("Local");
+    }finally{
+      syncReady = true;
+      initRemoteSync._running = false;
+    }
   }
 
   function daysForCrew(crewId){
@@ -2222,7 +2296,8 @@
 
   function init(){
     const local = StorageLayer.loadLocal();
-    state = (local && local.meta) ? local : defaultState();
+    bootHadLocal = !!(local && local.meta);
+    state = bootHadLocal ? local : defaultState();
 
     selectedSceneId = state.scenes?.[0]?.id || null;
     selectedDayId = state.shootDays?.[0]?.id || null;
@@ -2231,6 +2306,13 @@
     bindEvents();
     hydrateAll();
     showView("breakdown");
+
+    // Auto-pull remoto when possible (prevents first-time users overwriting remote data)
+    initRemoteSync();
+    window.addEventListener("online", ()=>{
+      // If we started without remote (offline), retry pulling when connection returns
+      if(!bootAppliedRemote) initRemoteSync();
+    });
   }
 
   window.addEventListener("DOMContentLoaded", init);
