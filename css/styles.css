@@ -30,17 +30,20 @@
 }
 
 html[data-theme="pink"]{
-  --bg:#13080c;
-  --panel:#1b0c12;
-  --card:#23101a;
-  --bg-rgb:19,8,12;
-  --panel-rgb:27,12,18;
-  --panel-deep-rgb:20,9,14;
-  --card-rgb:35,16,26;
-  --accent:#e6b35a;
-  --accent-rgb:230,179,90;
-  --danger:#ff4d6d;
+  --bg:#061512;
+  --panel:#0a1d19;
+  --card:#0e2621;
+
+  --bg-rgb:6,21,18;
+  --panel-rgb:10,29,25;
+  --panel-deep-rgb:7,22,17;
+  --card-rgb:14,38,33;
+
+  --accent:#43f6d3;
+  --accent-rgb:67,246,211;
+  --danger:#ff5c7a;
 }
+
 
 .projectSwitch{
   margin-top:10px;
