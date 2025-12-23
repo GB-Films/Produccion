@@ -906,7 +906,8 @@ tr.groupRow td{
 /* Back-compat: HTML usa scriptWrap/scriptLeft/scriptRight/scriptList */
 .scriptWrap{
   display:grid;
-  grid-template-columns: 340px 1fr;
+  /* +50% ancho del listado de escenas */
+  grid-template-columns: 510px 1fr;
   gap:12px;
   align-items:stretch;
   margin-top:12px;

@@ -144,8 +144,8 @@
       if(raw){
         const arr = JSON.parse(raw);
         if(Array.isArray(arr)){
-          const s = new Set(arr.filter(k=>all.has(k)));
-          if(s.size) reportsFilterSet = s;
+          // Permitimos también el caso "vacío" (0 filtros) para el toggle Todo ON/OFF
+          reportsFilterSet = new Set(arr.filter(k=>all.has(k)));
         }
       }
     }catch{}
@@ -162,6 +162,23 @@
     if(!wrap) return;
     const set = getReportsFilterSet();
     wrap.innerHTML = "";
+
+    // Toggle rápido: seleccionar todos / deseleccionar todos
+    {
+      const allSelected = REPORT_FILTER_KEYS.every(k=>set.has(k));
+      const chipAll = document.createElement("div");
+      chipAll.className = "chip toggle" + (allSelected ? " active" : "");
+      chipAll.innerHTML = `<span>Todo</span>`;
+      chipAll.title = allSelected ? "Deseleccionar todos" : "Seleccionar todos";
+      chipAll.addEventListener("click", ()=>{
+        reportsFilterSet = allSelected ? new Set() : new Set(REPORT_FILTER_KEYS);
+        saveReportsFilterSet();
+        renderReportsFilters();
+        renderReports();
+      });
+      wrap.appendChild(chipAll);
+    }
+
     for(const k of REPORT_FILTER_KEYS){
       const chip = document.createElement("div");
       chip.className = "chip toggle" + (set.has(k) ? " active" : "");
@@ -169,7 +186,6 @@
       chip.addEventListener("click", ()=>{
         const next = new Set(getReportsFilterSet());
         if(next.has(k)) next.delete(k); else next.add(k);
-        if(next.size===0) return toast("Seleccioná al menos 1 filtro");
         reportsFilterSet = next;
         saveReportsFilterSet();
         renderReportsFilters();
@@ -1192,6 +1208,19 @@ function setupScheduleWheelScroll(){
     renderScriptSceneList(v);
     renderScriptSceneEditor(v);
 
+    // Mantener el guion (raw) visible y persistente por versión
+    const panel = el("scriptImportPanel");
+    if(panel) panel.classList.remove("hidden");
+    const ta = el("scriptImportText");
+    if(ta && ta.value !== (v.rawText||"")) ta.value = v.rawText || "";
+    const ki = el("scriptKeywords");
+    if(ki && ki.value !== (v.keywords||"")) ki.value = v.keywords || "";
+    const meta = el("scriptVerMeta");
+    if(meta){
+      const when = v.updatedAt || v.createdAt;
+      meta.textContent = when ? `Actualizado: ${new Date(when).toLocaleString("es-AR")}` : "—";
+    }
+
     // Botón "+ Escena (6A)" dinámico según selección
     const btnIns = el("btnScriptInsertAfter");
     if(btnIns){
@@ -2102,6 +2131,11 @@ function setupScheduleWheelScroll(){
 
     renderReportsFilters();
     const f = getReportsFilterSet();
+
+    if(!f || f.size === 0){
+      board.innerHTML = `<div class="muted">Seleccioná al menos un filtro arriba.</div>`;
+      return;
+    }
 
     for(const d of state.shootDays){
       ensureDayTimingMaps(d);
@@ -3133,8 +3167,32 @@ el("btnParseScript")?.addEventListener("click", ()=>{
       touch();
       toast(`Guion procesado → ${v.name} ✅`);
       renderScriptUI();
-      toggleScriptImportPanel(false);
+      // No ocultamos el panel: el guion debe quedar visible por versión
     });
+
+    // Guardar también el texto crudo del guion y keywords por versión (editable)
+    const taImport = el("scriptImportText");
+    if(taImport && !taImport._bound){
+      taImport._bound = true;
+      taImport.addEventListener("input", ()=>{
+        const v = getActiveScriptVersion();
+        if(!v) return;
+        v.rawText = taImport.value || "";
+        v.updatedAt = new Date().toISOString();
+        touch();
+      });
+    }
+    const kw = el("scriptKeywords");
+    if(kw && !kw._bound){
+      kw._bound = true;
+      kw.addEventListener("input", ()=>{
+        const v = getActiveScriptVersion();
+        if(!v) return;
+        v.keywords = kw.value || "";
+        v.updatedAt = new Date().toISOString();
+        touch();
+      });
+    }
 
     
     el("btnScriptSaveScene")?.addEventListener("click", ()=>{
