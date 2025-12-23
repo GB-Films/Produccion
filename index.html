@@ -136,6 +136,25 @@
 
               <div class="spacer"></div>
               <div id="sceneElementsGrid"></div>
+              <div class="spacer"></div>
+              <div class="row gap alignEnd">
+                <div class="colTitle" style="margin:0;">Planos</div>
+                <button id="btnAddShot" class="btn">+ Plano</button>
+              </div>
+              <div class="tableWrap shotsWrap">
+                <table id="shotsTable" class="table">
+                  <thead>
+                    <tr>
+                      <th style="width:56px;">#</th>
+                      <th style="width:180px;">Tipo</th>
+                      <th>Descripción</th>
+                      <th style="width:72px;"></th>
+                    </tr>
+                  </thead>
+                  <tbody></tbody>
+                </table>
+              </div>
+
             </div>
           </div>
         </div>
@@ -148,6 +167,16 @@
               <button class="btn icon collapseBtn" data-collapse-btn="bd_script" title="Expandir/colapsar">▸</button>
             </div>
             <div class="cardContent">
+              <div class="row gap alignEnd">
+                <div class="field grow">
+                  <label>Versión</label>
+                  <select id="scriptVerSelect" class="input"></select>
+                </div>
+                <button id="btnScriptApply" class="btn">Aplicar al proyecto</button>
+              </div>
+
+              <div class="spacer"></div>
+
               <div class="row gap">
                 <textarea id="scriptImportText" class="textarea" placeholder="Pegá el guion acá…"></textarea>
               </div>
@@ -156,12 +185,46 @@
                   <label>Keywords extra (opcional)</label>
                   <input id="scriptKeywords" class="input" placeholder="Ej: EST., PLANO, MONTAGE" />
                 </div>
-                <button id="btnParseScript" class="btn primary">Detectar escenas</button>
+                <button id="btnParseScript" class="btn primary">Procesar a nueva versión</button>
               </div>
+
+              <div class="scriptVersionUI" id="scriptVersionUI">
+                <div class="scriptGrid">
+                  <div class="scriptList">
+                    <div class="row gap alignEnd">
+                      <div class="muted small">Escenas de la versión</div>
+                      <button id="btnScriptInsertAfter" class="btn">+ Escena (6A)</button>
+                    </div>
+                    <div id="scriptSceneList" class="scriptSceneList"></div>
+                  </div>
+
+                  <div class="scriptEdit">
+                    <div class="field">
+                      <label>Slugline</label>
+                      <input id="scriptSceneSlugline" class="input" placeholder="INT./EXT. ..." />
+                    </div>
+                    <div class="field">
+                      <label>Texto de la escena</label>
+                      <textarea id="scriptSceneBody" class="textarea scriptBodyArea" placeholder="Diálogos / acción…"></textarea>
+                    </div>
+                    <div class="muted small">
+                      Tip: insertá escenas nuevas sin renumerar (6A, 6B, 6C…)
+                    </div>
+                  </div>
+                </div>
+
+                <div class="spacer"></div>
+
+                <div class="field">
+                  <label>Vista lectura (numerada)</label>
+                  <pre id="scriptReadView" class="scriptReadView"></pre>
+                </div>
+              </div>
+
               <div class="muted small">
                 Tip: cada escena debe empezar con una línea que arranque en <b>INT.</b> o <b>EXT.</b>
               </div>
-            </div>
+</div>
           </div>
 
           <div class="card collapsible collapsed" data-collapse-key="bd_table">
