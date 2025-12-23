@@ -221,15 +221,16 @@
     if(p) p.textContent = mode;
   }
 
-  function defaultState(){
+  function defaultState(title){
     return {
-      meta:{ version: 14, title:"Proyecto", updatedAt: new Date().toISOString() },
+      meta:{ version: 14, title: title || "Proyecto", updatedAt: new Date().toISOString() },
       scenes: [],
       shootDays: [],
       crew: [],
       script: { versions: [], activeVersionId: null }
     };
   }
+
 
   function getScene(id){ return state.scenes.find(s=>s.id===id) || null; }
   function getDay(id){ return state.shootDays.find(d=>d.id===id) || null; }
@@ -251,6 +252,19 @@
     return Number.isFinite(t) ? t : 0;
   }
 
+
+  function isUninitializedRemote(remote){
+    if(remote == null) return true;
+    if(typeof remote !== "object") return false;
+    if(Array.isArray(remote)) return false;
+    const keys = Object.keys(remote);
+    if(keys.length === 0) return true;
+    // Common accidental init payload: { "extras": [] }
+    const allowed = new Set(["extras","_meta","schemaVersion"]);
+    const onlyAllowed = keys.every(k=>allowed.has(k));
+    const looksLikeState = !!(remote.meta || remote.scenes || remote.shootDays || remote.crew || remote.script);
+    return onlyAllowed && !looksLikeState;
+  }
   async function initRemoteSync(){
     if(initRemoteSync._running) return;
     initRemoteSync._running = true;
@@ -296,7 +310,19 @@
 
         updateSyncPill("JSONBin");
       }else{
-        updateSyncPill("Local");
+        // Remote exists but is not a valid state. If it looks uninitialized (e.g. {extras:[]})
+        // and this project has no local data yet, bootstrap the remote with our default state.
+        if(!bootHadLocal && isUninitializedRemote(remote)){
+          try{
+            await StorageLayer.jsonbinPut(cfg.binId, cfg.accessKey, state);
+            updateSyncPill("JSONBin");
+            toast("Inicialicé remoto ✅");
+          }catch{
+            updateSyncPill("Local");
+          }
+        }else{
+          updateSyncPill("Local");
+        }
       }
     }catch(err){
       // Offline or blocked: stay local
@@ -3609,9 +3635,43 @@ el("scriptVerSelect")?.addEventListener("change", ()=>{
 
   function init(){
     loadCallSheetCursor();
+
+    const cfg = StorageLayer.loadCfg();
+
+    // Apply per-project theme (pink for Jubilada y Peligrosa)
+    try{
+      if(cfg && cfg.theme && cfg.theme !== "default") document.documentElement.setAttribute("data-theme", cfg.theme);
+      else document.documentElement.removeAttribute("data-theme");
+    }catch{}
+
+    // Project switcher (trusted projects only)
+    try{
+      const sw = el("projectSwitch");
+      if(sw){
+        const projs = (cfg && Array.isArray(cfg.projects)) ? cfg.projects : [];
+        sw.innerHTML = "";
+        for(const p of projs){
+          const opt = document.createElement("option");
+          opt.value = p.id;
+          opt.textContent = p.name;
+          sw.appendChild(opt);
+        }
+        if(cfg && cfg.projectId) sw.value = cfg.projectId;
+        sw.addEventListener("change", ()=>{
+          StorageLayer.setActiveProjectId(sw.value);
+          location.reload();
+        });
+      }
+    }catch{}
+
     const local = StorageLayer.loadLocal();
     bootHadLocal = !!(local && local.meta);
-    state = bootHadLocal ? local : defaultState();
+    state = bootHadLocal ? local : defaultState(cfg && cfg.projectName);
+
+    if(!bootHadLocal){
+      // Persist initial state locally for this project
+      StorageLayer.saveLocal(state);
+    }
 
     selectedSceneId = state.scenes?.[0]?.id || null;
     selectedDayId = state.shootDays?.[0]?.id || null;

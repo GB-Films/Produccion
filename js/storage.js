@@ -1,36 +1,86 @@
 window.StorageLayer = (function(){
-  const KEY_STATE = "gb_prod_state_v1";
-  const KEY_CFG   = "gb_prod_cfg_v1";
+  // Local storage keys (namespaced per project)
+  const KEY_ACTIVE_PROJECT = "gb_active_project_v1";
+  const KEY_STATE_PREFIX   = "gb_prod_state_v1__";
+  const KEY_CFG            = "gb_prod_cfg_v1";
 
   // JSONBin (fixed for this repo)
-  const DEFAULT_BIN_ID = "6945d8e2ae596e708fa5c4d9";
-  const DEFAULT_ACCESS_KEY = "$2a$10$nzjX1kWtm5vCMZj8qtlSoeP/kUp77ZWnpFE6kWIcnBqe1fDL1lkDi";
+  const ACCESS_KEY = "$2a$10$nzjX1kWtm5vCMZj8qtlSoeP/kUp77ZWnpFE6kWIcnBqe1fDL1lkDi";
+
+  // Two trusted projects (switchable)
+  const PROJECTS = [
+    { id:"casona", name:"LA CASONA", binId:"6945d8e2ae596e708fa5c4d9", theme:"default" },
+    { id:"jyp", name:"JUBILADA Y PELIGROSA", binId:"694b0c25ae596e708fad1e75", theme:"pink" }
+  ];
+
+  function getProjects(){
+    return PROJECTS.map(p=>({ id:p.id, name:p.name, theme:p.theme, binId:p.binId }));
+  }
+
+  function getActiveProjectId(){
+    try{
+      const raw = localStorage.getItem(KEY_ACTIVE_PROJECT);
+      const ok = PROJECTS.some(p=>p.id === raw);
+      return ok ? raw : PROJECTS[0].id;
+    }catch{
+      return PROJECTS[0].id;
+    }
+  }
+
+  function setActiveProjectId(id){
+    if(!PROJECTS.some(p=>p.id === id)) return;
+    try{ localStorage.setItem(KEY_ACTIVE_PROJECT, id); }catch{}
+    // keep cfg visible for debug
+    saveCfg({});
+  }
+
+  function getActiveProject(){
+    const id = getActiveProjectId();
+    return PROJECTS.find(p=>p.id === id) || PROJECTS[0];
+  }
+
+  function keyState(){
+    const p = getActiveProject();
+    // Use binId in case project ids change
+    return KEY_STATE_PREFIX + p.binId;
+  }
 
   function loadLocal(){
     try{
-      const raw = localStorage.getItem(KEY_STATE);
+      const raw = localStorage.getItem(keyState());
       return raw ? JSON.parse(raw) : null;
     }catch{ return null; }
   }
+
   function saveLocal(state){
-    localStorage.setItem(KEY_STATE, JSON.stringify(state));
+    localStorage.setItem(keyState(), JSON.stringify(state));
   }
 
   function loadCfg(){
-    // Always return fixed credentials and autosync ON
-    try{
-      // keep a copy in localStorage for forward compatibility / visibility
-      const safe = { binId: DEFAULT_BIN_ID, accessKey: DEFAULT_ACCESS_KEY, autosync: "on" };
-      localStorage.setItem(KEY_CFG, JSON.stringify(safe));
-      return safe;
-    }catch{
-      return { binId: DEFAULT_BIN_ID, accessKey: DEFAULT_ACCESS_KEY, autosync: "on" };
-    }
+    // Always return fixed credentials, autosync ON, and active project info
+    const p = getActiveProject();
+    const safe = {
+      projectId: p.id,
+      projectName: p.name,
+      theme: p.theme,
+      binId: p.binId,
+      accessKey: ACCESS_KEY,
+      autosync: "on",
+      projects: getProjects()
+    };
+    try{ localStorage.setItem(KEY_CFG, JSON.stringify(safe)); }catch{}
+    return safe;
   }
-  function saveCfg(_cfg){
-    // Ignore custom cfg; keep it fixed
-    const safe = { binId: DEFAULT_BIN_ID, accessKey: DEFAULT_ACCESS_KEY, autosync: "on" };
-    localStorage.setItem(KEY_CFG, JSON.stringify(safe));
+
+  function saveCfg(cfg){
+    // Ignore custom credentials/autosync; only accept projectId changes
+    if(cfg && typeof cfg === "object" && typeof cfg.projectId === "string"){
+      if(PROJECTS.some(p=>p.id === cfg.projectId)){
+        try{ localStorage.setItem(KEY_ACTIVE_PROJECT, cfg.projectId); }catch{}
+      }
+    }
+    // keep cfg visible for forward compatibility / visibility
+    loadCfg();
   }
 
   async function jsonbinGet(binId, accessKey){
@@ -56,9 +106,14 @@ window.StorageLayer = (function(){
   }
 
   function hardResetLocal(){
-    // still used internally for rare recovery scripts
-    localStorage.removeItem(KEY_STATE);
+    localStorage.removeItem(keyState());
   }
 
-  return { loadLocal, saveLocal, loadCfg, saveCfg, jsonbinGet, jsonbinPut, hardResetLocal };
+  return {
+    loadLocal, saveLocal,
+    loadCfg, saveCfg,
+    jsonbinGet, jsonbinPut,
+    hardResetLocal,
+    getProjects, getActiveProjectId, setActiveProjectId, getActiveProject
+  };
 })();

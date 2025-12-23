@@ -24,6 +24,17 @@
   --cat-extras:#c9c9c9;
 }
 
+html[data-theme="pink"]{
+  --accent:#ff6fb5;
+  --danger:#ff4d7a;
+}
+.projectSwitch{
+  margin-top:10px;
+  padding:8px 10px;
+  font-weight:700;
+  font-size:12px;
+}
+
 *{ box-sizing:border-box; }
 html,body{ height:100%; }
 body{
