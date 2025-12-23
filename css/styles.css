@@ -576,6 +576,10 @@ tr.groupRow td{
   font-weight:900;
 }
 
+
+.chip.toggle{ cursor:pointer; user-select:none; }
+.chip.toggle.active{ border-color: var(--accent); background: rgba(110,231,255,.12); }
+
 /* ===================== FIX 2: Breakdown lista escenas usa el alto disponible ===================== */
 #sceneListCard{
   display:flex;

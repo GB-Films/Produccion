@@ -128,6 +128,56 @@
     clearTimeout(toast._t);
     toast._t = setTimeout(()=>t.style.display="none", 2200);
   }
+
+
+  // ======= Reportes: filtros por categoría (local) =======
+  const REPORT_FILTER_LS_KEY = "gb_reports_filter_v1";
+  const REPORT_FILTER_KEYS = ["scenes","cast","crew", ...cats.filter(c=>c!=="cast")];
+  const REPORT_FILTER_LABELS = { scenes:"Escenas", cast:"Cast", crew:"Crew" };
+  let reportsFilterSet = null;
+
+  function getReportsFilterSet(){
+    if(reportsFilterSet) return reportsFilterSet;
+    const all = new Set(REPORT_FILTER_KEYS);
+    try{
+      const raw = localStorage.getItem(REPORT_FILTER_LS_KEY);
+      if(raw){
+        const arr = JSON.parse(raw);
+        if(Array.isArray(arr)){
+          const s = new Set(arr.filter(k=>all.has(k)));
+          if(s.size) reportsFilterSet = s;
+        }
+      }
+    }catch{}
+    if(!reportsFilterSet) reportsFilterSet = all;
+    return reportsFilterSet;
+  }
+
+  function saveReportsFilterSet(){
+    try{ localStorage.setItem(REPORT_FILTER_LS_KEY, JSON.stringify([...getReportsFilterSet()])); }catch{}
+  }
+
+  function renderReportsFilters(){
+    const wrap = el("reportsFilters");
+    if(!wrap) return;
+    const set = getReportsFilterSet();
+    wrap.innerHTML = "";
+    for(const k of REPORT_FILTER_KEYS){
+      const chip = document.createElement("div");
+      chip.className = "chip toggle" + (set.has(k) ? " active" : "");
+      chip.innerHTML = `<span>${esc(REPORT_FILTER_LABELS[k] || catNames[k] || k)}</span>`;
+      chip.addEventListener("click", ()=>{
+        const next = new Set(getReportsFilterSet());
+        if(next.has(k)) next.delete(k); else next.add(k);
+        if(next.size===0) return toast("Seleccioná al menos 1 filtro");
+        reportsFilterSet = next;
+        saveReportsFilterSet();
+        renderReportsFilters();
+        renderReports();
+      });
+      wrap.appendChild(chip);
+    }
+  }
   function touch(){
     state.meta.updatedAt = new Date().toISOString();
     StorageLayer.saveLocal(state);
@@ -661,7 +711,7 @@ function setupScheduleWheelScroll(){
     if(name==="shotlist"){ renderShotList(); }
     if(name==="elements"){ renderElementsExplorer(); }
     if(name==="crew"){ renderCrew(); }
-    if(name==="reports"){ renderReports(); }
+    if(name==="reports"){ renderReportsFilters(); renderReports(); }
     if(name==="callsheet"){ renderCallSheetCalendar(); renderCallSheetDetail(); }
     if(name==="settings"){ loadCfgToUI(); }
   }
@@ -2050,6 +2100,9 @@ function setupScheduleWheelScroll(){
     board.innerHTML = "";
     sortShootDaysInPlace();
 
+    renderReportsFilters();
+    const f = getReportsFilterSet();
+
     for(const d of state.shootDays){
       ensureDayTimingMaps(d);
       const col = document.createElement("div");
@@ -2084,6 +2137,7 @@ function setupScheduleWheelScroll(){
         </div>
       `;
 
+      if(f.has("scenes")){
       const scenesBox = document.createElement("div");
       scenesBox.className = "catBlock";
       scenesBox.innerHTML = `
@@ -2091,7 +2145,9 @@ function setupScheduleWheelScroll(){
         <div class="items">${scenes.length ? scenes.map(s=>`<div>#${esc(s.number)} ${esc(s.slugline)}</div>`).join("") : `<div>—</div>`}</div>
       `;
       body.appendChild(scenesBox);
+      }
 
+      if(f.has("cast")){
       const castBox = document.createElement("div");
       castBox.className = "catBlock";
       castBox.innerHTML = `
@@ -2099,7 +2155,9 @@ function setupScheduleWheelScroll(){
         <div class="items">${cast.length ? cast.map(n=>`<div>${esc(n)}</div>`).join("") : `<div>—</div>`}</div>
       `;
       body.appendChild(castBox);
+      }
 
+      if(f.has("crew")){
       const crewBox = document.createElement("div");
       crewBox.className = "catBlock";
       crewBox.innerHTML = `<div class="hdr"><span class="dot" style="background:var(--cat-sound)"></span>Crew citado</div>`;
@@ -2120,9 +2178,11 @@ function setupScheduleWheelScroll(){
       }
       crewBox.appendChild(crewItems);
       body.appendChild(crewBox);
+      }
 
       for(const cat of cats){
         if(cat==="cast") continue;
+        if(!f.has(cat)) continue;
         const items = union(scenes.flatMap(s=>s.elements?.[cat]||[]));
         if(!items.length) continue;
         const box = document.createElement("div");
@@ -2996,6 +3056,17 @@ function setupScheduleWheelScroll(){
 
     el("btnCancelScriptImport")?.addEventListener("click", ()=> toggleScriptImportPanel(false));
 
+    el("btnToggleScriptImport")?.addEventListener("click", ()=>{
+      ensureScriptState();
+      if(!state.script.versions.length){
+        el("btnNewScriptVersion")?.click();
+        return;
+      }
+      const panel = el("scriptImportPanel");
+      const open = panel ? panel.classList.contains("hidden") : true;
+      toggleScriptImportPanel(open);
+    });
+
     // Nueva versión: crea una versión editable (y opcionalmente pegás el guion para procesarla)
     el("btnNewScriptVersion")?.addEventListener("click", ()=>{
       ensureScriptState();
@@ -3375,6 +3446,7 @@ el("scriptVerSelect")?.addEventListener("change", ()=>{
     renderDayDetail();
     renderElementsExplorer();
     renderCrew();
+    renderReportsFilters();
     renderReports();
     renderScheduleBoard();
     renderShotList();
