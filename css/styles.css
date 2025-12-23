@@ -8,6 +8,7 @@
   --border2:rgba(255,255,255,.14);
   --shadow: 0 10px 24px rgba(0,0,0,.35);
   --accent:#6ee7ff;
+  --accent-rgb:110,231,255;
 
   --danger:#ff5c5c;
 
@@ -26,6 +27,7 @@
 
 html[data-theme="pink"]{
   --accent:#ff6fb5;
+  --accent-rgb:255,111,181;
   --danger:#ff4d7a;
 }
 .projectSwitch{
@@ -40,7 +42,7 @@ html,body{ height:100%; }
 body{
   margin:0;
   font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial;
-  background: radial-gradient(1000px 700px at 12% 10%, rgba(110,231,255,.12), transparent 55%),
+  background: radial-gradient(1000px 700px at 12% 10%, rgba(var(--accent-rgb),.12), transparent 55%),
               radial-gradient(900px 600px at 85% 85%, rgba(191,167,255,.10), transparent 60%),
               var(--bg);
   color:var(--text);
@@ -102,7 +104,7 @@ body{
   font-weight:700;
 }
 .navBtn:hover{ border-color:var(--border2); }
-.navBtn.active{ border-color: rgba(110,231,255,.45); box-shadow: 0 0 0 2px rgba(110,231,255,.10) inset; }
+.navBtn.active{ border-color: rgba(var(--accent-rgb),.45); box-shadow: 0 0 0 2px rgba(var(--accent-rgb),.10) inset; }
 .navBtn.bottom{ text-align:center; }
 
 .pillRow{ display:flex; gap:8px; }
@@ -206,8 +208,8 @@ label{ font-size:12px; color:var(--muted); }
   outline:none;
 }
 .input:focus,.textarea:focus,select:focus{
-  border-color: rgba(110,231,255,.45);
-  box-shadow: 0 0 0 2px rgba(110,231,255,.10);
+  border-color: rgba(var(--accent-rgb),.45);
+  box-shadow: 0 0 0 2px rgba(var(--accent-rgb),.10);
 }
 select option{
   background:#0f1a2c;
@@ -239,7 +241,7 @@ select option{
   font-weight:800;
 }
 .btn:hover{ border-color:var(--border2); }
-.btn.primary{ border-color: rgba(110,231,255,.55); box-shadow: 0 0 0 2px rgba(110,231,255,.08) inset; }
+.btn.primary{ border-color: rgba(var(--accent-rgb),.55); box-shadow: 0 0 0 2px rgba(var(--accent-rgb),.08) inset; }
 .btn.danger{ border-color: rgba(255,92,92,.55); }
 .btn.icon{ width:36px; height:36px; padding:0; display:flex; align-items:center; justify-content:center; border-radius:12px; }
 
@@ -270,9 +272,9 @@ select option{
   position:sticky;
   top:0;
 }
-tr.selected td{ background: rgba(110,231,255,.10); }
+tr.selected td{ background: rgba(var(--accent-rgb),.10); }
 tr.groupRow td{
-  background: rgba(110,231,255,.08);
+  background: rgba(var(--accent-rgb),.08);
   font-weight:900;
   color:rgba(255,255,255,.85);
 }
@@ -411,8 +413,8 @@ tr.groupRow td{
 }
 
 .dayCol.selected{
-  border-color: rgba(110,231,255,.55);
-  box-shadow: 0 0 0 2px rgba(110,231,255,.35);
+  border-color: rgba(var(--accent-rgb),.55);
+  box-shadow: 0 0 0 2px rgba(var(--accent-rgb),.35);
 }
 
 .dayHeader{
@@ -435,7 +437,7 @@ tr.groupRow td{
   min-height: 180px;
   background: rgba(0,0,0,.12);
 }
-.dropZone.over{ outline:2px dashed rgba(110,231,255,.55); outline-offset:-6px; }
+.dropZone.over{ outline:2px dashed rgba(var(--accent-rgb),.55); outline-offset:-6px; }
 
 .dayDetail3col{
   display:grid;
@@ -468,7 +470,7 @@ tr.groupRow td{
   padding:8px 10px;
   border-radius:14px;
   border:1px solid var(--border);
-  background: rgba(110,231,255,.08);
+  background: rgba(var(--accent-rgb),.08);
 }
 
 .crewPickItem{
@@ -610,7 +612,7 @@ tr.groupRow td{
 
 
 .chip.toggle{ cursor:pointer; user-select:none; }
-.chip.toggle.active{ border-color: var(--accent); background: rgba(110,231,255,.12); }
+.chip.toggle.active{ border-color: var(--accent); background: rgba(var(--accent-rgb),.12); }
 
 /* ===================== FIX 2: Breakdown lista escenas usa el alto disponible ===================== */
 #sceneListCard{
@@ -785,7 +787,7 @@ tr.groupRow td{
   bottom:6px;
   height:10px;
   border-radius:10px;
-  background: rgba(110,231,255,.18);
+  background: rgba(var(--accent-rgb),.18);
   cursor:ns-resize;
   touch-action:none;
 }
@@ -880,8 +882,8 @@ tr.groupRow td{
   min-height:64px;
 }
 .calCell:hover{ border-color:var(--border2); }
-.calCell.hasShoot{ border-color: rgba(110,231,255,.40); }
-.calCell.selected{ outline:2px solid rgba(110,231,255,.35); }
+.calCell.hasShoot{ border-color: rgba(var(--accent-rgb),.40); }
+.calCell.selected{ outline:2px solid rgba(var(--accent-rgb),.35); }
 .calCell .d{ font-weight:900; }
 .calCell .tag{ margin-top:6px; color:var(--muted); font-size:12px; }
 
@@ -915,7 +917,7 @@ tr.groupRow td{
   cursor:pointer;
 }
 .scriptSceneItem:hover{ border-color: var(--border2); background: rgba(255,255,255,.03); }
-.scriptSceneItem.selected{ border-color: rgba(110,231,255,.55); background: rgba(110,231,255,.08); }
+.scriptSceneItem.selected{ border-color: rgba(var(--accent-rgb),.55); background: rgba(var(--accent-rgb),.08); }
 .scriptSceneItem .n{ width:64px; flex:0 0 64px; font-weight:950; color: rgba(255,255,255,.9); }
 .scriptSceneItem .h{ font-weight:850; color: rgba(255,255,255,.92); }
 .scriptSceneItem .m{ font-size:12px; color: var(--muted); margin-top:2px; }
@@ -988,7 +990,7 @@ tr.groupRow td{
   cursor:pointer;
 }
 .scriptReadScene:hover{ border-color: var(--border2); background: rgba(255,255,255,.03); }
-.scriptReadScene.selected{ border-color: rgba(110,231,255,.55); background: rgba(110,231,255,.08); }
+.scriptReadScene.selected{ border-color: rgba(var(--accent-rgb),.55); background: rgba(var(--accent-rgb),.08); }
 .scriptReadHead{ font-weight:900; margin-bottom:6px; }
 .scriptReadBody{ color: rgba(255,255,255,.86); white-space:pre-wrap; }
 
@@ -1087,8 +1089,8 @@ tr.groupRow td{
 }
 .calCell:hover{ border-color:var(--border2); }
 .calCell:active{ transform: scale(.99); }
-.calCell.hasShoot{ border-color: rgba(110,231,255,.40); }
-.calCell.selected{ outline:2px solid rgba(110,231,255,.35); }
+.calCell.hasShoot{ border-color: rgba(var(--accent-rgb),.40); }
+.calCell.selected{ outline:2px solid rgba(var(--accent-rgb),.35); }
 .calCell .d{ font-weight:900; }
 .calCell .tag{ margin-top:6px; color:var(--muted); font-size:12px; }
 
@@ -1215,7 +1217,7 @@ tr.groupRow td{
   cursor:pointer;
 }
 .scriptSceneItem:hover{ border-color: var(--border2); background: rgba(255,255,255,.03); }
-.scriptSceneItem.selected{ border-color: rgba(110,231,255,.55); background: rgba(110,231,255,.08); }
+.scriptSceneItem.selected{ border-color: rgba(var(--accent-rgb),.55); background: rgba(var(--accent-rgb),.08); }
 .scriptSceneItem .n{ width:64px; flex:0 0 64px; font-weight:950; color: rgba(255,255,255,.9); }
 .scriptSceneItem .h{ font-weight:850; color: rgba(255,255,255,.92); }
 .scriptSceneItem .m{ font-size:12px; color: var(--muted); margin-top:2px; }
