@@ -555,7 +555,7 @@
         : (saved === "1");
       card.classList.toggle("collapsed", collapsed);
 
-      const btn = card.querySelector(".collapseBtn");
+      const btn = card.querySelector(".collapseBtn, .collapseToggle");
       if(btn){
         btn.textContent = collapsed ? "▸" : "▾";
         if(btn.dataset.bound !== "1"){
@@ -823,6 +823,38 @@ function setupScheduleWheelScroll(){
     }
     return parts.join("\n").trim();
   }
+
+  function cloneScriptScenes(scenes){
+    return (scenes||[]).map(sc=>({
+      id: uid("scrScene"),
+      number: canonSceneNumber(sc.number||""),
+      slugline: sc.slugline||"",
+      location: sc.location||"",
+      timeOfDay: sc.timeOfDay||"",
+      body: sc.body||"",
+      summary: sc.summary||""
+    }));
+  }
+
+  function buildScriptReadHTML(version){
+    if(!version) return "";
+    const out = [];
+    for(const sc of (version.scenes||[])){
+      const num = canonSceneNumber(sc.number||"");
+      const head = `${num} ${String(sc.slugline||"").trim()}`.trim();
+      const body = esc(String(sc.body||""))
+        .replace(/\n\s*\n/g, "\n\n")
+        .replace(/\n/g, "<br>");
+      out.push(
+        `<div class="scriptReadScene" data-sid="${esc(sc.id)}">`+
+          `<div class="scriptReadHead">${esc(head)}</div>`+
+          `<div class="scriptReadBody">${body || '<span class="muted">(sin texto)</span>'}</div>`+
+        `</div>`
+      );
+    }
+    return out.join("");
+  }
+
 
   function getActiveScriptVersion(){
     ensureScriptState();
@@ -1125,15 +1157,21 @@ function setupScheduleWheelScroll(){
     // Botón "+ Escena (6A)" dinámico según selección
     const btnIns = el("btnScriptInsertAfter");
     if(btnIns){
-      const idx = (v.scenes||[]).findIndex(s=>s.id===selectedScriptSceneId);
-      if(idx>=0){
-        const after = v.scenes[idx];
-        const nextNum = nextInsertedNumber(after.number, (v.scenes||[]).map(s=>s.number));
-        btnIns.textContent = nextNum ? `+ Escena (${nextNum})` : "+ Escena";
+      const scenes = (v.scenes||[]);
+      if(!scenes.length){
+        btnIns.textContent = "+ Escena (1)";
       }else{
-        btnIns.textContent = "+ Escena";
+        const idx = scenes.findIndex(s=>s.id===selectedScriptSceneId);
+        if(idx>=0){
+          const after = scenes[idx];
+          const nextNum = nextInsertedNumber(after.number, scenes.map(s=>s.number));
+          btnIns.textContent = nextNum ? `+ Escena (${nextNum})` : "+ Escena";
+        }else{
+          btnIns.textContent = "+ Escena";
+        }
       }
     }
+
   }
 
   function renderScriptSceneList(version){
@@ -1242,9 +1280,22 @@ function setupScheduleWheelScroll(){
   }
 
   function renderScriptReadView(version){
-    const pre = el("scriptReadView");
-    if(!pre) return;
-    pre.textContent = buildScriptReadView(version);
+    const box = el("scriptReadView");
+    if(!box) return;
+    box.innerHTML = buildScriptReadHTML(version);
+
+    // click en lectura => selecciona escena
+    if(box.dataset.bound!=='1'){
+      box.dataset.bound='1';
+      box.addEventListener('click', (e)=>{
+        const item = e.target.closest('.scriptReadScene');
+        if(!item) return;
+        const id = item.dataset.id;
+        if(!id) return;
+        selectedScriptSceneId = id;
+        renderScriptUI();
+      });
+    }
   }
 
   function addScene(){
@@ -2720,30 +2771,98 @@ function setupScheduleWheelScroll(){
     });
 
 
-    el("btnParseScript")?.addEventListener("click", ()=>{
+    
+
+    function toggleScriptImportPanel(open){
+      const panel = el("scriptImportPanel");
+      if(!panel) return;
+      panel.classList.toggle("hidden", !open);
+      if(open){
+        panel.scrollIntoView({block:"nearest"});
+        requestAnimationFrame(()=> el("scriptImportText")?.focus());
+      }
+    }
+
+    el("btnCancelScriptImport")?.addEventListener("click", ()=> toggleScriptImportPanel(false));
+
+    // Nueva versión: crea una versión editable (y opcionalmente pegás el guion para procesarla)
+    el("btnNewScriptVersion")?.addEventListener("click", ()=>{
+      ensureScriptState();
+      const now = new Date().toISOString();
+      const base = getActiveScriptVersion();
+      const v = {
+        id: uid("scrVer"),
+        name: `V${state.script.versions.length + 1}`,
+        createdAt: now,
+        updatedAt: now,
+        keywords: base?.keywords || "",
+        rawText: base?.rawText || "",
+        scenes: [],
+        draft: true
+      };
+      state.script.versions.push(v);
+      state.script.activeVersionId = v.id;
+      selectedScriptSceneId = v.scenes?.[0]?.id || null;
+
+      // Prefill textarea con el último guion (si lo había)
+      const ta = el("scriptImportText");
+      if(ta) ta.value = base?.rawText || "";
+      const ki = el("scriptKeywords");
+      if(ki) ki.value = base?.keywords || "";
+
+      touch();
+      toast(`Nueva versión creada → ${v.name}`);
+      renderScriptUI();
+      toggleScriptImportPanel(true);
+    });
+el("btnParseScript")?.addEventListener("click", ()=>{
       const txt = el("scriptImportText")?.value || "";
       const keys = el("scriptKeywords")?.value || "";
       const scenes = parseScreenplayToScriptScenes(txt, keys);
       if(!scenes.length) return toast("No detecté escenas (revisá INT./EXT. por línea).");
       ensureScriptState();
-      const v = {
-        id: uid("scrVer"),
-        name: `V${state.script.versions.length + 1}`,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-        keywords: keys,
-        rawText: txt,
-        scenes
-      };
-      state.script.versions.push(v);
+
+      const now = new Date().toISOString();
+      let v = getActiveScriptVersion();
+
+      // Si venís de 'Nueva versión' (draft) y está vacía, completamos ESA versión
+      if(v && v.draft && !(v.scenes||[]).length){
+        v.keywords = keys;
+        v.rawText = txt;
+        v.scenes = scenes;
+        v.updatedAt = now;
+        v.draft = false;
+      }else{
+        v = {
+          id: uid("scrVer"),
+          name: `V${state.script.versions.length + 1}`,
+          createdAt: now,
+          updatedAt: now,
+          keywords: keys,
+          rawText: txt,
+          scenes
+        };
+        state.script.versions.push(v);
+        state.script.activeVersionId = v.id;
+      }
+
       state.script.activeVersionId = v.id;
       selectedScriptSceneId = v.scenes?.[0]?.id || null;
       touch();
       toast(`Guion procesado → ${v.name} ✅`);
       renderScriptUI();
+      toggleScriptImportPanel(false);
     });
 
-    el("scriptVerSelect")?.addEventListener("change", ()=>{
+    
+    el("btnScriptSaveScene")?.addEventListener("click", ()=>{
+      const v = getActiveScriptVersion();
+      if(!v) return;
+      v.updatedAt = new Date().toISOString();
+      touch();
+      toast("Cambios guardados ✅");
+    });
+el("scriptVerSelect")?.addEventListener("change", ()=>{
       const id = el("scriptVerSelect").value;
       ensureScriptState();
       state.script.activeVersionId = id || null;
@@ -2755,6 +2874,28 @@ function setupScheduleWheelScroll(){
     el("btnScriptInsertAfter")?.addEventListener("click", ()=>{
       const v = getActiveScriptVersion();
       if(!v) return;
+
+      // Si la versión está vacía, creamos la primera escena #1
+      if(!(v.scenes||[]).length){
+        const fresh = {
+          id: uid("scrScene"),
+          number: "1",
+          slugline: "INT. (NUEVA ESCENA) - DÍA",
+          location: "(NUEVA ESCENA)",
+          timeOfDay: "Día",
+          body: "",
+          summary: ""
+        };
+        v.scenes = [fresh];
+        selectedScriptSceneId = fresh.id;
+        v.updatedAt = new Date().toISOString();
+        touch();
+        renderScriptUI();
+        toast("Creada escena 1 ✅");
+        requestAnimationFrame(()=> el("scriptSceneSlugline")?.focus());
+        return;
+      }
+
       const idx = (v.scenes||[]).findIndex(s=>s.id===selectedScriptSceneId);
       if(idx < 0) return toast("Elegí una escena en la versión.");
       const after = v.scenes[idx];

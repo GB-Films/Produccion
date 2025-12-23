@@ -174,6 +174,20 @@
                   <span class="pill" id="scriptVerMeta">—</span>
                 </div>
 
+
+                <div id="scriptImportPanel" class="scriptImportPanel hidden">
+                  <div class="muted small">Pegá el guion completo acá y lo proceso a escenas.</div>
+                  <textarea id="scriptImportText" class="input" rows="8" placeholder="INT./EXT. por línea, como guion tradicional…"></textarea>
+                  <div class="row gap" style="align-items:flex-end">
+                    <div class="grow">
+                      <label class="small">Palabras clave (opcional)</label>
+                      <input id="scriptKeywords" class="input" placeholder="Ej: lluvia, persecución, dron…" />
+                    </div>
+                    <button class="btn" id="btnParseScript">Procesar</button>
+                    <button class="btn ghost" id="btnCancelScriptImport">Cerrar</button>
+                  </div>
+                </div>
+
                 <div class="scriptWrap" id="scriptVersionUI" style="display:none">
                   <div class="scriptLeft">
                     <div class="muted small">Escenas de la versión (doble click = editar en el proyecto)</div>
