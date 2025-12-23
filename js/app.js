@@ -58,6 +58,8 @@
     return found || s;
   }
 
+  const MAX_SCRIPT_VERSIONS = 3;
+
   const crewAreas = [
     "Direccion",
     "Cast",
@@ -337,6 +339,22 @@
     if(!Array.isArray(state.script.versions)) state.script.versions = [];
     if(!("activeVersionId" in state.script)) state.script.activeVersionId = null;
   }
+
+
+function enforceScriptVersionsLimit(notify=false){
+  ensureScriptState();
+  const vers = state?.script?.versions || [];
+  if(vers.length <= MAX_SCRIPT_VERSIONS) return false;
+  vers.sort((a,b)=> Date.parse(a.createdAt||a.updatedAt||0) - Date.parse(b.createdAt||b.updatedAt||0));
+  const removed = vers.length - MAX_SCRIPT_VERSIONS;
+  state.script.versions = vers.slice(-MAX_SCRIPT_VERSIONS);
+  if(!state.script.versions.some(v=>v.id===state.script.activeVersionId)){
+    state.script.activeVersionId = state.script.versions[state.script.versions.length-1]?.id || null;
+  }
+  if(notify) toast(`Se limitaron las versiones de guion a ${MAX_SCRIPT_VERSIONS} (se borraron ${removed}).`);
+  return true;
+}
+
 
   function canonSceneNumber(n){
     const s = String(n||"").trim();
@@ -913,6 +931,7 @@ function setupScheduleWheelScroll(){
 
   function getActiveScriptVersion(){
     ensureScriptState();
+    enforceScriptVersionsLimit(true);
     const id = state.script.activeVersionId;
     return state.script.versions.find(v=>v.id===id) || state.script.versions[0] || null;
   }
@@ -1207,6 +1226,13 @@ function setupScheduleWheelScroll(){
 
     renderScriptSceneList(v);
     renderScriptSceneEditor(v);
+
+    const btnNew = el("btnNewScriptVersion");
+    if(btnNew){
+      const atLimit = (state.script.versions||[]).length >= MAX_SCRIPT_VERSIONS;
+      btnNew.disabled = atLimit;
+      btnNew.title = atLimit ? `Máximo ${MAX_SCRIPT_VERSIONS} versiones` : "";
+    }
 
     // Mantener el guion (raw) visible y persistente por versión
     const panel = el("scriptImportPanel");
@@ -1675,9 +1701,7 @@ function setupScheduleWheelScroll(){
         }
       }
 
-      if(d.id===selectedDayId){
-        col.style.borderColor = "rgba(110,231,255,.35)";
-      }
+      col.classList.toggle("selected", d.id===selectedDayId);
 
       col.appendChild(head);
       col.appendChild(zone);
@@ -1687,6 +1711,16 @@ function setupScheduleWheelScroll(){
 
   function renderDayDetail(){
     const d = selectedDayId ? getDay(selectedDayId) : null;
+
+    const title = el("dayDetailTitle");
+    if(title){
+      if(d){
+        const t = `${formatDayTitle(d.date)}${d.label? " · "+d.label:""}`;
+        title.textContent = `Detalle del Día — ${t}`;
+      }else{
+        title.textContent = "Detalle del Día";
+      }
+    }
 
     const map = { day_date:"date", day_call:"callTime", day_location:"location", day_label:"label", day_notes:"notes" };
     for(const id in map){
@@ -2131,6 +2165,7 @@ function setupScheduleWheelScroll(){
 
     renderReportsFilters();
     const f = getReportsFilterSet();
+    const q = (el("reportsSearch")?.value || "").toLowerCase().trim();
 
     if(!f || f.size === 0){
       board.innerHTML = `<div class="muted">Seleccioná al menos un filtro arriba.</div>`;
@@ -2147,6 +2182,7 @@ function setupScheduleWheelScroll(){
 
       const body = document.createElement("div");
       body.className = "reportBody";
+      let shownBlocks = 0;
 
       const scenes = (d.sceneIds||[]).map(getScene).filter(Boolean);
       const cast = union(scenes.flatMap(s=>s.elements?.cast||[]));
@@ -2178,7 +2214,11 @@ function setupScheduleWheelScroll(){
         <div class="hdr"><span class="dot" style="background:var(--cat-props)"></span>Escenas</div>
         <div class="items">${scenes.length ? scenes.map(s=>`<div>#${esc(s.number)} ${esc(s.slugline)}</div>`).join("") : `<div>—</div>`}</div>
       `;
-      body.appendChild(scenesBox);
+      const hayScenes = scenes.map(s=>`${s.number||""} ${s.slugline||""}`).join(" ").toLowerCase();
+      if(!q || hayScenes.includes(q)){
+        body.appendChild(scenesBox);
+        shownBlocks++;
+      }
       }
 
       if(f.has("cast")){
@@ -2188,7 +2228,11 @@ function setupScheduleWheelScroll(){
         <div class="hdr"><span class="dot" style="background:${catColors.cast}"></span>Cast</div>
         <div class="items">${cast.length ? cast.map(n=>`<div>${esc(n)}</div>`).join("") : `<div>—</div>`}</div>
       `;
-      body.appendChild(castBox);
+      const hayCast = cast.join(" ").toLowerCase();
+      if(!q || hayCast.includes(q)){
+        body.appendChild(castBox);
+        shownBlocks++;
+      }
       }
 
       if(f.has("crew")){
@@ -2211,7 +2255,11 @@ function setupScheduleWheelScroll(){
         `).join("");
       }
       crewBox.appendChild(crewItems);
-      body.appendChild(crewBox);
+      const hayCrew = crewAll.map(c=>`${c.area||""} ${c.name||""} ${c.role||""}`).join(" ").toLowerCase();
+      if(!q || hayCrew.includes(q)){
+        body.appendChild(crewBox);
+        shownBlocks++;
+      }
       }
 
       for(const cat of cats){
@@ -2225,12 +2273,26 @@ function setupScheduleWheelScroll(){
           <div class="hdr"><span class="dot" style="background:${catColors[cat]}"></span>${esc(catNames[cat])}</div>
           <div class="items">${items.map(x=>`<div>${esc(x)}</div>`).join("")}</div>
         `;
-        body.appendChild(box);
+        const hayCat = items.join(" ").toLowerCase();
+        if(!q || hayCat.includes(q)){
+          body.appendChild(box);
+          shownBlocks++;
+        }
+      }
+
+      if(q && shownBlocks===0){
+        const hhay = `${formatDayTitle(d.date)} ${d.label||""} ${d.location||""} ${d.callTime||""}`.toLowerCase();
+        if(!hhay.includes(q)) continue;
+        body.innerHTML = `<div class="muted">Sin resultados.</div>`;
       }
 
       col.appendChild(head);
       col.appendChild(body);
       board.appendChild(col);
+    }
+
+    if(q && !board.children.length){
+      board.innerHTML = `<div class="muted">Sin resultados.</div>`;
     }
   }
 
@@ -2239,6 +2301,8 @@ function setupScheduleWheelScroll(){
     const board = el("schedBoard");
     if(!board) return;
     board.innerHTML = "";
+
+    const q = (el("schedSearch")?.value || "").toLowerCase().trim();
 
     sortShootDaysInPlace();
     if(!state.shootDays.length){
@@ -2265,6 +2329,7 @@ function setupScheduleWheelScroll(){
 
       const grid = document.createElement("div");
       grid.className = "schedGrid";
+      let shownBlocks = 0;
       grid.dataset.dayId = d.id;
       grid.style.height = `${Math.ceil(DAY_SPAN_MIN * pxPerMin)}px`;
 
@@ -2285,6 +2350,10 @@ function setupScheduleWheelScroll(){
       for(const sid of d.sceneIds){
         const s = getScene(sid);
         if(!s) continue;
+        if(q){
+          const hay = `${s.number||""} ${s.slugline||""} ${s.location||""} ${s.summary||""}`.toLowerCase();
+          if(!hay.includes(q)) continue;
+        }
 
         const startMin = clamp(d.times[sid] ?? 0, 0, DAY_SPAN_MIN-1);
         const durMin   = clamp(d.durations[sid] ?? 60, 5, DAY_SPAN_MIN);
@@ -2319,13 +2388,21 @@ function setupScheduleWheelScroll(){
         });
 
         grid.appendChild(block);
+        shownBlocks++;
       }
 
+      if(q && shownBlocks===0){
+        const hhay = `${formatDayTitle(d.date)} ${d.label||""} ${d.location||""}`.toLowerCase();
+        if(!hhay.includes(q)) continue;
+      }
       dayWrap.appendChild(head);
       dayWrap.appendChild(grid);
       board.appendChild(dayWrap);
     }
 
+    if(q && !board.children.length){
+      board.innerHTML = `<div class="muted">Sin resultados.</div>`;
+    }
     bindScheduleDnD();
     setupScheduleTopScrollbar(); // ✅
   }
@@ -2998,6 +3075,9 @@ function setupScheduleWheelScroll(){
     el("sceneSearch")?.addEventListener("input", renderScenesTable);
     el("sceneFilterTOD")?.addEventListener("change", renderScenesTable);
 
+    el("schedSearch")?.addEventListener("input", renderScheduleBoard);
+    el("reportsSearch")?.addEventListener("input", renderReports);
+
     // Número de escena: no permitimos duplicados (si chocan, auto 6A/6B…)
     const numNode = el("scene_number");
     numNode?.addEventListener("input", ()=>{
@@ -3104,6 +3184,10 @@ function setupScheduleWheelScroll(){
     // Nueva versión: crea una versión editable (y opcionalmente pegás el guion para procesarla)
     el("btnNewScriptVersion")?.addEventListener("click", ()=>{
       ensureScriptState();
+      enforceScriptVersionsLimit(false);
+      if(state.script.versions.length >= MAX_SCRIPT_VERSIONS){
+        return toast(`Máximo ${MAX_SCRIPT_VERSIONS} versiones por ahora.`);
+      }
       const now = new Date().toISOString();
       const base = getActiveScriptVersion();
       const v = {
@@ -3149,18 +3233,27 @@ el("btnParseScript")?.addEventListener("click", ()=>{
         v.updatedAt = now;
         v.draft = false;
       }else{
-        v = {
-          id: uid("scrVer"),
-          name: `V${state.script.versions.length + 1}`,
-          createdAt: now,
-          updatedAt: now,
-          keywords: keys,
-          rawText: txt,
-          scenes
-        };
-        state.script.versions.push(v);
-        state.script.activeVersionId = v.id;
-      }
+  // Si ya llegamos al límite, re-procesamos la versión activa en lugar de crear otra.
+  if(state.script.versions.length >= MAX_SCRIPT_VERSIONS){
+    v.keywords = keys;
+    v.rawText = txt;
+    v.scenes = scenes;
+    v.updatedAt = now;
+    v.draft = false;
+  }else{
+    v = {
+      id: uid("scrVer"),
+      name: `V${state.script.versions.length + 1}`,
+      createdAt: now,
+      updatedAt: now,
+      keywords: keys,
+      rawText: txt,
+      scenes
+    };
+    state.script.versions.push(v);
+    state.script.activeVersionId = v.id;
+  }
+}
 
       state.script.activeVersionId = v.id;
       selectedScriptSceneId = v.scenes?.[0]?.id || null;

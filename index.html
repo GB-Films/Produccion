@@ -295,59 +295,62 @@
 
             <div class="card" id="dayDetailCard">
               <div class="cardHeader">
-                <h2 class="cardTitle">Detalle del Día</h2>
+                <h2 class="cardTitle" id="dayDetailTitle">Detalle del Día</h2>
                 <button id="btnOpenCallSheet" class="btn">Ver Call Sheet</button>
               </div>
 
               <div class="cardContent">
-                <div class="dayDetail3col">
-                  <!-- Col 1 -->
-                  <div class="col">
-                    <div class="field">
-                      <label>Fecha</label>
-                      <input id="day_date" class="input" type="date" />
-                    </div>
+                <div class="dayDetail4col">
+  <!-- Col 1 -->
+  <div class="col">
+    <div class="field">
+      <label>Fecha</label>
+      <input id="day_date" class="input" type="date" />
+    </div>
 
-                    <div class="field">
-                      <label>Call Time</label>
-                      <div class="row gap">
-                        <button id="day_call_minus" class="btn icon" title="-15">−</button>
-                        <input id="day_call" class="input grow" placeholder="08:00" />
-                        <button id="day_call_plus" class="btn icon" title="+15">+</button>
-                      </div>
-                    </div>
+    <div class="field">
+      <label>Call Time</label>
+      <div class="row gap">
+        <button id="day_call_minus" class="btn icon" title="-15">−</button>
+        <input id="day_call" class="input grow" placeholder="08:00" />
+        <button id="day_call_plus" class="btn icon" title="+15">+</button>
+      </div>
+    </div>
 
-                    <div class="field">
-                      <label>Locación</label>
-                      <input id="day_location" class="input" />
-                    </div>
+    <div class="field">
+      <label>Locación</label>
+      <input id="day_location" class="input" />
+    </div>
 
-                    <div class="field">
-                      <label>Nombre</label>
-                      <input id="day_label" class="input" />
-                    </div>
+    <div class="field">
+      <label>Nombre</label>
+      <input id="day_label" class="input" />
+    </div>
 
-                    <div class="field">
-                      <label>Notas</label>
-                      <textarea id="day_notes" class="textarea smallArea"></textarea>
-                    </div>
-                  </div>
+    <div class="field">
+      <label>Notas</label>
+      <textarea id="day_notes" class="textarea smallArea"></textarea>
+    </div>
+  </div>
 
-                  <!-- Col 2 -->
-                  <div class="col">
-                    <div class="colTitle">Necesidades por Área</div>
-                    <div id="dayNeeds"></div>
-                  </div>
+  <!-- Col 2 -->
+  <div class="col">
+    <div class="colTitle">Necesidades por Área</div>
+    <div id="dayNeeds"></div>
+  </div>
 
-                  <!-- Col 3 -->
-                  <div class="col">
-                    <div class="colTitle">Cast citado (auto)</div>
-                    <div id="dayCast"></div>
+  <!-- Col 3 -->
+  <div class="col">
+    <div class="colTitle">Cast citado (auto)</div>
+    <div id="dayCast"></div>
+  </div>
 
-                    <div class="spacer"></div>
-                    <div class="colTitle">Equipo técnico (clic para seleccionar)</div>
-                    <div id="dayCrewPicker"></div>
-                  </div>
+  <!-- Col 4 -->
+  <div class="col">
+    <div class="colTitle">Equipo técnico</div>
+    <div id="dayCrewPicker"></div>
+  </div>
+</div>
                 </div>
               </div>
             </div>
@@ -362,6 +365,7 @@
           <div class="cardHeader">
             <h2 class="cardTitle">Cronograma</h2>
             <div class="row gap">
+              <input id="schedSearch" class="input" style="max-width:260px" placeholder="Buscar…" />
               <label class="row gap small muted">Zoom
                 <select id="schedZoom" class="input compact">
                   <option value="60">Bajo</option>
@@ -475,6 +479,9 @@
             <h2 class="cardTitle">Reportes por día</h2>
           </div>
           <div class="cardContent">
+            <div class="row gap" style="margin-bottom:10px">
+              <input id="reportsSearch" class="input grow" placeholder="Buscar…" />
+            </div>
             <div id="reportsFilters" class="chips" style="margin-bottom:10px"></div>
             <div id="reportsBoard" class="reportsBoard"></div>
           </div>
