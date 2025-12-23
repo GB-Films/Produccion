@@ -929,9 +929,11 @@ tr.groupRow td{
 }
 
 .scriptRight #scriptSceneBody{
-  flex:1 1 auto;
-  min-height:360px;
-  resize:vertical;
+  flex:0 0 auto;
+  height:96px; /* ~4 renglones */
+  max-height:120px;
+  overflow:auto;
+  resize:none;
 }
 .scriptRead{
   border:1px solid var(--border);
@@ -957,13 +959,22 @@ tr.groupRow td{
 .scriptReadHead{ font-weight:900; margin-bottom:6px; }
 .scriptReadBody{ color: rgba(255,255,255,.86); white-space:pre-wrap; }
 
-.scriptImport{
+.scriptImport, .scriptImportPanel{
   margin-top:10px;
   padding:10px;
   border:1px dashed rgba(255,255,255,.12);
   border-radius:16px;
   background: rgba(255,255,255,.02);
 }
+
+.scriptImportPanel{ flex:1 1 auto; display:flex; flex-direction:column; gap:8px; }
+.scriptImportPanel #scriptImportText{
+  flex:1 1 auto;
+  width:100%;
+  min-height:360px;
+  resize:vertical;
+}
+
 .hidden{ display:none !important; }
 
 /* ===== Breakdown: Planos ===== */
