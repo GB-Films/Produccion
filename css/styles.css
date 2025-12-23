@@ -754,6 +754,54 @@ tr.groupRow td{
   touch-action:none;
 }
 
+/* ===================== Shotlist ===================== */
+#shotlistCard{
+  height:100%;
+  display:flex;
+  flex-direction:column;
+  min-height:0;
+}
+#shotlistCard .cardContent{
+  flex:1 1 auto;
+  min-height:0;
+  overflow:auto;
+}
+
+.shotDayKpis{ display:flex; flex-wrap:wrap; gap:8px; }
+.shotDayKpis .pill{ background: rgba(255,255,255,.04); }
+
+.shotSceneBox{
+  border:1px solid var(--border);
+  border-radius:18px;
+  overflow:hidden;
+  background: rgba(0,0,0,.12);
+  margin-bottom:12px;
+}
+.shotSceneHead{
+  padding:10px 12px;
+  border-bottom:1px solid var(--border);
+  background: linear-gradient(180deg, rgba(255,255,255,.05), rgba(255,255,255,.01));
+  display:flex;
+  justify-content:space-between;
+  gap:10px;
+  align-items:flex-end;
+}
+.shotSceneHead .t{ font-weight:950; }
+.shotSceneHead .m{ color:var(--muted); font-size:12px; margin-top:4px; }
+.shotSceneHead .warn{ color: rgba(255,92,92,.92); font-weight:900; font-size:12px; }
+
+.shotTableWrap{ padding:12px; }
+.shotTable{ width:100%; }
+.shotTable td{ vertical-align:top; }
+.shotTable .shotNum{ width:46px; color:var(--muted); }
+.shotTable .shotTime{ width:78px; font-weight:900; }
+.shotTable .shotDur{ width:120px; }
+.shotTable .shotChk{ width:44px; }
+.shotRowDone{ opacity:.65; }
+
+.shotDurSel{ width:100%; }
+
+
 /* Reports */
 .reportsBoard{
   display:flex;
@@ -856,21 +904,30 @@ tr.groupRow td{
   display:grid;
   grid-template-columns: 340px 1fr;
   gap:12px;
-  align-items:start;
+  align-items:stretch;
   margin-top:12px;
+  min-height:600px;
 }
 @media (max-width: 980px){
   .scriptWrap{ grid-template-columns: 1fr; }
 }
-.scriptLeft{ min-width:0; }
-.scriptRight{ min-width:0; }
+.scriptLeft{ min-width:0; display:flex; flex-direction:column; min-height:600px; }
+.scriptRight{ min-width:0; display:flex; flex-direction:column; min-height:600px; }
 .scriptList{
   border:1px solid var(--border);
   border-radius:16px;
   overflow:auto;
-  max-height:360px;
+  max-height:none;
   padding:6px;
   background: rgba(0,0,0,.10);
+  flex:1 1 auto;
+  min-height:0;
+}
+
+.scriptRight #scriptSceneBody{
+  flex:1 1 auto;
+  min-height:360px;
+  resize:vertical;
 }
 .scriptRead{
   border:1px solid var(--border);

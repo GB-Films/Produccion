@@ -1,6 +1,6 @@
 (function(){
   const el = (id)=>document.getElementById(id);
-  const views = ["breakdown","shooting","schedule","elements","crew","reports","callsheet","settings"];
+  const views = ["breakdown","shooting","schedule","shotlist","elements","crew","reports","callsheet","settings"];
 
   const cats = ["cast","props","wardrobe","art","makeup","sound","sfx","vfx","vehicles","animals","extras"];
   const catNames = {
@@ -76,6 +76,9 @@
   let selectedSceneId = null;
   let selectedDayId = null;
   let callSheetDayId = null;
+  let selectedShotlistDayId = null;
+
+  const DEFAULT_SHOT_MIN = 15;
 
   // Guion versionado (Breakdown)
   let selectedScriptSceneId = null;
@@ -256,6 +259,11 @@
     }
     // ensure shots
     if(!Array.isArray(s.shots)) s.shots = [];
+    for(const sh of s.shots){
+      if(!sh) continue;
+      const n = Number(sh.durMin);
+      if(!(Number.isFinite(n) && n>0)) sh.durMin = DEFAULT_SHOT_MIN;
+    }
   }
 
   function ensureScriptState(){
@@ -650,6 +658,7 @@ function setupScheduleWheelScroll(){
     if(name==="breakdown"){ initCollapsibles(); renderScriptUI(); renderShotsEditor(); }
     if(name==="shooting"){ renderSceneBank(); renderDaysBoard(); renderDayDetail(); applyBankCollapsedUI(); }
     if(name==="schedule"){ renderScheduleBoard(); }
+    if(name==="shotlist"){ renderShotList(); }
     if(name==="elements"){ renderElementsExplorer(); }
     if(name==="crew"){ renderCrew(); }
     if(name==="reports"){ renderReports(); }
@@ -835,26 +844,6 @@ function setupScheduleWheelScroll(){
       summary: sc.summary||""
     }));
   }
-
-  function buildScriptReadHTML(version){
-    if(!version) return "";
-    const out = [];
-    for(const sc of (version.scenes||[])){
-      const num = canonSceneNumber(sc.number||"");
-      const head = `${num} ${String(sc.slugline||"").trim()}`.trim();
-      const body = esc(String(sc.body||""))
-        .replace(/\n\s*\n/g, "\n\n")
-        .replace(/\n/g, "<br>");
-      out.push(
-        `<div class="scriptReadScene" data-sid="${esc(sc.id)}">`+
-          `<div class="scriptReadHead">${esc(head)}</div>`+
-          `<div class="scriptReadBody">${body || '<span class="muted">(sin texto)</span>'}</div>`+
-        `</div>`
-      );
-    }
-    return out.join("");
-  }
-
 
   function getActiveScriptVersion(){
     ensureScriptState();
@@ -1078,7 +1067,7 @@ function setupScheduleWheelScroll(){
         const s = selectedSceneId ? getScene(selectedSceneId) : null;
         if(!s) return;
         ensureSceneExtras(s);
-        s.shots.push({ id: uid("shot"), type: "Plano general", desc: "" });
+        s.shots.push({ id: uid("shot"), type: "Plano general", desc: "", durMin: DEFAULT_SHOT_MIN });
         touch();
         renderShotsEditor();
       };
@@ -1152,7 +1141,6 @@ function setupScheduleWheelScroll(){
 
     renderScriptSceneList(v);
     renderScriptSceneEditor(v);
-    renderScriptReadView(v);
 
     // Botón "+ Escena (6A)" dinámico según selección
     const btnIns = el("btnScriptInsertAfter");
@@ -1259,7 +1247,6 @@ function setupScheduleWheelScroll(){
         v.updatedAt = new Date().toISOString();
         touch();
         renderScriptSceneList(v);
-        renderScriptReadView(v);
       });
     }
     if(inBody && !inBody._bound){
@@ -1273,27 +1260,7 @@ function setupScheduleWheelScroll(){
         scc.summary = String(scc.body||"").replace(/\s+/g," ").trim().slice(0,220);
         v.updatedAt = new Date().toISOString();
         touch();
-        // read view updates but list doesn't need rebuild on every key
-        renderScriptReadView(v);
-      });
-    }
-  }
-
-  function renderScriptReadView(version){
-    const box = el("scriptReadView");
-    if(!box) return;
-    box.innerHTML = buildScriptReadHTML(version);
-
-    // click en lectura => selecciona escena
-    if(box.dataset.bound!=='1'){
-      box.dataset.bound='1';
-      box.addEventListener('click', (e)=>{
-        const item = e.target.closest('.scriptReadScene');
-        if(!item) return;
-        const id = item.dataset.id;
-        if(!id) return;
-        selectedScriptSceneId = id;
-        renderScriptUI();
+        // nothing else to re-render on every key
       });
     }
   }
@@ -2251,7 +2218,11 @@ function setupScheduleWheelScroll(){
 
         attachSceneHover(block, s);
 
-        block.addEventListener("dblclick", ()=> jumpToSceneInBreakdown(s.id));
+        // Doble click robusto (algunos browsers no disparan dblclick si hay pointerdown preventDefault)
+        block.addEventListener("dblclick", (e)=>{ e.stopPropagation(); jumpToSceneInBreakdown(s.id); });
+        block.addEventListener("click", (e)=>{
+          if(e.detail === 2 && !(schedDrag && schedDrag.moved)) jumpToSceneInBreakdown(s.id);
+        });
 
         grid.appendChild(block);
       }
@@ -2471,6 +2442,246 @@ function setupScheduleWheelScroll(){
       block.style.height = `${Math.max(34, dur * pxPerMin)}px`;
       const meta = block.querySelector(".meta");
       if(meta) meta.textContent = `${fmtClockFromCall(d.callTime, start)} · ${dur} min`;
+    }
+  }
+
+  // ===================== Shotlist (por día) =====================
+  function ensureDayShotsDone(d){
+    if(!d) return;
+    if(!d.shotsDone || typeof d.shotsDone !== "object") d.shotsDone = {};
+  }
+
+  function shotDurMin(sh){
+    const n = Number(sh?.durMin);
+    return (Number.isFinite(n) && n>0) ? n : DEFAULT_SHOT_MIN;
+  }
+
+  function sceneShotsTotalMin(scene){
+    if(!scene) return 0;
+    ensureSceneExtras(scene);
+    let total = 0;
+    for(const sh of (scene.shots||[])) total += shotDurMin(sh);
+    return total;
+  }
+
+  function syncDayDurationsFromShots(day, snapMin=15){
+    if(!day) return false;
+    ensureDayTimingMaps(day);
+    let changed = false;
+    for(const sid of (day.sceneIds||[])){
+      const sc = getScene(sid);
+      if(!sc) continue;
+      const shotsMin = sceneShotsTotalMin(sc);
+      if(!shotsMin) continue;
+      const cur = Number(day.durations?.[sid] ?? 0) || 0;
+      if(cur < shotsMin){
+        day.durations[sid] = shotsMin;
+        changed = true;
+      }
+    }
+    if(changed){
+      resolveOverlapsPushDown(day, snapMin);
+    }
+    return changed;
+  }
+
+  function syncAllDaysDurationsFromShotsForScene(sceneId, snapMin=15){
+    if(!sceneId) return false;
+    let changed = false;
+    for(const d of state.shootDays){
+      if((d.sceneIds||[]).includes(sceneId)){
+        if(syncDayDurationsFromShots(d, snapMin)) changed = true;
+      }
+    }
+    return changed;
+  }
+
+  function renderShotList(){
+    const sel = el("shotDaySelect");
+    const wrap = el("shotlistWrap");
+    const sum = el("shotlistSummary");
+    const btnPrint = el("btnShotPrint");
+    if(!sel || !wrap || !sum) return;
+
+    sortShootDaysInPlace();
+
+    // Select options
+    sel.innerHTML = state.shootDays.map(d=>{
+      const label = `${formatDayTitle(d.date)}${d.label ? " · "+d.label : ""}`.trim();
+      return `<option value="${esc(d.id)}">${esc(label||"Día")}</option>`;
+    }).join("");
+
+    if(!selectedShotlistDayId || !state.shootDays.some(d=>d.id===selectedShotlistDayId)){
+      selectedShotlistDayId = state.shootDays[0]?.id || null;
+    }
+    sel.value = selectedShotlistDayId || "";
+
+    if(!sel.dataset.bound){
+      sel.dataset.bound = "1";
+      sel.addEventListener("change", ()=>{
+        selectedShotlistDayId = sel.value;
+        renderShotList();
+      });
+    }
+    if(btnPrint && !btnPrint.dataset.bound){
+      btnPrint.dataset.bound = "1";
+      btnPrint.addEventListener("click", ()=> window.print());
+    }
+
+    const d = getDay(selectedShotlistDayId);
+    if(!d){
+      wrap.innerHTML = `<div class="muted">No hay días cargados.</div>`;
+      sum.textContent = "—";
+      return;
+    }
+
+    ensureDayTimingMaps(d);
+    ensureDayShotsDone(d);
+
+    // Auto-ajuste: si los planos superan la duración de la escena en cronograma, ampliamos.
+    const snapMin = Number(el("schedSnap")?.value || 15);
+    const changed = syncDayDurationsFromShots(d, snapMin);
+    if(changed){
+      touch();
+      // re-render de lo que depende del cronograma
+      renderScheduleBoard();
+      renderDayDetail();
+      renderReports();
+      renderCallSheetCalendar();
+      renderCallSheetDetail();
+      toast("Ajusté duraciones del cronograma según los planos");
+    }
+
+    // KPIs
+    let totalShots = 0;
+    let totalMin = 0;
+    let lastEnd = 0;
+    for(const sid of (d.sceneIds||[])){
+      const sc = getScene(sid);
+      if(!sc) continue;
+      ensureSceneExtras(sc);
+      totalShots += (sc.shots||[]).length;
+      const sMin = sceneShotsTotalMin(sc);
+      totalMin += sMin;
+      const st = Number(d.times?.[sid] ?? 0) || 0;
+      const du = Number(d.durations?.[sid] ?? 60) || 0;
+      lastEnd = Math.max(lastEnd, st + du);
+    }
+    const wrapClock = d.callTime ? fmtClockFromCall(d.callTime, lastEnd) : "";
+    sum.innerHTML = `
+      <div class="shotDayKpis">
+        <span class="pill">Escenas: <b>${(d.sceneIds||[]).length}</b></span>
+        <span class="pill">Planos: <b>${totalShots}</b></span>
+        <span class="pill">Min (planos): <b>${totalMin}</b></span>
+        <span class="pill">Fin estimado: <b>${esc(wrapClock||"—")}</b></span>
+      </div>
+    `;
+
+    wrap.innerHTML = "";
+    if(!(d.sceneIds||[]).length){
+      wrap.innerHTML = `<div class="muted">No hay escenas asignadas a este día.</div>`;
+      return;
+    }
+
+    for(const sid of (d.sceneIds||[])){
+      const sc = getScene(sid);
+      if(!sc) continue;
+      ensureSceneExtras(sc);
+
+      const st = Number(d.times?.[sid] ?? 0) || 0;
+      const du = Number(d.durations?.[sid] ?? 60) || 60;
+      const scStart = d.callTime ? fmtClockFromCall(d.callTime, st) : "";
+      const scEnd = d.callTime ? fmtClockFromCall(d.callTime, st+du) : "";
+      const shotsMin = sceneShotsTotalMin(sc);
+      const warn = shotsMin > du ? "Planos > duración" : "";
+
+      const box = document.createElement("div");
+      box.className = "shotSceneBox";
+      box.innerHTML = `
+        <div class="shotSceneHead">
+          <div>
+            <div class="t">#${esc(sc.number||"")} — ${esc(sc.slugline||"")}</div>
+            <div class="m">${esc(scStart||"")} → ${esc(scEnd||"")} · Escena: ${du} min · Planos: ${shotsMin} min</div>
+          </div>
+          ${warn ? `<div class="warn">${esc(warn)}</div>` : ""}
+        </div>
+        <div class="shotTableWrap">
+          <div class="tableWrap">
+            <table class="table shotTable">
+              <thead>
+                <tr>
+                  <th class="shotChk">✓</th>
+                  <th class="shotNum">#</th>
+                  <th class="shotTime">Hora</th>
+                  <th style="width:220px">Tipo</th>
+                  <th>Descripción</th>
+                  <th class="shotDur">Min</th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </div>
+      `;
+
+      const tbody = box.querySelector("tbody");
+      if(!(sc.shots||[]).length){
+        const tr = document.createElement("tr");
+        tr.innerHTML = `<td colspan="6" class="muted">Sin planos cargados para esta escena.</td>`;
+        tbody.appendChild(tr);
+      }else{
+        let offset = 0;
+        (sc.shots||[]).forEach((sh, idx)=>{
+          const dur = shotDurMin(sh);
+          const key = `${sid}|${sh.id}`;
+          const done = !!d.shotsDone[key];
+          const t = d.callTime ? fmtClockFromCall(d.callTime, st + offset) : "";
+
+          const tr = document.createElement("tr");
+          if(done) tr.classList.add("shotRowDone");
+          tr.innerHTML = `
+            <td class="shotChk"><input type="checkbox" ${done?"checked":""} /></td>
+            <td class="shotNum">${idx+1}</td>
+            <td class="shotTime">${esc(t||"")}</td>
+            <td>${esc(normalizeShotType(sh.type)||sh.type||"Plano")}</td>
+            <td>${esc(sh.desc||"")}</td>
+            <td class="shotDur">
+              <select class="input compact shotDurSel">
+                ${[5,10,15,20,30,45,60].map(n=>`<option value="${n}"${(dur===n)?" selected":""}>${n}</option>`).join("")}
+              </select>
+            </td>
+          `;
+
+          const chk = tr.querySelector("input[type=checkbox]");
+          const selDur = tr.querySelector("select");
+
+          chk?.addEventListener("change", ()=>{
+            d.shotsDone[key] = chk.checked;
+            touch();
+            renderShotList();
+          });
+          selDur?.addEventListener("change", ()=>{
+            sh.durMin = Number(selDur.value) || DEFAULT_SHOT_MIN;
+            const changed2 = syncAllDaysDurationsFromShotsForScene(sid, snapMin);
+            touch();
+            if(changed2){
+              renderScheduleBoard();
+              renderDayDetail();
+              renderReports();
+              renderCallSheetDetail();
+            }
+            renderShotList();
+          });
+
+          tbody.appendChild(tr);
+          offset += dur;
+        });
+      }
+
+      // Doble click: ir a editar la escena en Breakdown
+      box.addEventListener("dblclick", ()=> jumpToSceneInBreakdown(sc.id));
+
+      wrap.appendChild(box);
     }
   }
 
@@ -3153,6 +3364,7 @@ el("scriptVerSelect")?.addEventListener("change", ()=>{
 
     selectedSceneId = selectedSceneId || state.scenes[0]?.id || null;
     selectedDayId   = selectedDayId   || state.shootDays[0]?.id || null;
+    selectedShotlistDayId = selectedShotlistDayId || selectedDayId;
     callSheetDayId  = callSheetDayId  || selectedDayId;
 
     renderScenesTable();
@@ -3165,6 +3377,7 @@ el("scriptVerSelect")?.addEventListener("change", ()=>{
     renderCrew();
     renderReports();
     renderScheduleBoard();
+    renderShotList();
     renderCallSheetCalendar();
     renderCallSheetDetail();
     applyBankCollapsedUI();
@@ -3180,6 +3393,7 @@ el("scriptVerSelect")?.addEventListener("change", ()=>{
     selectedSceneId = state.scenes?.[0]?.id || null;
     selectedDayId = state.shootDays?.[0]?.id || null;
     callSheetDayId = selectedDayId;
+    selectedShotlistDayId = selectedDayId;
 
     bindEvents();
     setupScheduleWheelScroll();

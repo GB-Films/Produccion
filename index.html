@@ -20,6 +20,7 @@
         <button class="navBtn" data-view="breakdown">Breakdown</button>
         <button class="navBtn" data-view="shooting">Plan de Rodaje</button>
         <button class="navBtn" data-view="schedule">Cronograma</button>
+        <button class="navBtn" data-view="shotlist">Shotlist</button>
         <button class="navBtn" data-view="elements">Elementos</button>
         <button class="navBtn" data-view="crew">Equipo técnico</button>
         <button class="navBtn" data-view="reports">Reportes</button>
@@ -222,16 +223,14 @@
                         </select>
                       </div>
                     </div>
-                    <label class="small">Texto</label>
-                    <textarea class="input" id="scriptSceneBody" rows="6" placeholder="Pegá acá el texto de la escena…"></textarea>
+                    <label class="small">Guion (editable)</label>
+                    <textarea class="input" id="scriptSceneBody" rows="16" placeholder="Escribí o pegá acá el texto de la escena…"></textarea>
 
                     <div class="row gap" style="justify-content:flex-end">
                       <button class="btn" id="btnScriptSaveScene">Guardar cambios</button>
                     </div>
 
-                    <div class="divider"></div>
-                    <div class="muted small">Lectura cómoda</div>
-                    <div class="scriptRead" id="scriptReadView"></div>
+                    
                   </div>
                 </div>
 
@@ -391,6 +390,24 @@
             <div id="schedWrap" class="schedWrap">
               <div id="schedBoard" class="schedBoard"></div>
             </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ================= SHOTLIST ================= -->
+      <section id="view-shotlist" class="view hidden">
+        <div class="card" id="shotlistCard">
+          <div class="cardHeader">
+            <h2 class="cardTitle">Shotlist</h2>
+            <div class="row gap noPrint">
+              <select id="shotDaySelect" class="input compact"></select>
+              <button id="btnShotPrint" class="btn">Imprimir</button>
+            </div>
+          </div>
+          <div class="cardContent">
+            <div id="shotlistSummary" class="muted small">—</div>
+            <div class="spacer"></div>
+            <div id="shotlistWrap"></div>
           </div>
         </div>
       </section>
