@@ -845,7 +845,7 @@ function setupScheduleWheelScroll(){
     }
   }
 
-  function sceneCardNode(scene, mode="bank"){
+  function sceneCardNode(scene, mode="bank", dayId=null){
     const node = document.createElement("div");
     node.className = "sceneCard";
     node.draggable = true;
@@ -862,12 +862,37 @@ function setupScheduleWheelScroll(){
         <div class="right"><span class="dragHandle">⠿</span></div>
       `;
     }else{
+      // mode === "day"
       node.innerHTML = `
         <div class="left">
           <div class="title">#${esc(scene.number||"")} — ${esc(scene.slugline||"")}</div>
         </div>
-        <div class="right"><span class="dragHandle">⠿</span></div>
+        <div class="right">
+          <button class="btn icon sceneRemoveBtn" title="Quitar del día">×</button>
+          <span class="dragHandle">⠿</span>
+        </div>
       `;
+      if(dayId) node.dataset.dayId = dayId;
+      const rm = node.querySelector(".sceneRemoveBtn");
+      rm?.addEventListener("click", (e)=>{
+        e.preventDefault();
+        e.stopPropagation();
+        const did = node.dataset.dayId;
+        const d = did ? getDay(did) : null;
+        if(!d) return;
+        d.sceneIds = (d.sceneIds||[]).filter(x=>x!==scene.id);
+        if(d.times) delete d.times[scene.id];
+        if(d.durations) delete d.durations[scene.id];
+        selectedDayId = d.id;
+        touch();
+        renderSceneBank();
+        renderDaysBoard();
+        renderDayDetail();
+        renderReports();
+        renderScheduleBoard();
+        renderCallSheetCalendar();
+        renderCallSheetDetail();
+      });
     }
 
     attachSceneHover(node, scene);
@@ -1024,7 +1049,7 @@ function setupScheduleWheelScroll(){
         for(const sid of d.sceneIds){
           const s = getScene(sid);
           if(!s) continue;
-          zone.appendChild(sceneCardNode(s, "day"));
+          zone.appendChild(sceneCardNode(s, "day", d.id));
         }
       }
 

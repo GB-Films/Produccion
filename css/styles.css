@@ -404,6 +404,7 @@ tr.groupRow td{
   justify-content:space-between;
   gap:8px;
   cursor:pointer;
+  background: linear-gradient(180deg, rgba(255,255,255,.05), rgba(255,255,255,.01));
 }
 .dayHeader .t{ font-weight:900; }
 .dayHeader .m{ color:var(--muted); font-size:12px; margin-top:4px; }
@@ -498,6 +499,44 @@ tr.groupRow td{
 .sceneCard .dragHandle{ cursor:grab; color:var(--muted); font-weight:900; }
 .sceneCard.assigned{ border-color: rgba(113,255,122,.55); }
 .sceneCard.unassigned{ border-color: rgba(255,92,92,.55); }
+
+/* Plan de rodaje: títulos de escenas un poco más chicos (banco + tablero) */
+.bankList .sceneCard .title,
+.dropZone .sceneCard .title{
+  font-size: 13px;
+  line-height: 1.2;
+}
+.bankList .sceneCard .meta{ font-size:11px; }
+
+/* Botón quitar escena del día (compacto, no altera hover) */
+.sceneCard .sceneRemoveBtn{
+  width:28px;
+  height:28px;
+  border-radius:10px;
+  padding:0;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  font-size:18px;
+  line-height:1;
+  border-color: rgba(255,92,92,.45);
+  background: rgba(255,255,255,.02);
+}
+.sceneCard .sceneRemoveBtn:hover{ border-color: rgba(255,92,92,.65); }
+
+/* Detalle del día: equipo técnico más compacto y sin ensanchar columna */
+#dayCrewPicker .crewPickItem{
+  padding:8px 10px;
+  border-radius:14px;
+}
+#dayCrewPicker .crewPickItem .title{ font-size:13px; }
+#dayCrewPicker .crewPickItem .left,
+#dayCrewPicker .crewPickItem .left > div{ min-width:0; }
+#dayCrewPicker .crewPickItem .meta{
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+}
 
 /* Breakdown elements grid */
 .sceneCatRow{
@@ -646,6 +685,7 @@ tr.groupRow td{
 .schedHead{
   padding:10px 12px;
   border-bottom:1px solid var(--border);
+  background: linear-gradient(180deg, rgba(255,255,255,.05), rgba(255,255,255,.01));
 }
 .schedHead .t{ font-weight:900; }
 .schedHead .m{ color:var(--muted); font-size:12px; margin-top:4px; }
