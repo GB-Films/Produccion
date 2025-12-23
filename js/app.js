@@ -23,8 +23,40 @@
   };
 
   const shotTypes = [
-    "GPG", "PG", "PC", "PA", "PM", "PP", "PPP", "PD", "INSERT", "PLANO SECUENCIA"
+    "Gran plano general",
+    "Plano general",
+    "Plano conjunto",
+    "Plano americano",
+    "Plano medio",
+    "Primer plano",
+    "Primerísimo primer plano",
+    "Plano detalle",
+    "Insert",
+    "Plano secuencia"
   ];
+
+  // Back-compat: abreviaturas viejas → nombres completos
+  const shotTypeAliases = {
+    "GPG": "Gran plano general",
+    "PG": "Plano general",
+    "PC": "Plano conjunto",
+    "PA": "Plano americano",
+    "PM": "Plano medio",
+    "PP": "Primer plano",
+    "PPP": "Primerísimo primer plano",
+    "PD": "Plano detalle",
+    "INS": "Insert",
+    "PS": "Plano secuencia"
+  };
+
+  function normalizeShotType(v){
+    const s = String(v||"").trim();
+    if(!s) return "";
+    const u = s.toUpperCase();
+    if(shotTypeAliases[u]) return shotTypeAliases[u];
+    const found = shotTypes.find(t=>t.toLowerCase()===s.toLowerCase());
+    return found || s;
+  }
 
   const crewAreas = [
     "Direccion",
@@ -59,6 +91,24 @@
   let expandedCrewIds = new Set();
 
   let calCursor = { year: new Date().getFullYear(), month: new Date().getMonth() };
+
+  function loadCallSheetCursor(){
+    const raw = localStorage.getItem("gb_callsheet_month");
+    if(!raw) return;
+    const m = String(raw).match(/^(\d{4})-(\d{2})$/);
+    if(!m) return;
+    const y = Number(m[1]);
+    const mo = Number(m[2]) - 1;
+    if(Number.isFinite(y) && mo>=0 && mo<=11){
+      calCursor.year = y;
+      calCursor.month = mo;
+    }
+  }
+  function saveCallSheetCursor(){
+    try{
+      localStorage.setItem("gb_callsheet_month", `${calCursor.year}-${String(calCursor.month+1).padStart(2,"0")}`);
+    }catch{}
+  }
   let schedDrag = null;
 
   function uid(p="id"){ return `${p}_${Math.random().toString(16).slice(2)}_${Date.now().toString(16)}`; }
@@ -269,6 +319,34 @@
       cand = base + "A" + String.fromCharCode("A".charCodeAt(0) + (i%26));
     }
     return cand;
+  }
+
+  function usedSceneNumbers(exceptSceneId=null){
+    return (state.scenes||[])
+      .filter(s=>s.id!==exceptSceneId)
+      .map(s=>canonSceneNumber(s.number))
+      .filter(Boolean);
+  }
+
+  function makeUniqueSceneNumber(desired, exceptSceneId=null){
+    const cand = canonSceneNumber(desired);
+    if(!cand) return "";
+    const used = new Set(usedSceneNumbers(exceptSceneId));
+    if(!used.has(cand)) return cand;
+
+    const key = sceneNumberKey(cand);
+    if(key.ok){
+      // si ya existe "6" → devuelve "6A"; si existe "6A" → "6B", etc.
+      return nextInsertedNumber(cand, Array.from(used));
+    }
+    const base = String(desired||"").match(/\d+/)?.[0] || cand;
+    return nextInsertedNumber(base, Array.from(used));
+  }
+
+  function nextNewSceneNumber(){
+    const keys = (state.scenes||[]).map(s=>sceneNumberKey(s.number)).filter(k=>k.ok && Number.isFinite(k.base));
+    const maxBase = keys.reduce((m,k)=>Math.max(m,k.base), 0);
+    return makeUniqueSceneNumber(String(maxBase + 1), null);
   }
 
   function sluglineToLocTOD(slugline){
@@ -824,6 +902,7 @@ function setupScheduleWheelScroll(){
     const table = el("sceneTable");
     if(!table) return;
     const tbody = table.querySelector("tbody");
+    sortScenesByNumberInPlace();
     const q = (el("sceneSearch")?.value||"").toLowerCase();
     const tod = (el("sceneFilterTOD")?.value||"");
     tbody.innerHTML = "";
@@ -967,7 +1046,7 @@ function setupScheduleWheelScroll(){
         const s = selectedSceneId ? getScene(selectedSceneId) : null;
         if(!s) return;
         ensureSceneExtras(s);
-        s.shots.push({ id: uid("shot"), type: "PG", desc: "" });
+        s.shots.push({ id: uid("shot"), type: "Plano general", desc: "" });
         touch();
         renderShotsEditor();
       };
@@ -984,12 +1063,14 @@ function setupScheduleWheelScroll(){
     ensureSceneExtras(s);
 
     (s.shots||[]).forEach((sh, i)=>{
+      // migración: abreviaturas viejas → labels completos
+      sh.type = normalizeShotType(sh.type) || "Plano general";
       const tr = document.createElement("tr");
       tr.innerHTML = `
         <td>${i+1}</td>
         <td>
           <select class="input compact shotTypeSel">
-            ${shotTypes.map(t=>`<option value="${esc(t)}"${(String(sh.type||"").toUpperCase()===t)?" selected":""}>${esc(t)}</option>`).join("")}
+            ${shotTypes.map(t=>`<option value="${esc(t)}"${(normalizeShotType(sh.type)===t)?" selected":""}>${esc(t)}</option>`).join("")}
           </select>
         </td>
         <td><input class="input shotDescInput" placeholder="Descripción del plano…" value="${esc(sh.desc||"")}" /></td>
@@ -1040,6 +1121,19 @@ function setupScheduleWheelScroll(){
     renderScriptSceneList(v);
     renderScriptSceneEditor(v);
     renderScriptReadView(v);
+
+    // Botón "+ Escena (6A)" dinámico según selección
+    const btnIns = el("btnScriptInsertAfter");
+    if(btnIns){
+      const idx = (v.scenes||[]).findIndex(s=>s.id===selectedScriptSceneId);
+      if(idx>=0){
+        const after = v.scenes[idx];
+        const nextNum = nextInsertedNumber(after.number, (v.scenes||[]).map(s=>s.number));
+        btnIns.textContent = nextNum ? `+ Escena (${nextNum})` : "+ Escena";
+      }else{
+        btnIns.textContent = "+ Escena";
+      }
+    }
   }
 
   function renderScriptSceneList(version){
@@ -1060,6 +1154,16 @@ function setupScheduleWheelScroll(){
         selectedScriptSceneId = sc.id;
         renderScriptUI();
       });
+      item.addEventListener("dblclick", ()=>{
+        // Ir al Breakdown para editar la escena del proyecto
+        const target = state.scenes.find(s=>canonSceneNumber(s.number)===canonSceneNumber(sc.number));
+        if(target){
+          selectedSceneId = target.id;
+          showView("breakdown");
+          renderSceneEditor();
+          renderScenesTable();
+        }
+      });
       list.appendChild(item);
     }
   }
@@ -1067,13 +1171,42 @@ function setupScheduleWheelScroll(){
   function renderScriptSceneEditor(version){
     const sc = (version.scenes||[]).find(s=>s.id===selectedScriptSceneId) || null;
     const inSlug = el("scriptSceneSlugline");
+    const inNum  = el("scriptSceneNumber");
     const inBody = el("scriptSceneBody");
     if(inSlug) inSlug.disabled = !sc;
     if(inBody) inBody.disabled = !sc;
     if(inSlug) inSlug.value = sc ? (sc.slugline||"") : "";
     if(inBody) inBody.value = sc ? (sc.body||"") : "";
+    if(inNum) inNum.disabled = !sc;
+    if(inNum) inNum.value = sc ? (canonSceneNumber(sc.number||"")) : "";
 
     // prevent duplicate handlers
+    if(inNum && !inNum._bound){
+      inNum._bound = true;
+      inNum.addEventListener("blur", ()=>{
+        const v = getActiveScriptVersion();
+        if(!v) return;
+        const scc = (v.scenes||[]).find(s=>s.id===selectedScriptSceneId);
+        if(!scc) return;
+        const cand = canonSceneNumber(inNum.value);
+        if(!cand){
+          inNum.value = canonSceneNumber(scc.number||"");
+          return;
+        }
+        const used = (v.scenes||[]).filter(s=>s.id!==scc.id).map(s=>canonSceneNumber(s.number)).filter(Boolean);
+        let fixed = cand;
+        if(used.includes(fixed)){
+          fixed = nextInsertedNumber(fixed, used);
+          toast(`Número ajustado → ${fixed}`);
+        }
+        scc.number = fixed;
+        v.scenes.sort((a,b)=>sceneNumberCompare(a.number,b.number));
+        v.updatedAt = new Date().toISOString();
+        touch();
+        renderScriptUI();
+      });
+    }
+
     if(inSlug && !inSlug._bound){
       inSlug._bound = true;
       inSlug.addEventListener("input", ()=>{
@@ -1117,7 +1250,7 @@ function setupScheduleWheelScroll(){
   function addScene(){
     const s = {
       id: uid("scene"),
-      number: String((state.scenes.length||0)+1),
+      number: nextNewSceneNumber(),
       slugline:"",
       location:"",
       timeOfDay:"",
@@ -1128,6 +1261,7 @@ function setupScheduleWheelScroll(){
       shots: []
     };
     state.scenes.push(s);
+    sortScenesByNumberInPlace();
     selectedSceneId = s.id;
     touch();
     renderScenesTable();
@@ -1168,8 +1302,9 @@ function setupScheduleWheelScroll(){
     if(!s) return;
     const c = JSON.parse(JSON.stringify(s));
     c.id = uid("scene");
-    c.number = `${s.number}b`;
+    c.number = makeUniqueSceneNumber(`${s.number}B`);
     state.scenes.push(c);
+    sortScenesByNumberInPlace();
     selectedSceneId = c.id;
     touch();
     renderScenesTable();
@@ -1278,7 +1413,8 @@ function setupScheduleWheelScroll(){
         renderDayDetail();
         renderReports();
         renderScheduleBoard();
-        renderCallSheetCalendar();
+        saveCallSheetCursor();
+      renderCallSheetCalendar();
         renderCallSheetDetail();
       });
     }
@@ -1427,7 +1563,8 @@ function setupScheduleWheelScroll(){
         renderDayDetail();
         renderReports();
         renderScheduleBoard();
-        renderCallSheetCalendar();
+        saveCallSheetCursor();
+      renderCallSheetCalendar();
         renderCallSheetDetail();
       });
 
@@ -2505,7 +2642,52 @@ function setupScheduleWheelScroll(){
     el("sceneSearch")?.addEventListener("input", renderScenesTable);
     el("sceneFilterTOD")?.addEventListener("change", renderScenesTable);
 
-    ["number","slugline","location","timeOfDay","pages","summary","notes"].forEach(k=>{
+    // Número de escena: no permitimos duplicados (si chocan, auto 6A/6B…)
+    const numNode = el("scene_number");
+    numNode?.addEventListener("input", ()=>{
+      const s = selectedSceneId ? getScene(selectedSceneId) : null;
+      if(!s) return;
+      s.number = numNode.value;
+      renderScenesTable();
+      renderSceneBank();
+      renderDaysBoard();
+      renderDayDetail();
+      renderReports();
+      renderScheduleBoard();
+      renderCallSheetDetail();
+    });
+    numNode?.addEventListener("blur", ()=>{
+      const s = selectedSceneId ? getScene(selectedSceneId) : null;
+      if(!s) return;
+      const before = canonSceneNumber(s.number);
+      const fixed = makeUniqueSceneNumber(numNode.value, s.id);
+      if(!fixed){
+        s.number = "";
+        numNode.value = "";
+        touch();
+        renderScenesTable();
+        return;
+      }
+      s.number = fixed;
+      numNode.value = fixed;
+      if(canonSceneNumber(fixed)!==before){
+        toast(`Número ajustado → ${fixed}`);
+      }
+      sortScenesByNumberInPlace();
+      touch();
+      renderScenesTable();
+      renderSceneEditor();
+      renderScriptUI();
+      renderSceneBank();
+      renderDaysBoard();
+      renderDayDetail();
+      renderElementsExplorer();
+      renderReports();
+      renderScheduleBoard();
+      renderCallSheetDetail();
+    });
+
+    ["slugline","location","timeOfDay","pages","summary","notes"].forEach(k=>{
       const node = el(`scene_${k}`);
       node?.addEventListener("input", ()=>{
         const s = selectedSceneId ? getScene(selectedSceneId) : null;
@@ -2823,6 +3005,8 @@ function setupScheduleWheelScroll(){
 
     state.crew = (state.crew||[]).map(c=>({ ...c, area: normalizeCrewArea(c.area) }));
 
+    sortScenesByNumberInPlace();
+
     sortShootDaysInPlace();
     for(const d of state.shootDays) ensureDayTimingMaps(d);
 
@@ -2847,6 +3031,7 @@ function setupScheduleWheelScroll(){
   }
 
   function init(){
+    loadCallSheetCursor();
     const local = StorageLayer.loadLocal();
     bootHadLocal = !!(local && local.meta);
     state = bootHadLocal ? local : defaultState();

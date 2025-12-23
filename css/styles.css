@@ -127,6 +127,7 @@ body{
   gap:14px;
   margin-bottom:14px;
 }
+.span2{ grid-column: 1 / -1; }
 @media (max-width:1200px){
   .shell{ grid-template-columns: 240px 1fr; }
   .grid2{ grid-template-columns: 1fr; }
@@ -849,7 +850,7 @@ tr.groupRow td{
 }
 
 /* ===== Breakdown: Planos ===== */
-.shotsWrap{ max-height:240px; }
+.shotsWrap{ flex:1 1 auto; min-height:0; overflow:auto; max-height:none; }
 .shotsWrap .table th, .shotsWrap .table td{ padding:9px 10px; }
 .shotTypeSel{ width:100%; }
 .shotDescInput{ width:100%; }
@@ -1072,7 +1073,7 @@ tr.groupRow td{
 }
 
 /* ===== Breakdown: Planos ===== */
-.shotsWrap{ max-height:240px; }
+.shotsWrap{ flex:1 1 auto; min-height:0; overflow:auto; max-height:none; }
 .shotsWrap .table th, .shotsWrap .table td{ padding:9px 10px; }
 .shotTypeSel{ width:100%; }
 .shotDescInput{ width:100%; }

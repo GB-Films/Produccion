@@ -82,7 +82,7 @@
             </div>
           </div>
 
-          <div class="card">
+          <div class="card" id="sceneEditorCard">
             <div class="cardHeader">
               <h2 class="cardTitle">Editor</h2>
               <div id="selectedSceneHint" class="muted small">Seleccioná una escena</div>
@@ -160,84 +160,79 @@
         </div>
 
         <!-- ABAJO: importación (secundaria) + colapsable -->
-        <div class="grid2">
-          <div class="card collapsible collapsed" data-collapse-key="bd_script">
-            <div class="cardHeader">
-              <h2 class="cardTitle">Cargar guion <span class="keepcase">(INT./EXT.)</span></h2>
-              <button class="btn icon collapseBtn" data-collapse-btn="bd_script" title="Expandir/colapsar">▸</button>
+        
+          <div class="grid2">
+            <div class="card collapsible collapsed span2" data-collapse-key="bd_script">
+              <div class="cardHeader">
+                <div class="cardTitle">GUION EN EL BREAKDOWN <span class="keepcase">(versión y planos)</span></div>
+                <div class="collapseToggle" title="Expandir/Colapsar">▸</div>
+              </div>
+              <div class="cardContent">
+                <div class="row gap">
+                  <select id="scriptVerSelect" class="input" style="max-width:240px"></select>
+                  <button class="btn" id="btnNewScriptVersion">Nueva versión</button>
+                  <span class="pill" id="scriptVerMeta">—</span>
+                </div>
+
+                <div class="scriptWrap" id="scriptVersionUI" style="display:none">
+                  <div class="scriptLeft">
+                    <div class="muted small">Escenas de la versión (doble click = editar en el proyecto)</div>
+                    <div class="scriptList" id="scriptSceneList"></div>
+                    <div class="row gap">
+                      <button class="btn" id="btnScriptInsertAfter">+ Escena (6A)</button>
+                      <button class="btn" id="btnScriptApply">Incorporar cambios al proyecto</button>
+                    </div>
+                  </div>
+
+                  <div class="scriptRight">
+                    <div class="muted small">Editor de escena (versión)</div>
+                    <div class="row gap">
+                      <div class="grow">
+                        <label class="small">Slugline</label>
+                        <input class="input" id="scriptSceneSlugline" placeholder="INT. CASA - DÍA" />
+                      </div>
+                      <div style="max-width:120px">
+                        <label class="small">Nº</label>
+                        <input class="input" id="scriptSceneNumber" placeholder="6A" />
+                      </div>
+                    </div>
+                    <div class="row gap">
+                      <div class="grow">
+                        <label class="small">Lugar</label>
+                        <input class="input" id="scriptSceneLocation" placeholder="LIVING" />
+                      </div>
+                      <div style="max-width:140px">
+                        <label class="small">Momento</label>
+                        <select class="input" id="scriptSceneTOD">
+                          <option>Día</option><option>Noche</option><option>Atardecer</option><option>Amanecer</option>
+                        </select>
+                      </div>
+                    </div>
+                    <label class="small">Texto</label>
+                    <textarea class="input" id="scriptSceneBody" rows="6" placeholder="Pegá acá el texto de la escena…"></textarea>
+
+                    <div class="row gap" style="justify-content:flex-end">
+                      <button class="btn" id="btnScriptSaveScene">Guardar cambios</button>
+                    </div>
+
+                    <div class="divider"></div>
+                    <div class="muted small">Lectura cómoda</div>
+                    <div class="scriptRead" id="scriptReadView"></div>
+                  </div>
+                </div>
+
+                <div class="divider"></div>
+                <div class="muted small">Cómo usarlo</div>
+                <ol class="small">
+                  <li>Creá una versión nueva, pegá el guion (o editá las escenas acá).</li>
+                  <li>Insertá escenas intermedias: 6 → 6A → 6B…</li>
+                  <li>Cuando esté OK, incorporá al proyecto (se sincroniza).</li>
+                </ol>
+                <div class="muted small">Tip: en el guion, el buscador de escenas funciona si el slugline arranca con INT./EXT.</div>
+              </div>
             </div>
-            <div class="cardContent">
-              <div class="row gap alignEnd">
-                <div class="field grow">
-                  <label>Versión</label>
-                  <select id="scriptVerSelect" class="input"></select>
-                </div>
-                <button id="btnScriptApply" class="btn">Aplicar al proyecto</button>
-              </div>
-
-              <div class="spacer"></div>
-
-              <div class="row gap">
-                <textarea id="scriptImportText" class="textarea" placeholder="Pegá el guion acá…"></textarea>
-              </div>
-              <div class="row gap alignEnd">
-                <div class="field grow">
-                  <label>Keywords extra (opcional)</label>
-                  <input id="scriptKeywords" class="input" placeholder="Ej: EST., PLANO, MONTAGE" />
-                </div>
-                <button id="btnParseScript" class="btn primary">Procesar a nueva versión</button>
-              </div>
-
-              <div class="scriptVersionUI" id="scriptVersionUI">
-                <div class="scriptGrid">
-                  <div class="scriptList">
-                    <div class="row gap alignEnd">
-                      <div class="muted small">Escenas de la versión</div>
-                      <button id="btnScriptInsertAfter" class="btn">+ Escena (6A)</button>
-                    </div>
-                    <div id="scriptSceneList" class="scriptSceneList"></div>
-                  </div>
-
-                  <div class="scriptEdit">
-                    <div class="field">
-                      <label>Slugline</label>
-                      <input id="scriptSceneSlugline" class="input" placeholder="INT./EXT. ..." />
-                    </div>
-                    <div class="field">
-                      <label>Texto de la escena</label>
-                      <textarea id="scriptSceneBody" class="textarea scriptBodyArea" placeholder="Diálogos / acción…"></textarea>
-                    </div>
-                    <div class="muted small">
-                      Tip: insertá escenas nuevas sin renumerar (6A, 6B, 6C…)
-                    </div>
-                  </div>
-                </div>
-
-                <div class="spacer"></div>
-
-                <div class="field">
-                  <label>Vista lectura (numerada)</label>
-                  <pre id="scriptReadView" class="scriptReadView"></pre>
-                </div>
-              </div>
-
-              <div class="muted small">
-                Tip: cada escena debe empezar con una línea que arranque en <b>INT.</b> o <b>EXT.</b>
-              </div>
-</div>
           </div>
 
-          <div class="card collapsible collapsed" data-collapse-key="bd_table">
-            <div class="cardHeader">
-              <h2 class="cardTitle">Importar tabla de escenas</h2>
-              <button class="btn icon collapseBtn" data-collapse-btn="bd_table" title="Expandir/colapsar">▸</button>
-            </div>
-            <div class="cardContent">
-              <textarea id="sceneImportText" class="textarea" placeholder="Nro<TAB>Slugline<TAB>Locación<TAB>Momento del día<TAB>Páginas<TAB>Resumen"></textarea>
-              <div class="row gap alignEnd">
-                <button id="btnImportScenes" class="btn">Importar</button>
-              </div>
-            </div>
       </section>
 
       <!-- ================= PLAN DE RODAJE ================= -->
