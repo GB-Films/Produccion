@@ -8,6 +8,7 @@
     sound:"Sonido", sfx:"SFX", vfx:"Post VFX", vehicles:"Vehículos", animals:"Animales", extras:"Extras"
   };
   const catColors = {
+
     cast:"var(--cat-cast)",
     props:"var(--cat-props)",
     wardrobe:"var(--cat-wardrobe)",
@@ -20,6 +21,10 @@
     animals:"var(--cat-animals)",
     extras:"var(--cat-extras)"
   };
+
+  const shotTypes = [
+    "GPG", "PG", "PC", "PA", "PM", "PP", "PPP", "PD", "INSERT", "PLANO SECUENCIA"
+  ];
 
   const crewAreas = [
     "Direccion",
@@ -39,6 +44,9 @@
   let selectedSceneId = null;
   let selectedDayId = null;
   let callSheetDayId = null;
+
+  // Guion versionado (Breakdown)
+  let selectedScriptSceneId = null;
 
   // Sync safety:
   // - We do an initial pull from JSONBin when possible (especially on first run)
@@ -94,10 +102,11 @@
 
   function defaultState(){
     return {
-      meta:{ version: 13, title:"Proyecto", updatedAt: new Date().toISOString() },
+      meta:{ version: 14, title:"Proyecto", updatedAt: new Date().toISOString() },
       scenes: [],
       shootDays: [],
-      crew: []
+      crew: [],
+      script: { versions: [], activeVersionId: null }
     };
   }
 
@@ -182,6 +191,106 @@
     return (state.shootDays||[]).filter(d=> (d.crewIds||[]).includes(crewId));
   }
 
+
+
+
+  function ensureSceneExtras(s){
+    if(!s) return;
+    // ensure elements structure
+    if(!s.elements){
+      s.elements = Object.fromEntries(cats.map(c=>[c,[]]));
+    }else{
+      for(const c of cats){
+        if(!Array.isArray(s.elements[c])) s.elements[c] = [];
+      }
+    }
+    // ensure shots
+    if(!Array.isArray(s.shots)) s.shots = [];
+  }
+
+  function ensureScriptState(){
+    if(!state.script) state.script = { versions: [], activeVersionId: null };
+    if(!Array.isArray(state.script.versions)) state.script.versions = [];
+    if(!("activeVersionId" in state.script)) state.script.activeVersionId = null;
+  }
+
+  function canonSceneNumber(n){
+    const s = String(n||"").trim();
+    if(!s) return "";
+    const m = s.match(/^(\d+)\s*([A-Za-z]*)/);
+    if(!m) return s.toUpperCase();
+    const base = m[1];
+    const suf = (m[2]||"").toUpperCase();
+    return base + suf;
+  }
+
+  function sceneNumberKey(n){
+    const s = canonSceneNumber(n);
+    const m = s.match(/^(\d+)([A-Z]*)$/);
+    if(!m) return { ok:false, raw:s, base: Number.POSITIVE_INFINITY, suf:"" };
+    return { ok:true, raw:s, base: Number(m[1]), suf: m[2]||"" };
+  }
+
+  function compareSceneNumbers(a, b){
+    const A = sceneNumberKey(a);
+    const B = sceneNumberKey(b);
+    if(A.base !== B.base) return A.base - B.base;
+    // empty suffix first
+    if(!A.suf && B.suf) return -1;
+    if(A.suf && !B.suf) return 1;
+    return A.suf.localeCompare(B.suf);
+  }
+
+  function sortScenesByNumberInPlace(){
+    state.scenes.sort((x,y)=> compareSceneNumbers(x.number, y.number));
+  }
+
+  function nextInsertedNumber(afterNumber, existingNumbers){
+    const a = sceneNumberKey(afterNumber);
+    if(!a.ok || !Number.isFinite(a.base)) return "";
+    const used = new Set((existingNumbers||[]).map(canonSceneNumber));
+    const base = String(a.base);
+    const afterSuf = (a.suf||"");
+    // start from A if after has no suffix, else next letter after last suffix char
+    let startChar = "A".charCodeAt(0);
+    if(afterSuf){
+      const last = afterSuf.charCodeAt(afterSuf.length-1);
+      startChar = Math.min("Z".charCodeAt(0)+1, last+1);
+    }
+    for(let code = startChar; code <= "Z".charCodeAt(0); code++){
+      const cand = base + String.fromCharCode(code);
+      if(!used.has(cand)) return cand;
+    }
+    // fallback (rarísimo): base + "AA"
+    let cand = base + "AA";
+    let i = 0;
+    while(used.has(cand) && i<200){
+      i++;
+      cand = base + "A" + String.fromCharCode("A".charCodeAt(0) + (i%26));
+    }
+    return cand;
+  }
+
+  function sluglineToLocTOD(slugline){
+    const s = String(slugline||"").trim();
+    const parts = s.split(/\s[-–—]\s/g).map(p=>p.trim()).filter(Boolean);
+    let location = "";
+    let tod = "";
+    if(parts.length >= 2){
+      tod = normalizeTOD(parts[parts.length-1]);
+      const mid = parts.slice(0, parts.length-1).join(" - ");
+      location = mid
+        .replace(/^(INT\/EXT\.?|INT\.?\/EXT\.?|I\/E\.?|INT\.?|EXT\.?)\s*/i,"")
+        .replace(/^(INTERIOR|EXTERIOR)\s*/i,"")
+        .trim();
+    }else{
+      location = s
+        .replace(/^(INT\/EXT\.?|INT\.?\/EXT\.?|I\/E\.?|INT\.?|EXT\.?)\s*/i,"")
+        .replace(/^(INTERIOR|EXTERIOR)\s*/i,"")
+        .trim();
+    }
+    return { location, timeOfDay: tod };
+  }
 
 
   function normalizeTOD(raw){
@@ -460,7 +569,7 @@ function setupScheduleWheelScroll(){
       b.classList.toggle("active", b.dataset.view===name);
     });
 
-    if(name==="breakdown"){ initCollapsibles(); }
+    if(name==="breakdown"){ initCollapsibles(); renderScriptUI(); renderShotsEditor(); }
     if(name==="shooting"){ renderSceneBank(); renderDaysBoard(); renderDayDetail(); applyBankCollapsedUI(); }
     if(name==="schedule"){ renderScheduleBoard(); }
     if(name==="elements"){ renderElementsExplorer(); }
@@ -518,7 +627,8 @@ function setupScheduleWheelScroll(){
       pages: 0,
       summary: s.summary,
       notes:"",
-      elements: Object.fromEntries(cats.map(c=>[c,[]]))
+      elements: Object.fromEntries(cats.map(c=>[c,[]])),
+      shots: []
     }));
 
     function finalize(s){
@@ -551,6 +661,118 @@ function setupScheduleWheelScroll(){
       const summary = bodyText.slice(0, 220);
       return { number:num, slugline, location, timeOfDay:tod, summary };
     }
+  }
+
+
+  // ======= Guion (versionado) =======
+  function parseScreenplayToScriptScenes(text, extraKeywordsCsv=""){
+    const rawLines = (text||"").split(/\r?\n/);
+    if(!rawLines.length) return [];
+
+    const extra = (extraKeywordsCsv||"").split(",").map(s=>s.trim()).filter(Boolean).map(s=>s.toUpperCase());
+
+    function stripSceneNumber(line){
+      return String(line||"")
+        .replace(/^\s*\(?\s*\d+[A-Za-z]*\s*\)?\s*[.)-:]\s*/,"")
+        .replace(/^\s*\(?\s*\d+[A-Za-z]*\s*\)?\s+/,"");
+    }
+    function isHeading(line){
+      const cleaned = stripSceneNumber(line).trimStart();
+      const up = cleaned.toUpperCase();
+      for(const k of extra){ if(up.startsWith(k)) return true; }
+      const starters = [
+        "INT/EXT.", "INT/EXT ", "INT./EXT.", "INT./EXT ", "I/E.", "I/E ",
+        "INT.", "INT ", "EXT.", "EXT ", "INTERIOR", "EXTERIOR"
+      ];
+      return starters.some(s=>up.startsWith(s));
+    }
+
+    const out = [];
+    let current = null;
+    let autoN = 1;
+
+    for(const raw of rawLines){
+      const line = String(raw ?? "").replace(/\s+$/,"");
+      if(isHeading(line.trim())){
+        if(current) out.push(finalize(current));
+        current = { rawHeading: line.trim(), body:[], autoNumber:autoN++ };
+      }else{
+        if(!current){
+          // skip leading empty lines
+          if(!line.trim()) continue;
+          current = { rawHeading:"ESCENA", body:[], autoNumber:autoN++ };
+        }
+        current.body.push(line);
+      }
+    }
+    if(current) out.push(finalize(current));
+
+    // normalize ids and return
+    return out.map(s=>({
+      id: uid("scrScene"),
+      number: canonSceneNumber(String(s.number)),
+      slugline: s.slugline,
+      location: s.location,
+      timeOfDay: s.timeOfDay,
+      body: s.body.join("\n").trim(),
+      summary: s.summary
+    }));
+
+    function finalize(s){
+      const heading = s.rawHeading || "";
+      let num = s.autoNumber;
+      // Accept existing numbers like 6A, 6B...
+      const mNum = heading.match(/^\s*(\d+)([A-Za-z]*)\b/);
+      if(mNum) num = canonSceneNumber(mNum[1] + (mNum[2]||""));
+
+      const slugline = stripSceneNumber(heading).trim();
+      const { location, timeOfDay } = sluglineToLocTOD(slugline);
+
+      const bodyText = (s.body||[]).join(" ").trim();
+      const summary = bodyText.slice(0, 220);
+      return { number:num, slugline, location, timeOfDay, body: s.body||[], summary };
+    }
+  }
+
+  function buildScriptReadView(version){
+    if(!version) return "";
+    const parts = [];
+    for(const sc of (version.scenes||[])){
+      const head = `${canonSceneNumber(sc.number)} ${String(sc.slugline||"").trim()}`.trim();
+      parts.push(head);
+      if(sc.body) parts.push(String(sc.body).trim());
+      parts.push(""); // blank line between scenes
+    }
+    return parts.join("\n").trim();
+  }
+
+  function getActiveScriptVersion(){
+    ensureScriptState();
+    const id = state.script.activeVersionId;
+    return state.script.versions.find(v=>v.id===id) || state.script.versions[0] || null;
+  }
+
+  function setActiveScriptVersion(versionId){
+    ensureScriptState();
+    state.script.activeVersionId = versionId;
+  }
+
+  function renderScriptVersionSelect(){
+    const sel = el("scriptVerSelect");
+    if(!sel) return;
+    ensureScriptState();
+    if(!state.script.versions.length){
+      sel.innerHTML = `<option value="">(sin versiones)</option>`;
+      sel.value = "";
+      return;
+    }
+    sel.innerHTML = state.script.versions
+      .slice()
+      .sort((a,b)=> (a.createdAt||"").localeCompare(b.createdAt||""))
+      .map(v=>`<option value="${esc(v.id)}">${esc(v.name||"Versión")}</option>`)
+      .join("");
+    if(!state.script.activeVersionId) state.script.activeVersionId = state.script.versions[state.script.versions.length-1].id;
+    sel.value = state.script.activeVersionId;
   }
 
   // ======= Cast roster (desde Crew área Cast) =======
@@ -627,6 +849,7 @@ function setupScheduleWheelScroll(){
         selectedSceneId = s.id;
         renderScenesTable();
         renderSceneEditor();
+    renderScriptUI();
       });
       tbody.appendChild(tr);
     }
@@ -656,6 +879,7 @@ function setupScheduleWheelScroll(){
     showView("breakdown");
     renderScenesTable();
     renderSceneEditor();
+    renderScriptUI();
 
     // después del render, llevamos la lista a la fila seleccionada
     requestAnimationFrame(()=>{
@@ -679,6 +903,7 @@ function setupScheduleWheelScroll(){
     }
     refreshElementSuggestions();
     renderSceneElementsGrid();
+    renderShotsEditor();
   }
 
   function renderSceneElementsGrid(){
@@ -717,6 +942,7 @@ function setupScheduleWheelScroll(){
           s.elements[cat] = (s.elements[cat]||[]).filter(x=>x!==it);
           touch();
           renderSceneElementsGrid();
+    renderShotsEditor();
           renderSceneBank();
           renderDaysBoard();
           renderDayDetail();
@@ -731,6 +957,163 @@ function setupScheduleWheelScroll(){
     }
   }
 
+
+  function renderShotsEditor(){
+    const table = el("shotsTable");
+    const btnAdd = el("btnAddShot");
+    if(btnAdd){
+      btnAdd.disabled = !selectedSceneId;
+      btnAdd.onclick = ()=>{
+        const s = selectedSceneId ? getScene(selectedSceneId) : null;
+        if(!s) return;
+        ensureSceneExtras(s);
+        s.shots.push({ id: uid("shot"), type: "PG", desc: "" });
+        touch();
+        renderShotsEditor();
+      };
+    }
+    if(!table) return;
+    const tbody = table.querySelector("tbody");
+    if(!tbody) return;
+
+    const s = selectedSceneId ? getScene(selectedSceneId) : null;
+    tbody.innerHTML = "";
+    if(!s){
+      return;
+    }
+    ensureSceneExtras(s);
+
+    (s.shots||[]).forEach((sh, i)=>{
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
+        <td>${i+1}</td>
+        <td>
+          <select class="input compact shotTypeSel">
+            ${shotTypes.map(t=>`<option value="${esc(t)}"${(String(sh.type||"").toUpperCase()===t)?" selected":""}>${esc(t)}</option>`).join("")}
+          </select>
+        </td>
+        <td><input class="input shotDescInput" placeholder="Descripción del plano…" value="${esc(sh.desc||"")}" /></td>
+        <td><button class="btn icon danger" title="Borrar">×</button></td>
+      `;
+      const sel = tr.querySelector("select");
+      const inp = tr.querySelector("input");
+      const del = tr.querySelector("button");
+
+      sel?.addEventListener("change", ()=>{
+        sh.type = sel.value;
+        touch();
+      });
+      inp?.addEventListener("input", ()=>{
+        sh.desc = inp.value;
+        touch();
+      });
+      del?.addEventListener("click", (e)=>{
+        e.preventDefault();
+        s.shots = (s.shots||[]).filter(x=>x.id!==sh.id);
+        touch();
+        renderShotsEditor();
+      });
+
+      tbody.appendChild(tr);
+    });
+  }
+
+  function renderScriptUI(){
+    const wrap = el("scriptVersionUI");
+    ensureScriptState();
+
+    renderScriptVersionSelect();
+    const v = getActiveScriptVersion();
+
+    if(!wrap) return;
+    if(!v){
+      wrap.style.display = "none";
+      return;
+    }
+    wrap.style.display = "";
+
+    // pick selected script scene
+    if(!selectedScriptSceneId || !(v.scenes||[]).some(s=>s.id===selectedScriptSceneId)){
+      selectedScriptSceneId = v.scenes?.[0]?.id || null;
+    }
+
+    renderScriptSceneList(v);
+    renderScriptSceneEditor(v);
+    renderScriptReadView(v);
+  }
+
+  function renderScriptSceneList(version){
+    const list = el("scriptSceneList");
+    if(!list) return;
+    list.innerHTML = "";
+    for(const sc of (version.scenes||[])){
+      const item = document.createElement("div");
+      item.className = "scriptSceneItem" + (sc.id===selectedScriptSceneId ? " selected" : "");
+      item.innerHTML = `
+        <div class="n">${esc(canonSceneNumber(sc.number||""))}</div>
+        <div class="grow">
+          <div class="h">${esc(sc.slugline||"")}</div>
+          <div class="m">${esc(sc.location||"")}${sc.timeOfDay? " · "+esc(sc.timeOfDay):""}</div>
+        </div>
+      `;
+      item.addEventListener("click", ()=>{
+        selectedScriptSceneId = sc.id;
+        renderScriptUI();
+      });
+      list.appendChild(item);
+    }
+  }
+
+  function renderScriptSceneEditor(version){
+    const sc = (version.scenes||[]).find(s=>s.id===selectedScriptSceneId) || null;
+    const inSlug = el("scriptSceneSlugline");
+    const inBody = el("scriptSceneBody");
+    if(inSlug) inSlug.disabled = !sc;
+    if(inBody) inBody.disabled = !sc;
+    if(inSlug) inSlug.value = sc ? (sc.slugline||"") : "";
+    if(inBody) inBody.value = sc ? (sc.body||"") : "";
+
+    // prevent duplicate handlers
+    if(inSlug && !inSlug._bound){
+      inSlug._bound = true;
+      inSlug.addEventListener("input", ()=>{
+        const v = getActiveScriptVersion();
+        if(!v) return;
+        const scc = (v.scenes||[]).find(s=>s.id===selectedScriptSceneId);
+        if(!scc) return;
+        scc.slugline = inSlug.value;
+        const { location, timeOfDay } = sluglineToLocTOD(scc.slugline);
+        scc.location = location;
+        scc.timeOfDay = timeOfDay;
+        v.updatedAt = new Date().toISOString();
+        touch();
+        renderScriptSceneList(v);
+        renderScriptReadView(v);
+      });
+    }
+    if(inBody && !inBody._bound){
+      inBody._bound = true;
+      inBody.addEventListener("input", ()=>{
+        const v = getActiveScriptVersion();
+        if(!v) return;
+        const scc = (v.scenes||[]).find(s=>s.id===selectedScriptSceneId);
+        if(!scc) return;
+        scc.body = inBody.value;
+        scc.summary = String(scc.body||"").replace(/\s+/g," ").trim().slice(0,220);
+        v.updatedAt = new Date().toISOString();
+        touch();
+        // read view updates but list doesn't need rebuild on every key
+        renderScriptReadView(v);
+      });
+    }
+  }
+
+  function renderScriptReadView(version){
+    const pre = el("scriptReadView");
+    if(!pre) return;
+    pre.textContent = buildScriptReadView(version);
+  }
+
   function addScene(){
     const s = {
       id: uid("scene"),
@@ -741,13 +1124,15 @@ function setupScheduleWheelScroll(){
       pages:0,
       summary:"",
       notes:"",
-      elements: Object.fromEntries(cats.map(c=>[c,[]]))
+      elements: Object.fromEntries(cats.map(c=>[c,[]])),
+      shots: []
     };
     state.scenes.push(s);
     selectedSceneId = s.id;
     touch();
     renderScenesTable();
     renderSceneEditor();
+    renderScriptUI();
     renderSceneBank();
   }
 
@@ -768,6 +1153,7 @@ function setupScheduleWheelScroll(){
     touch();
     renderScenesTable();
     renderSceneEditor();
+    renderScriptUI();
     renderSceneBank();
     renderDaysBoard();
     renderDayDetail();
@@ -788,6 +1174,7 @@ function setupScheduleWheelScroll(){
     touch();
     renderScenesTable();
     renderSceneEditor();
+    renderScriptUI();
     renderSceneBank();
   }
 
@@ -821,6 +1208,7 @@ function setupScheduleWheelScroll(){
     touch();
     refreshElementSuggestions();
     renderSceneElementsGrid();
+    renderShotsEditor();
     renderSceneBank();
     renderDaysBoard();
     renderDayDetail();
@@ -1350,6 +1738,7 @@ function setupScheduleWheelScroll(){
           showView("breakdown");
           renderScenesTable();
           renderSceneEditor();
+    renderScriptUI();
         });
         detailWrap.appendChild(r);
       }
@@ -2148,6 +2537,122 @@ function setupScheduleWheelScroll(){
       }
     });
 
+
+    el("btnParseScript")?.addEventListener("click", ()=>{
+      const txt = el("scriptImportText")?.value || "";
+      const keys = el("scriptKeywords")?.value || "";
+      const scenes = parseScreenplayToScriptScenes(txt, keys);
+      if(!scenes.length) return toast("No detecté escenas (revisá INT./EXT. por línea).");
+      ensureScriptState();
+      const v = {
+        id: uid("scrVer"),
+        name: `V${state.script.versions.length + 1}`,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        keywords: keys,
+        rawText: txt,
+        scenes
+      };
+      state.script.versions.push(v);
+      state.script.activeVersionId = v.id;
+      selectedScriptSceneId = v.scenes?.[0]?.id || null;
+      touch();
+      toast(`Guion procesado → ${v.name} ✅`);
+      renderScriptUI();
+    });
+
+    el("scriptVerSelect")?.addEventListener("change", ()=>{
+      const id = el("scriptVerSelect").value;
+      ensureScriptState();
+      state.script.activeVersionId = id || null;
+      selectedScriptSceneId = null;
+      touch();
+      renderScriptUI();
+    });
+
+    el("btnScriptInsertAfter")?.addEventListener("click", ()=>{
+      const v = getActiveScriptVersion();
+      if(!v) return;
+      const idx = (v.scenes||[]).findIndex(s=>s.id===selectedScriptSceneId);
+      if(idx < 0) return toast("Elegí una escena en la versión.");
+      const after = v.scenes[idx];
+      const nextNum = nextInsertedNumber(after.number, v.scenes.map(s=>s.number));
+      if(!nextNum) return toast("No pude calcular el número.");
+      const fresh = {
+        id: uid("scrScene"),
+        number: nextNum,
+        slugline: "INT. (NUEVA ESCENA) - DÍA",
+        location: "(NUEVA ESCENA)",
+        timeOfDay: "Día",
+        body: "",
+        summary: ""
+      };
+      v.scenes.splice(idx+1, 0, fresh);
+      selectedScriptSceneId = fresh.id;
+      v.updatedAt = new Date().toISOString();
+      touch();
+      renderScriptUI();
+      toast(`Insertada ${nextNum} ✅`);
+      // focus editor
+      requestAnimationFrame(()=> el("scriptSceneSlugline")?.focus());
+    });
+
+    el("btnScriptApply")?.addEventListener("click", ()=>{
+      const v = getActiveScriptVersion();
+      if(!v) return toast("No hay versión activa.");
+      // Apply (merge) to project scenes by number
+      const byNum = new Map(state.scenes.map(s=>[canonSceneNumber(s.number), s]));
+      let added = 0, updated = 0;
+
+      for(const sc of (v.scenes||[])){
+        const num = canonSceneNumber(sc.number);
+        if(!num) continue;
+        const existing = byNum.get(num);
+        if(existing){
+          ensureSceneExtras(existing);
+          existing.number = num;
+          existing.slugline = sc.slugline || existing.slugline;
+          existing.location = sc.location || existing.location;
+          existing.timeOfDay = sc.timeOfDay || existing.timeOfDay;
+          existing.summary = sc.summary || String(sc.body||"").replace(/\s+/g," ").trim().slice(0,220) || existing.summary;
+          updated++;
+        }else{
+          const s = {
+            id: uid("scene"),
+            number: num,
+            slugline: sc.slugline || "",
+            location: sc.location || "",
+            timeOfDay: sc.timeOfDay || "",
+            pages: 0,
+            summary: sc.summary || String(sc.body||"").replace(/\s+/g," ").trim().slice(0,220),
+            notes: "",
+            elements: Object.fromEntries(cats.map(c=>[c,[]])),
+            shots: []
+          };
+          state.scenes.push(s);
+          byNum.set(num, s);
+          added++;
+        }
+      }
+
+      sortScenesByNumberInPlace();
+      selectedSceneId = state.scenes[0]?.id || null;
+
+      touch();
+      toast(`Aplicado ✅ (nuevas: ${added}, actualizadas: ${updated})`);
+      renderScenesTable();
+      renderSceneEditor();
+    renderScriptUI();
+      renderSceneBank();
+      renderDaysBoard();
+      renderDayDetail();
+      renderElementsExplorer();
+      renderReports();
+      renderScheduleBoard();
+      renderCallSheetDetail();
+    });
+
+
     el("btnImportScenes")?.addEventListener("click", ()=>{
       const txt = el("sceneImportText").value || "";
       const rows = window.U.parseTableText(txt);
@@ -2168,7 +2673,8 @@ function setupScheduleWheelScroll(){
           pages: Number(r[4]||0),
           summary: r[5]||"",
           notes:"",
-          elements: Object.fromEntries(cats.map(c=>[c,[]]))
+          elements: Object.fromEntries(cats.map(c=>[c,[]])),
+          shots: []
         });
         added++;
       }
@@ -2178,22 +2684,9 @@ function setupScheduleWheelScroll(){
         toast(`Importadas ${added} escenas ✅`);
         renderScenesTable();
         renderSceneEditor();
+    renderScriptUI();
         renderSceneBank();
       }
-    });
-
-    el("btnParseScript")?.addEventListener("click", ()=>{
-      const txt = el("scriptImportText").value || "";
-      const keys = el("scriptKeywords").value || "";
-      const scenes = parseScreenplayToScenes(txt, keys);
-      if(!scenes.length) return toast("No detecté escenas (revisá INT./EXT. por línea).");
-      state.scenes.push(...scenes);
-      selectedSceneId = state.scenes[state.scenes.length-1].id;
-      touch();
-      toast(`Cargadas ${scenes.length} escenas ✅`);
-      renderScenesTable();
-      renderSceneEditor();
-      renderSceneBank();
     });
 
     el("btnAddShootDay")?.addEventListener("click", addShootDay);
@@ -2290,6 +2783,9 @@ function setupScheduleWheelScroll(){
   }
 
   function hydrateAll(){
+    ensureScriptState();
+    state.scenes.forEach(ensureSceneExtras);
+
     renderCatSelect();
     refreshElementSuggestions();
 
@@ -2306,7 +2802,8 @@ function setupScheduleWheelScroll(){
         pages:1,
         summary:"(Completá el resumen)",
         notes:"",
-        elements: Object.fromEntries(cats.map(c=>[c,[]]))
+        elements: Object.fromEntries(cats.map(c=>[c,[]])),
+        shots: []
       });
     }
     if(!state.shootDays.length){
@@ -2335,6 +2832,7 @@ function setupScheduleWheelScroll(){
 
     renderScenesTable();
     renderSceneEditor();
+    renderScriptUI();
     renderSceneBank();
     renderDaysBoard();
     renderDayDetail();
