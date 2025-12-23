@@ -2,6 +2,10 @@
   --bg:#0b1220;
   --panel:#0f1a2c;
   --card:#111f36;
+  --bg-rgb:11,18,32;
+  --panel-rgb:15,26,44;
+  --card-rgb:17,31,54;
+  --glow2-rgb:191,167,255;
   --muted:rgba(255,255,255,.65);
   --text:rgba(255,255,255,.92);
   --border:rgba(255,255,255,.10);
@@ -26,9 +30,16 @@
 }
 
 html[data-theme="pink"]{
+  --bg:#180712;
+  --panel:#220818;
+  --card:#2b0c22;
+  --bg-rgb:24,7,18;
+  --panel-rgb:34,8,24;
+  --card-rgb:43,12,34;
   --accent:#ff6fb5;
   --accent-rgb:255,111,181;
   --danger:#ff4d7a;
+  --glow2-rgb:255,123,198;
 }
 .projectSwitch{
   margin-top:10px;
@@ -43,7 +54,7 @@ body{
   margin:0;
   font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial;
   background: radial-gradient(1000px 700px at 12% 10%, rgba(var(--accent-rgb),.12), transparent 55%),
-              radial-gradient(900px 600px at 85% 85%, rgba(191,167,255,.10), transparent 60%),
+              radial-gradient(900px 600px at 85% 85%, rgba(var(--glow2-rgb),.10), transparent 60%),
               var(--bg);
   color:var(--text);
 }
@@ -57,7 +68,7 @@ body{
 .sidebar{
   padding:14px;
   border-right:1px solid var(--border);
-  background: linear-gradient(180deg, rgba(17,31,54,.9), rgba(13,22,38,.92));
+  background: linear-gradient(180deg, rgba(var(--card-rgb),.90), rgba(var(--panel-rgb),.92));
   display:flex;
   flex-direction:column;
   gap:14px;
@@ -148,7 +159,7 @@ body{
 
 .card{
   border:1px solid var(--border);
-  background: rgba(17,31,54,.88);
+  background: rgba(var(--card-rgb),.88);
   border-radius:18px;
   box-shadow: var(--shadow);
   overflow:hidden;
@@ -212,7 +223,7 @@ label{ font-size:12px; color:var(--muted); }
   box-shadow: 0 0 0 2px rgba(var(--accent-rgb),.10);
 }
 select option{
-  background:#0f1a2c;
+  background:var(--panel);
   color:var(--text);
 }
 
@@ -755,7 +766,7 @@ tr.groupRow td{
   right:10px;
   border:1px solid var(--border);
   border-radius:16px;
-  background: rgba(17,31,54,.92);
+  background: rgba(var(--card-rgb),.92);
   padding:12px;
   cursor:grab;
   user-select:none;
