@@ -1041,7 +1041,97 @@ tr.groupRow td{
 .shotDescInput{ width:100%; }
 
 /* Print */
+
+
+/* ===================== PLAN DEL DÍA ===================== */
+.dayplanHeader{
+  display:flex;
+  justify-content:space-between;
+  gap:16px;
+  align-items:flex-end;
+  flex-wrap:wrap;
+}
+.dpTitle{display:flex; flex-direction:column; gap:2px;}
+.dpProj{
+  font-weight:800;
+  letter-spacing:.02em;
+  text-transform:uppercase;
+}
+.dpDay{
+  font-size:1.05rem;
+  font-weight:700;
+}
+.dpMeta{
+  display:flex;
+  gap:16px;
+  flex-wrap:wrap;
+  font-size:.95rem;
+}
+.dayplanNotes{
+  margin-top:10px;
+  padding:10px 12px;
+  border:1px solid var(--border);
+  border-radius:12px;
+  background:rgba(255,255,255,.03);
+}
+.dayplanTable .dpHandle{
+  cursor:grab;
+  user-select:none;
+  font-size:18px;
+  opacity:.75;
+}
+.dayplanTable .dpRow{
+  border-left:8px solid transparent;
+}
+.dayplanTable .dpSwatch{
+  display:inline-block;
+  width:14px;
+  height:14px;
+  border-radius:4px;
+  border:1px solid rgba(255,255,255,.25);
+  margin-right:8px;
+  vertical-align:middle;
+}
+.dayplanTable .dpColorInput{
+  width:42px;
+  height:28px;
+  padding:0;
+  border:none;
+  background:transparent;
+}
+.dayplanTable td{
+  vertical-align:top;
+}
+.dayplanTable .dpItem .linkBtn{
+  padding:0;
+  background:none;
+  border:none;
+  color:var(--text);
+  text-align:left;
+}
+.dayplanTable .dpItem .linkBtn:hover{
+  text-decoration:underline;
+}
+
 @media print{
+
+  /* Plan del día */
+  .dayplanNotes{ background:#fff; border:1px solid #ddd; }
+  .dayplanTable{ font-size:10.5pt; }
+  .dayplanTable .dpHandle,
+  .dayplanTable .dpColorInput,
+  .dayplanTable .btn{ display:none !important; }
+  .dayplanTable .dpSwatch{ border:1px solid #000; }
+  .dayplanTable input,
+  .dayplanTable textarea,
+  .dayplanTable select{
+    border:none !important;
+    background:transparent !important;
+    color:#000 !important;
+    box-shadow:none !important;
+    padding:0 !important;
+    height:auto !important;
+  }
   body{ background:#fff; color:#000; }
   .sidebar, .noPrint, #toast, #hoverTip { display:none !important; }
   .shell{ grid-template-columns: 1fr; }
@@ -1265,6 +1355,24 @@ tr.groupRow td{
 
 /* Print */
 @media print{
+
+  /* Plan del día */
+  .dayplanNotes{ background:#fff; border:1px solid #ddd; }
+  .dayplanTable{ font-size:10.5pt; }
+  .dayplanTable .dpHandle,
+  .dayplanTable .dpColorInput,
+  .dayplanTable .btn{ display:none !important; }
+  .dayplanTable .dpSwatch{ border:1px solid #000; }
+  .dayplanTable input,
+  .dayplanTable textarea,
+  .dayplanTable select{
+    border:none !important;
+    background:transparent !important;
+    color:#000 !important;
+    box-shadow:none !important;
+    padding:0 !important;
+    height:auto !important;
+  }
   body{ background:#fff; color:#000; }
   .sidebar, .noPrint, #toast, #hoverTip { display:none !important; }
   .shell{ grid-template-columns: 1fr; }

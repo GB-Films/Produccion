@@ -1,6 +1,6 @@
 (function(){
   const el = (id)=>document.getElementById(id);
-  const views = ["breakdown","shooting","schedule","shotlist","elements","crew","reports","callsheet"];
+  const views = ["breakdown","shooting","dayplan","schedule","shotlist","elements","crew","reports","callsheet"];
 
   const cats = ["cast","props","wardrobe","art","makeup","sound","sfx","vfx","vehicles","animals","extras"];
   const catNames = {
@@ -79,6 +79,7 @@
   let selectedDayId = null;
   let callSheetDayId = null;
   let selectedShotlistDayId = null;
+  let selectedDayplanDayId = null;
 
   const DEFAULT_SHOT_MIN = 15;
 
@@ -563,6 +564,21 @@ function enforceScriptVersionsLimit(notify=false){
     d.times = d.times || {};
     d.sceneIds = d.sceneIds || [];
     d.crewIds = d.crewIds || [];
+    d.blocks = Array.isArray(d.blocks) ? d.blocks : [];
+    d.sceneColors = (d.sceneColors && typeof d.sceneColors === "object") ? d.sceneColors : {};
+
+    // Normalizar bloques (notas/tareas del día)
+    for(const b of d.blocks){
+      if(!b || typeof b !== "object") continue;
+      if(!b.id) b.id = uid("blk");
+      if(typeof b.startMin !== "number" || !Number.isFinite(b.startMin)) b.startMin = 0;
+      if(typeof b.durMin !== "number" || !Number.isFinite(b.durMin)) b.durMin = 30;
+      b.durMin = clamp(b.durMin, 5, DAY_SPAN_MIN);
+      b.startMin = clamp(b.startMin, 0, Math.max(0, DAY_SPAN_MIN-1));
+      if(typeof b.title !== "string") b.title = String(b.title||"");
+      if(typeof b.detail !== "string") b.detail = String(b.detail||"");
+      if(typeof b.color !== "string" || !b.color) b.color = "#bdbdbd";
+    }
     for(const sid of d.sceneIds){
       if(typeof d.durations[sid] !== "number") d.durations[sid] = 60;
       if(typeof d.times[sid] !== "number") d.times[sid] = 0;
@@ -580,20 +596,59 @@ function enforceScriptVersionsLimit(notify=false){
 
   function resolveOverlapsPushDown(d, snapMin){
     ensureDayTimingMaps(d);
-    d.sceneIds.sort((a,b)=> (d.times[a]??0) - (d.times[b]??0));
+
+    const blockById = new Map((d.blocks||[]).map(b=>[b.id, b]));
+    const items = [];
+
+    for(const sid of (d.sceneIds||[])){
+      items.push({
+        kind:"scene",
+        id:sid,
+        start: d.times[sid] ?? 0,
+        dur:   d.durations[sid] ?? 60
+      });
+    }
+    for(const b of (d.blocks||[])){
+      items.push({
+        kind:"block",
+        id:b.id,
+        start: b.startMin ?? 0,
+        dur:   b.durMin ?? 30
+      });
+    }
+
+    items.sort((a,b)=> (a.start??0) - (b.start??0));
+
     let cursor = 0;
-    for(const sid of d.sceneIds){
-      let st = d.times[sid] ?? 0;
-      const du = d.durations[sid] ?? 60;
+    for(const it of items){
+      let st = it.start ?? 0;
+      let du = it.dur ?? snapMin;
+
+      du = clamp(du, snapMin, DAY_SPAN_MIN);
       st = clamp(st, 0, DAY_SPAN_MIN - snapMin);
+
       if(st < cursor){
         st = snap(cursor, snapMin);
       }
+
       st = clamp(st, 0, Math.max(0, DAY_SPAN_MIN - du));
-      d.times[sid] = st;
-      cursor = st + du;
-      cursor = clamp(cursor, 0, DAY_SPAN_MIN);
+
+      if(it.kind === "scene"){
+        d.times[it.id] = st;
+        d.durations[it.id] = du;
+      }else{
+        const bb = blockById.get(it.id);
+        if(bb){
+          bb.startMin = st;
+          bb.durMin = du;
+        }
+      }
+
+      cursor = clamp(st + du, 0, DAY_SPAN_MIN);
     }
+
+    // Mantener escenas ordenadas por horario
+    d.sceneIds.sort((a,b)=> (d.times[a]??0) - (d.times[b]??0));
   }
 
   function sceneCatsWithItems(scene){
@@ -943,6 +998,7 @@ function setupScheduleWheelScroll(){
 
     if(name==="breakdown"){ initCollapsibles(); renderScriptUI(); renderShotsEditor(); }
     if(name==="shooting"){ renderSceneBank(); renderDaysBoard(); renderDayDetail(); applyBankCollapsedUI(); }
+    if(name==="dayplan"){ renderDayPlan(); }
     if(name==="schedule"){ renderScheduleBoard(); }
     if(name==="shotlist"){ renderShotList(); }
     if(name==="elements"){ renderElementsExplorer(); }
@@ -1790,6 +1846,8 @@ function setupScheduleWheelScroll(){
       notes:"",
       sceneIds:[],
       crewIds:[],
+      blocks:[],
+      sceneColors:{},
       times:{},
       durations:{}
     };
@@ -2569,6 +2627,8 @@ function setupScheduleWheelScroll(){
 
         const block = document.createElement("div");
         block.className = "schedBlock";
+        const rowColor = d.sceneColors?.[sid];
+        if(rowColor) block.style.borderLeft = `6px solid ${rowColor}`;
         block.dataset.sceneId = sid;
         block.dataset.dayId = d.id;
         block.style.top = `${top}px`;
@@ -2970,7 +3030,364 @@ function setupScheduleWheelScroll(){
     return changed;
   }
 
-  function renderShotList(){
+  
+
+  // ===================== Plan del Día (itinerario con escenas + notas) =====================
+  let dayplanDragKey = null;
+
+  function safeHexColor(c, fallback="#bdbdbd"){
+    const s = String(c||"").trim();
+    if(/^#[0-9a-fA-F]{6}$/.test(s)) return s;
+    return fallback;
+  }
+
+  function getDayplanSnap(){
+    const a = Number(el("dayplanSnap")?.value || 0);
+    const b = Number(el("schedSnap")?.value || 0);
+    return (a || b || 15);
+  }
+
+  function buildDayplanItems(d){
+    ensureDayTimingMaps(d);
+    const items = [];
+
+    for(const sid of (d.sceneIds||[])){
+      const sc = getScene(sid);
+      if(!sc) continue;
+      items.push({
+        key:`scene:${sid}`,
+        kind:"scene",
+        id:sid,
+        start: Number(d.times?.[sid] ?? 0) || 0,
+        dur: Number(d.durations?.[sid] ?? 60) || 0,
+        title: `#${sc.number||""} ${sc.slugline||""}`.trim(),
+        detail: [sc.location||"", sc.timeOfDay||""].filter(Boolean).join(" · "),
+        color: d.sceneColors?.[sid] || ""
+      });
+    }
+
+    for(const b of (d.blocks||[])){
+      items.push({
+        key:`block:${b.id}`,
+        kind:"block",
+        id:b.id,
+        start: Number(b.startMin ?? 0) || 0,
+        dur: Number(b.durMin ?? 0) || 0,
+        title: b.title || "Nota",
+        detail: b.detail || "",
+        color: b.color || ""
+      });
+    }
+
+    items.sort((a,b)=> (a.start||0) - (b.start||0));
+    return items;
+  }
+
+  function setDayplanStart(d, kind, id, startMin){
+    if(kind === "scene"){
+      d.times[id] = startMin;
+      return;
+    }
+    const b = (d.blocks||[]).find(x=>x.id===id);
+    if(b) b.startMin = startMin;
+  }
+
+  function setDayplanDur(d, kind, id, durMin){
+    if(kind === "scene"){
+      d.durations[id] = durMin;
+      return;
+    }
+    const b = (d.blocks||[]).find(x=>x.id===id);
+    if(b) b.durMin = durMin;
+  }
+
+  function addDayplanNote(){
+    const dayId = selectedDayplanDayId || selectedDayId || state.shootDays?.[0]?.id || null;
+    const d = dayId ? getDay(dayId) : null;
+    if(!d) return toast("No hay día seleccionado.");
+    ensureDayTimingMaps(d);
+    const snapMin = getDayplanSnap();
+
+    const items = buildDayplanItems(d);
+    let lastEnd = 0;
+    for(const it of items) lastEnd = Math.max(lastEnd, (it.start||0) + (it.dur||0));
+
+    d.blocks.push({
+      id: uid("blk"),
+      title: "Nueva tarea",
+      detail: "",
+      startMin: snap(lastEnd, snapMin),
+      durMin: snapMin,
+      color: "#bdbdbd"
+    });
+
+    resolveOverlapsPushDown(d, snapMin);
+    touch();
+    renderDayPlan();
+    renderScheduleBoard();
+    renderCallSheetDetail();
+    renderReports();
+    toast("Agregada ✅");
+  }
+
+  function deleteDayplanBlock(dayId, blockId){
+    const d = getDay(dayId);
+    if(!d) return;
+    d.blocks = (d.blocks||[]).filter(b=>b.id!==blockId);
+    resolveOverlapsPushDown(d, getDayplanSnap());
+    touch();
+    renderDayPlan();
+    renderScheduleBoard();
+    renderCallSheetDetail();
+    renderReports();
+  }
+
+  function renderDayPlan(){
+    const sel = el("dayplanSelect");
+    const head = el("dayplanHead");
+    const tbody = el("dayplanTbody");
+    if(!sel || !head || !tbody) return;
+
+    // selector de día
+    sel.innerHTML = "";
+    for(const d of state.shootDays){
+      const opt = document.createElement("option");
+      opt.value = d.id;
+      opt.textContent = `${d.label||"Día"}${d.date?` — ${d.date}`:""}`;
+      sel.appendChild(opt);
+    }
+
+    selectedDayplanDayId = selectedDayplanDayId || selectedDayId || state.shootDays?.[0]?.id || null;
+    if(selectedDayplanDayId) sel.value = selectedDayplanDayId;
+
+    const d = selectedDayplanDayId ? getDay(selectedDayplanDayId) : null;
+    if(!d){
+      head.innerHTML = `<div class="muted">No hay días cargados.</div>`;
+      tbody.innerHTML = "";
+      return;
+    }
+
+    ensureDayTimingMaps(d);
+    const snapMin = getDayplanSnap();
+
+    const items = buildDayplanItems(d);
+
+    const proj = esc(state.meta?.title || "Proyecto");
+    const label = esc(d.label || "Día");
+    const date = esc(d.date || "");
+    const call = esc(d.callTime || "");
+    const loc = esc(d.location || "");
+
+    head.innerHTML = `
+      <div class="dayplanHeader">
+        <div class="dpTitle">
+          <div class="dpProj">${proj}</div>
+          <div class="dpDay">${label}${date?` · ${date}`:""}</div>
+        </div>
+        <div class="dpMeta">
+          <div><b>Call:</b> ${call||"—"}</div>
+          <div><b>Locación:</b> ${loc||"—"}</div>
+        </div>
+      </div>
+      ${d.notes ? `<div class="dayplanNotes"><b>Notas:</b> ${esc(d.notes)}</div>` : ``}
+    `;
+
+    const eattr = (s)=>esc(String(s||"")).replace(/"/g,"&quot;");
+
+    tbody.innerHTML = items.length ? items.map((it, idx)=>{
+      const clock = d.callTime ? fmtClockFromCall(d.callTime, it.start) : hhmmFromMinutes(it.start);
+      const color = safeHexColor(it.color);
+      const border = color ? `style="border-left:8px solid ${eattr(color)}"` : "";
+      const colorVal = eattr(color);
+
+      const itemCell = it.kind==="scene"
+        ? `<button class="linkBtn dpSceneLink" data-action="openScene" data-scene="${eattr(it.id)}">${esc(it.title)}</button>`
+        : `<input class="input compact dpInput" data-field="title" value="${eattr(it.title)}" placeholder="Tarea / Nota">`;
+
+      const detailCell = it.kind==="scene"
+        ? `<div class="muted small">${esc(it.detail||"")}</div>`
+        : `<input class="input compact dpInput" data-field="detail" value="${eattr(it.detail)}" placeholder="Detalle (opcional)">`;
+
+      const delBtn = it.kind==="block"
+        ? `<button class="btn icon danger noPrint" data-action="delete" title="Eliminar">🗑</button>`
+        : ``;
+
+      return `
+        <tr class="dpRow" draggable="true" data-kind="${it.kind}" data-id="${eattr(it.id)}" ${border}>
+          <td class="dpHandle noPrint" title="Arrastrar">⠿</td>
+          <td class="dpTime">
+            <input class="input compact dpInput" type="time" data-field="time" value="${eattr(clock)}">
+          </td>
+          <td class="dpDur">
+            <input class="input compact dpInput" type="number" data-field="dur" min="${snapMin}" step="${snapMin}" value="${Math.max(snapMin, Math.round(it.dur||snapMin))}">
+          </td>
+          <td class="dpItem">${itemCell}</td>
+          <td class="dpDetail">${detailCell}</td>
+          <td class="dpColor">
+            <span class="dpSwatch" style="background:${colorVal}"></span>
+            <input class="dpColorInput noPrint" type="color" data-field="color" value="${colorVal}" aria-label="Color">
+            ${delBtn}
+          </td>
+        </tr>
+      `;
+    }).join("") : `<tr><td colspan="6" class="muted">No hay escenas ni notas para este día.</td></tr>`;
+
+    // Delegación de eventos (una sola vez)
+    if(tbody.dataset.bound !== "1"){
+      tbody.dataset.bound = "1";
+
+      tbody.addEventListener("click", (e)=>{
+        const btn = e.target.closest("[data-action]");
+        if(!btn) return;
+        const tr = e.target.closest("tr.dpRow");
+        if(!tr) return;
+        const kind = tr.dataset.kind;
+        const id = tr.dataset.id;
+        const action = btn.dataset.action;
+
+        if(action === "delete" && kind === "block"){
+          deleteDayplanBlock(selectedDayplanDayId, id);
+          return;
+        }
+        if(action === "openScene"){
+          const sid = btn.dataset.scene;
+          if(!sid) return;
+          selectedSceneId = sid;
+          showView("breakdown");
+          renderScenesTable();
+          renderSceneEditor();
+          renderShotsEditor();
+          return;
+        }
+      });
+
+      tbody.addEventListener("change", (e)=>{
+        const tr = e.target.closest("tr.dpRow");
+        if(!tr) return;
+        const field = e.target.dataset.field;
+        if(!field) return;
+
+        const d = selectedDayplanDayId ? getDay(selectedDayplanDayId) : null;
+        if(!d) return;
+
+        const kind = tr.dataset.kind;
+        const id = tr.dataset.id;
+        const snapMin = getDayplanSnap();
+
+        if(field === "time"){
+          const v = String(e.target.value||"");
+          const call = minutesFromHHMM(d.callTime||"08:00");
+          const abs = minutesFromHHMM(v||"00:00");
+          let startMin = abs - call;
+          if(!Number.isFinite(startMin)) startMin = 0;
+          startMin = clamp(startMin, 0, DAY_SPAN_MIN - snapMin);
+          startMin = snap(startMin, snapMin);
+
+          setDayplanStart(d, kind, id, startMin);
+          resolveOverlapsPushDown(d, snapMin);
+          touch();
+          renderDayPlan();
+          renderScheduleBoard();
+          renderCallSheetDetail();
+          renderReports();
+          return;
+        }
+
+        if(field === "dur"){
+          let durMin = Number(e.target.value||0);
+          if(!Number.isFinite(durMin) || durMin<=0) durMin = snapMin;
+          durMin = snap(durMin, snapMin);
+          durMin = clamp(durMin, snapMin, DAY_SPAN_MIN);
+
+          setDayplanDur(d, kind, id, durMin);
+          resolveOverlapsPushDown(d, snapMin);
+          touch();
+          renderDayPlan();
+          renderScheduleBoard();
+          renderCallSheetDetail();
+          renderReports();
+          return;
+        }
+
+        if(field === "color"){
+          const col = safeHexColor(e.target.value);
+          if(kind === "scene"){
+            d.sceneColors[id] = col;
+            touch();
+            renderDayPlan();
+            renderScheduleBoard();
+            renderCallSheetDetail();
+            return;
+          }
+          const b = (d.blocks||[]).find(x=>x.id===id);
+          if(b){ b.color = col; touch(); renderDayPlan(); renderCallSheetDetail(); }
+          return;
+        }
+      });
+
+      tbody.addEventListener("input", (e)=>{
+        const tr = e.target.closest("tr.dpRow");
+        if(!tr) return;
+        const field = e.target.dataset.field;
+        if(!field) return;
+        const d = selectedDayplanDayId ? getDay(selectedDayplanDayId) : null;
+        if(!d) return;
+        if(tr.dataset.kind !== "block") return;
+
+        const b = (d.blocks||[]).find(x=>x.id===tr.dataset.id);
+        if(!b) return;
+
+        if(field === "title"){ b.title = e.target.value; touch(); return; }
+        if(field === "detail"){ b.detail = e.target.value; touch(); return; }
+      });
+
+      // Drag & drop (reordenar moviendo el horario)
+      tbody.addEventListener("dragstart", (e)=>{
+        const tr = e.target.closest("tr.dpRow");
+        if(!tr) return;
+        dayplanDragKey = `${tr.dataset.kind}:${tr.dataset.id}`;
+        e.dataTransfer?.setData("text/plain", dayplanDragKey);
+        e.dataTransfer?.setDragImage?.(tr, 10, 10);
+      });
+      tbody.addEventListener("dragover", (e)=>{ e.preventDefault(); });
+      tbody.addEventListener("drop", (e)=>{
+        e.preventDefault();
+        const tr = e.target.closest("tr.dpRow");
+        if(!tr) return;
+
+        const targetKey = `${tr.dataset.kind}:${tr.dataset.id}`;
+        const dragKey = dayplanDragKey || e.dataTransfer?.getData("text/plain");
+        if(!dragKey || dragKey === targetKey) return;
+
+        const d = selectedDayplanDayId ? getDay(selectedDayplanDayId) : null;
+        if(!d) return;
+        const snapMin = getDayplanSnap();
+
+        const items = buildDayplanItems(d);
+        const fromIdx = items.findIndex(it=>`${it.kind}:${it.id}`===dragKey);
+        const toIdx = items.findIndex(it=>`${it.kind}:${it.id}`===targetKey);
+        if(fromIdx<0 || toIdx<0) return;
+
+        const target = items[toIdx];
+        const newStart = (toIdx > fromIdx)
+          ? (target.start + target.dur)
+          : Math.max(0, target.start - snapMin);
+
+        const [k, id] = dragKey.split(":");
+        setDayplanStart(d, k, id, snap(newStart, snapMin));
+        resolveOverlapsPushDown(d, snapMin);
+
+        touch();
+        renderDayPlan();
+        renderScheduleBoard();
+        renderCallSheetDetail();
+        renderReports();
+      });
+      tbody.addEventListener("dragend", ()=>{ dayplanDragKey = null; });
+    }
+  }
+
+function renderShotList(){
     const sel = el("shotDaySelect");
     const wrap = el("shotlistWrap");
     const sum = el("shotlistSummary");
@@ -3039,6 +3456,12 @@ function setupScheduleWheelScroll(){
       totalMin += sMin;
       const st = Number(d.times?.[sid] ?? 0) || 0;
       const du = Number(d.durations?.[sid] ?? 60) || 0;
+      lastEnd = Math.max(lastEnd, st + du);
+    }
+    // Incluir notas/tareas del día
+    for(const b of (d.blocks||[])){
+      const st = Number(b.startMin ?? 0) || 0;
+      const du = Number(b.durMin ?? 0) || 0;
       lastEnd = Math.max(lastEnd, st + du);
     }
     const wrapClock = d.callTime ? fmtClockFromCall(d.callTime, lastEnd) : "";
@@ -3252,19 +3675,54 @@ function setupScheduleWheelScroll(){
 
     const scenesBox = document.createElement("div");
     scenesBox.className = "catBlock callScenes";
-    scenesBox.innerHTML = `<div class="hdr"><span class="dot" style="background:var(--cat-vehicles)"></span>Escenas</div>`;
+    scenesBox.innerHTML = `<div class="hdr"><span class="dot" style="background:var(--cat-vehicles)"></span>Itinerario</div>`;
     const list = document.createElement("div");
     list.className = "items";
-    if(!scenes.length){
+
+    const timeline = [];
+    for(const sid of (d.sceneIds||[])){
+      const s = getScene(sid);
+      if(!s) continue;
+      timeline.push({
+        kind:"scene",
+        id:sid,
+        start: Number(d.times?.[sid] ?? 0) || 0,
+        dur:   Number(d.durations?.[sid] ?? 60) || 0,
+        title: `#${s.number||""} ${s.slugline||""}`.trim(),
+        detail: [s.location||"", s.timeOfDay||""].filter(Boolean).join(" · "),
+        color: d.sceneColors?.[sid] || ""
+      });
+    }
+    for(const b of (d.blocks||[])){
+      timeline.push({
+        kind:"block",
+        id:b.id,
+        start: Number(b.startMin ?? 0) || 0,
+        dur:   Number(b.durMin ?? 0) || 0,
+        title: b.title || "Nota",
+        detail: b.detail || "",
+        color: b.color || ""
+      });
+    }
+    timeline.sort((a,b)=> (a.start||0) - (b.start||0));
+
+    if(!timeline.length){
       list.innerHTML = `<div>—</div>`;
     }else{
-      const ordered = d.sceneIds.map(getScene).filter(Boolean);
-      list.innerHTML = ordered.map(s=>{
-        const st = d.times[s.id] ?? 0;
-        const du = d.durations[s.id] ?? 60;
-        return `<div><b>${esc(fmtClockFromCall(d.callTime, st))}</b> · #${esc(s.number)} ${esc(s.slugline)} <span class="muted">(${du}m)</span></div>`;
+      list.innerHTML = timeline.map(it=>{
+        const time = d.callTime ? fmtClockFromCall(d.callTime, it.start) : `+${it.start}m`;
+        const du = Math.round(it.dur||0);
+        const border = it.color ? `border-left:6px solid ${esc(it.color)}; padding-left:10px;` : "";
+        const main = it.kind==="scene"
+          ? `<b>#${esc(getScene(it.id)?.number||"")}</b> ${esc(getScene(it.id)?.slugline||"")}`
+          : `<b>${esc(it.title||"Nota")}</b>${it.detail ? ` <span class="muted">— ${esc(it.detail)}</span>` : ""}`;
+
+        const sub = (it.kind==="scene" && it.detail) ? `<div class="muted small">${esc(it.detail)}</div>` : ``;
+
+        return `<div style="${border}"><b>${time}</b> · <span class="muted">(${du}m)</span> · ${main}${sub}</div>`;
       }).join("");
     }
+
     scenesBox.appendChild(list);
     wrap.appendChild(scenesBox);
 
@@ -3415,6 +3873,25 @@ function setupScheduleWheelScroll(){
 
     el("schedSearch")?.addEventListener("input", renderScheduleBoard);
     el("reportsSearch")?.addEventListener("input", renderReports);
+
+    // Plan del día
+    el("dayplanSelect")?.addEventListener("change", ()=>{
+      selectedDayplanDayId = el("dayplanSelect").value;
+      renderDayPlan();
+    });
+    el("btnDayplanAddNote")?.addEventListener("click", addDayplanNote);
+    el("btnDayplanAuto")?.addEventListener("click", ()=>{
+      const d = selectedDayplanDayId ? getDay(selectedDayplanDayId) : null;
+      if(!d) return;
+      resolveOverlapsPushDown(d, getDayplanSnap());
+      touch();
+      renderDayPlan();
+      renderScheduleBoard();
+      renderCallSheetDetail();
+      renderReports();
+    });
+    el("btnDayplanPrint")?.addEventListener("click", ()=> window.print());
+    el("dayplanSnap")?.addEventListener("change", ()=> renderDayPlan());
 
     // Número de escena: no permitimos duplicados (si chocan, auto 6A/6B…)
     const numNode = el("scene_number");
@@ -3910,6 +4387,8 @@ if(!state.scenes.length){
         notes:"",
         sceneIds:[],
         crewIds:[],
+        blocks:[],
+        sceneColors:{},
         times:{},
         durations:{}
       });
@@ -3925,6 +4404,7 @@ if(!state.scenes.length){
     selectedSceneId = selectedSceneId || state.scenes[0]?.id || null;
     selectedDayId   = selectedDayId   || state.shootDays[0]?.id || null;
     selectedShotlistDayId = selectedShotlistDayId || selectedDayId;
+    selectedDayplanDayId = selectedDayplanDayId || selectedDayId;
     callSheetDayId  = callSheetDayId  || selectedDayId;
 
     renderScenesTable();
@@ -3989,6 +4469,7 @@ if(!state.scenes.length){
     selectedDayId = state.shootDays?.[0]?.id || null;
     callSheetDayId = selectedDayId;
     selectedShotlistDayId = selectedDayId;
+    selectedDayplanDayId = selectedDayId;
 
     bindEvents();
     ensureMobileChrome();

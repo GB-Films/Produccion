@@ -17,6 +17,7 @@
       <nav class="nav">
         <button class="navBtn" data-view="breakdown">Breakdown</button>
         <button class="navBtn" data-view="shooting">Plan de Rodaje</button>
+        <button class="navBtn" data-view="dayplan">Plan del día</button>
         <button class="navBtn" data-view="schedule">Cronograma</button>
         <button class="navBtn" data-view="shotlist">Shotlist</button>
         <button class="navBtn" data-view="elements">Elementos</button>
@@ -346,6 +347,54 @@
               </div>
             </div>
 
+          </div>
+        </div>
+      </section>
+
+
+      <!-- ================= PLAN DEL DÍA ================= -->
+      <section class="view hidden" id="view-dayplan">
+        <div class="card" id="dayplanCard">
+          <div class="cardHeader">
+            <h2 class="cardTitle">Plan del día</h2>
+            <div class="row gap noPrint" style="flex-wrap:wrap">
+              <select class="input compact" id="dayplanSelect"></select>
+
+              <div class="row gap" style="align-items:center">
+                <span class="muted">Snap</span>
+                <select class="input compact" id="dayplanSnap" style="width:90px">
+                  <option value="5">5m</option>
+                  <option value="10">10m</option>
+                  <option value="15" selected>15m</option>
+                  <option value="30">30m</option>
+                </select>
+              </div>
+
+              <button class="btn" id="btnDayplanAddNote">+ Nota / tarea</button>
+              <button class="btn ghost" id="btnDayplanAuto" title="Acomoda el horario sin solaparse">Auto</button>
+              <button class="btn" id="btnDayplanPrint">Imprimir</button>
+            </div>
+          </div>
+
+          <div class="cardContent">
+            <div id="dayplanHead"></div>
+            <div class="spacer"></div>
+
+            <div class="tableWrap">
+              <table class="table dayplanTable">
+                <thead>
+                  <tr>
+                    <th class="noPrint" style="width:36px"></th>
+                    <th style="width:120px">Hora</th>
+                    <th style="width:90px">Dur</th>
+                    <th>Item</th>
+                    <th>Detalle</th>
+                    <th style="width:150px">Color</th>
+                  </tr>
+                </thead>
+                <tbody id="dayplanTbody"></tbody>
+              </table>
+            </div>
           </div>
         </div>
       </section>
