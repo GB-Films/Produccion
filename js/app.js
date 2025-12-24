@@ -132,32 +132,6 @@
   }
 
 
-  // ======= Mobile UI helpers (layout only) =======
-  function isMobileUI(){
-    try{ return window.matchMedia && window.matchMedia("(max-width: 860px)").matches; }catch{ return false; }
-  }
-  function setMobileNavOpen(open){
-    try{
-      document.body.classList.toggle("mobileNavOpen", !!open);
-      const bd = el("sidebarBackdrop");
-      if(bd) bd.classList.toggle("hidden", !open);
-    }catch{}
-  }
-  function updateMobileActiveNav(name){
-    document.querySelectorAll(".mnav[data-view]").forEach(b=>{
-      b.classList.toggle("active", b.dataset.view === name);
-    });
-  }
-  function updateMobileHeader(){
-    const t = el("mobileProjectTitle");
-    if(t) t.textContent = (state && state.meta && state.meta.title) ? state.meta.title : "Proyecto";
-    const s = el("mobileSavedAtText");
-    if(s && state && state.meta && state.meta.updatedAt){
-      s.textContent = new Date(state.meta.updatedAt).toLocaleString("es-AR");
-    }
-  }
-
-
   // ======= Reportes: filtros por categoría (local) =======
   const REPORT_FILTER_LS_KEY = "gb_reports_filter_v1";
   const REPORT_FILTER_KEYS = ["scenes","cast","crew", ...cats.filter(c=>c!=="cast")];
@@ -225,16 +199,8 @@
   function touch(){
     state.meta.updatedAt = new Date().toISOString();
     StorageLayer.saveLocal(state);
-
     const saved = el("savedAtText");
     if(saved) saved.textContent = new Date(state.meta.updatedAt).toLocaleString("es-AR");
-
-    const savedM = el("mobileSavedAtText");
-    if(savedM) savedM.textContent = new Date(state.meta.updatedAt).toLocaleString("es-AR");
-
-    const tM = el("mobileProjectTitle");
-    if(tM) tM.textContent = state.meta.title || "Proyecto";
-
     const st = el("statusText");
     if(st) st.textContent = "Guardado";
     if(syncReady) autosyncDebounced();
@@ -253,8 +219,6 @@
   function updateSyncPill(mode){
     const p = el("syncPill");
     if(p) p.textContent = mode;
-    const pm = el("mobileSyncPill");
-    if(pm) pm.textContent = mode;
   }
 
   function defaultState(title){
@@ -726,7 +690,195 @@ function enforceScriptVersionsLimit(notify=false){
   }
 
   // ======= NUEVO: Scroll horizontal superior del cronograma =======
+  function isMobileUI(){
+    // Mobile = viewport chico. Evitamos falsos positivos en desktop táctil.
+    try{
+      return window.matchMedia("(max-width: 820px)").matches;
+    }catch{
+      return window.innerWidth <= 820;
+    }
+  }
+
+
+  // ======= Mobile chrome (topbar + dock + drawer) =======
+  function ensureMobileChrome(){
+    const sidebar = document.querySelector(".sidebar");
+    if(!sidebar) return;
+
+    // Backdrop
+    let back = el("mBackdrop");
+    if(!back){
+      back = document.createElement("div");
+      back.id = "mBackdrop";
+      back.className = "mBackdrop hidden";
+      document.body.appendChild(back);
+    }
+
+    // Topbar
+    let top = el("mTopbar");
+    if(!top){
+      top = document.createElement("div");
+      top.id = "mTopbar";
+      top.className = "mTopbar";
+      top.innerHTML = `
+        <button id="mMenuBtn" class="mIconBtn" title="Menú">☰</button>
+        <div class="mTopMid">
+          <div id="mProjectTitle" class="mProjTitle">Proyecto</div>
+          <div class="mBadges">
+            <span class="pill" id="mSyncPill">Local</span>
+            <span class="pill muted" id="mStatusText">—</span>
+            <span class="pill muted">🕒 <span id="mSavedAtText">—</span></span>
+          </div>
+        </div>
+        <select id="mProjectSwitch" class="mProjectSwitch" title="Proyecto"></select>
+        <button id="mSettingsBtn" class="mIconBtn" title="Ajustes">⚙</button>
+      `;
+      document.body.appendChild(top);
+    }
+
+    // Dock
+    let dock = el("mDock");
+    if(!dock){
+      dock = document.createElement("div");
+      dock.id = "mDock";
+      dock.className = "mDock";
+      dock.innerHTML = `
+        <button class="mDockBtn" data-view="breakdown">BD</button>
+        <button class="mDockBtn" data-view="shooting">Rod</button>
+        <button class="mDockBtn" data-view="schedule">Cron</button>
+        <button class="mDockBtn" data-view="callsheet">Call</button>
+        <button class="mDockBtn" id="mMoreBtn" data-view="more">Más</button>
+      `;
+      document.body.appendChild(dock);
+    }
+
+    const menuBtn = el("mMenuBtn");
+    const moreBtn = el("mMoreBtn");
+    const settingsBtn = el("mSettingsBtn");
+
+    function openDrawer(){
+      sidebar.classList.add("mOpen");
+      back.classList.remove("hidden");
+      document.body.classList.add("mNoScroll");
+    }
+    function closeDrawer(){
+      sidebar.classList.remove("mOpen");
+      back.classList.add("hidden");
+      document.body.classList.remove("mNoScroll");
+    }
+    function toggleDrawer(){
+      if(sidebar.classList.contains("mOpen")) closeDrawer();
+      else openDrawer();
+    }
+
+    if(menuBtn && menuBtn.dataset.bound !== "1"){
+      menuBtn.dataset.bound = "1";
+      menuBtn.addEventListener("click", ()=>{ if(isMobileUI()) toggleDrawer(); });
+    }
+    if(moreBtn && moreBtn.dataset.bound !== "1"){
+      moreBtn.dataset.bound = "1";
+      moreBtn.addEventListener("click", ()=>{ if(isMobileUI()) toggleDrawer(); });
+    }
+    if(back && back.dataset.bound !== "1"){
+      back.dataset.bound = "1";
+      back.addEventListener("click", closeDrawer);
+    }
+
+    // Cerrar drawer al navegar desde el sidebar
+    sidebar.querySelectorAll(".navBtn").forEach(btn=>{
+      if(btn.dataset.mCloseBound === "1") return;
+      btn.dataset.mCloseBound = "1";
+      btn.addEventListener("click", ()=>{ if(isMobileUI()) closeDrawer(); }, true);
+    });
+
+    // Dock navegación
+    dock.querySelectorAll(".mDockBtn").forEach(btn=>{
+      if(btn.dataset.bound === "1") return;
+      btn.dataset.bound = "1";
+      btn.addEventListener("click", ()=>{
+        const v = btn.dataset.view;
+        if(v === "more") return toggleDrawer();
+        if(v) showView(v);
+        if(isMobileUI()) closeDrawer();
+      });
+    });
+
+    if(settingsBtn && settingsBtn.dataset.bound !== "1"){
+      settingsBtn.dataset.bound = "1";
+      settingsBtn.addEventListener("click", ()=>{
+        showView("settings");
+        if(isMobileUI()) closeDrawer();
+      });
+    }
+
+    // Sync de proyectos (duplicamos el select, sin tocar la lógica)
+    const baseProj = el("projectSwitch");
+    const mProj = el("mProjectSwitch");
+    function syncProjectSwitch(){
+      if(!baseProj || !mProj) return;
+      mProj.innerHTML = baseProj.innerHTML;
+      mProj.value = baseProj.value;
+    }
+    syncProjectSwitch();
+
+    if(baseProj && baseProj.dataset.mObs !== "1"){
+      baseProj.dataset.mObs = "1";
+      baseProj.addEventListener("change", syncProjectSwitch);
+    }
+    if(mProj && mProj.dataset.bound !== "1"){
+      mProj.dataset.bound = "1";
+      mProj.addEventListener("change", ()=>{
+        if(!baseProj) return;
+        baseProj.value = mProj.value;
+        baseProj.dispatchEvent(new Event("change", { bubbles:true }));
+      });
+    }
+
+    // Mirror badges (saved/sync/status/title)
+    const savedBase = el("savedAtText");
+    const syncBase = el("syncPill");
+    const statusBase = el("statusText");
+    const titleInput = el("projectTitle");
+
+    const savedM = el("mSavedAtText");
+    const syncM = el("mSyncPill");
+    const statusM = el("mStatusText");
+    const titleM = el("mProjectTitle");
+
+    function syncBadges(){
+      if(savedBase && savedM) savedM.textContent = savedBase.textContent;
+      if(syncBase && syncM) syncM.textContent = syncBase.textContent;
+      if(statusBase && statusM) statusM.textContent = statusBase.textContent;
+      if(titleInput && titleM) titleM.textContent = (titleInput.value || titleInput.placeholder || "Proyecto");
+    }
+    syncBadges();
+
+    if(savedBase && savedBase.dataset.mObs2 !== "1"){
+      savedBase.dataset.mObs2 = "1";
+      const obs = new MutationObserver(syncBadges);
+      obs.observe(savedBase, { characterData:true, subtree:true, childList:true });
+      if(syncBase) obs.observe(syncBase, { characterData:true, subtree:true, childList:true });
+      if(statusBase) obs.observe(statusBase, { characterData:true, subtree:true, childList:true });
+    }
+    if(titleInput && titleInput.dataset.mBound2 !== "1"){
+      titleInput.dataset.mBound2 = "1";
+      titleInput.addEventListener("input", syncBadges);
+    }
+
+    if(!window.__mResizeBound){
+      window.__mResizeBound = true;
+      window.addEventListener("resize", window.U.debounce(()=>{
+        if(!isMobileUI()) closeDrawer();
+        syncProjectSwitch();
+        syncBadges();
+      }, 120));
+    }
+
+    window.MobileChrome = { openDrawer, closeDrawer, syncBadges, syncProjectSwitch };
+  }
+
   function setupScheduleTopScrollbar(){
+    if(!isMobileUI()) return;
     const top = el("schedScrollTop");
     const inner = el("schedScrollTopInner");
     const board = el("schedBoard");
@@ -765,6 +917,7 @@ function enforceScriptVersionsLimit(notify=false){
 
 // ======= NUEVO: Scroll vertical con ruedita en cualquier lado (Cronograma) =======
 function setupScheduleWheelScroll(){
+  if(!isMobileUI()) return;
   const view = el("view-schedule");
   const wrap = el("schedWrap");
   if(!view || !wrap) return;
@@ -797,12 +950,9 @@ function setupScheduleWheelScroll(){
       const node = el(`view-${v}`);
       if(node) node.classList.toggle("hidden", v!==name);
     });
-    document.querySelectorAll(".navBtn").forEach(b=>{
+    document.querySelectorAll(".navBtn, .mDockBtn").forEach(b=>{
       b.classList.toggle("active", b.dataset.view===name);
     });
-
-    updateMobileActiveNav(name);
-    if(isMobileUI()) setMobileNavOpen(false);
 
     if(name==="breakdown"){ initCollapsibles(); renderScriptUI(); renderShotsEditor(); }
     if(name==="shooting"){ renderSceneBank(); renderDaysBoard(); renderDayDetail(); applyBankCollapsedUI(); }
@@ -3127,35 +3277,12 @@ function setupScheduleWheelScroll(){
 
   // Bind events (igual que antes, pero llamamos setupScheduleTopScrollbar después de render schedule)
   function bindEvents(){
-    document.querySelectorAll(".navBtn").forEach(b=>{
+    document.querySelectorAll(".navBtn, .mDockBtn").forEach(b=>{
       b.addEventListener("click", ()=>{
         const v = b.dataset.view;
         if(v) showView(v);
       });
     });
-
-
-    // Mobile quick nav / drawer
-    el("btnMobileMenu")?.addEventListener("click", ()=>{
-      const open = document.body.classList.contains("mobileNavOpen");
-      setMobileNavOpen(!open);
-    });
-    el("btnMobileMore")?.addEventListener("click", ()=>{
-      const open = document.body.classList.contains("mobileNavOpen");
-      setMobileNavOpen(!open);
-    });
-    el("sidebarBackdrop")?.addEventListener("click", ()=> setMobileNavOpen(false));
-    el("btnMobileSettings")?.addEventListener("click", ()=>{
-      showView("settings");
-      setMobileNavOpen(false);
-    });
-    document.querySelectorAll(".mnav[data-view]").forEach(b=>{
-      b.addEventListener("click", ()=>{
-        const v = b.dataset.view;
-        if(v) showView(v);
-      });
-    });
-
 
     el("btnAddScene")?.addEventListener("click", addScene);
     el("btnDuplicateScene")?.addEventListener("click", duplicateScene);
@@ -3635,12 +3762,6 @@ el("scriptVerSelect")?.addEventListener("change", ()=>{
 
     el("projectTitle").value = state.meta.title || "Proyecto";
     el("savedAtText").textContent = new Date(state.meta.updatedAt).toLocaleString("es-AR");
-    updateMobileHeader();
-    updateMobileHeader();
-    updateMobileHeader();
-    updateMobileHeader();
-    updateMobileHeader();
-    updateMobileHeader();
 
     if(!state.scenes.length){
       state.scenes.push({
@@ -3706,14 +3827,6 @@ el("scriptVerSelect")?.addEventListener("change", ()=>{
 
     const cfg = StorageLayer.loadCfg();
 
-    // Mobile: default to a cleaner screen (collapse bank) on first run
-    try{
-      if(isMobileUI() && localStorage.getItem("gb_bank_collapsed") === null){
-        localStorage.setItem("gb_bank_collapsed","1");
-      }
-    }catch{}
-
-
     // Apply per-project theme (pink for Jubilada y Peligrosa)
     try{
       if(cfg && cfg.theme && cfg.theme !== "default") document.documentElement.setAttribute("data-theme", cfg.theme);
@@ -3755,6 +3868,7 @@ el("scriptVerSelect")?.addEventListener("change", ()=>{
     selectedShotlistDayId = selectedDayId;
 
     bindEvents();
+    ensureMobileChrome();
     setupScheduleWheelScroll();
     hydrateAll();
     showView("breakdown");
