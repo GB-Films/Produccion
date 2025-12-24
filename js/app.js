@@ -1,6 +1,6 @@
 (function(){
   const el = (id)=>document.getElementById(id);
-  const views = ["breakdown","shooting","schedule","shotlist","elements","crew","reports","callsheet","settings"];
+  const views = ["breakdown","shooting","schedule","shotlist","elements","crew","reports","callsheet"];
 
   const cats = ["cast","props","wardrobe","art","makeup","sound","sfx","vfx","vehicles","animals","extras"];
   const catNames = {
@@ -731,7 +731,6 @@ function enforceScriptVersionsLimit(notify=false){
           </div>
         </div>
         <select id="mProjectSwitch" class="mProjectSwitch" title="Proyecto"></select>
-        <button id="mSettingsBtn" class="mIconBtn" title="Ajustes">⚙</button>
       `;
       document.body.appendChild(top);
     }
@@ -754,8 +753,6 @@ function enforceScriptVersionsLimit(notify=false){
 
     const menuBtn = el("mMenuBtn");
     const moreBtn = el("mMoreBtn");
-    const settingsBtn = el("mSettingsBtn");
-
     function openDrawer(){
       sidebar.classList.add("mOpen");
       back.classList.remove("hidden");
@@ -802,14 +799,6 @@ function enforceScriptVersionsLimit(notify=false){
         if(isMobileUI()) closeDrawer();
       });
     });
-
-    if(settingsBtn && settingsBtn.dataset.bound !== "1"){
-      settingsBtn.dataset.bound = "1";
-      settingsBtn.addEventListener("click", ()=>{
-        showView("settings");
-        if(isMobileUI()) closeDrawer();
-      });
-    }
 
     // Sync de proyectos (duplicamos el select, sin tocar la lógica)
     const baseProj = el("projectSwitch");
@@ -962,8 +951,7 @@ function setupScheduleWheelScroll(){
     if(name==="crew"){ renderCrew(); }
     if(name==="reports"){ renderReportsFilters(); renderReports(); }
     if(name==="callsheet"){ renderCallSheetCalendar(); renderCallSheetDetail(); }
-    if(name==="settings"){ loadCfgToUI(); }
-  }
+}
 
   // ======= Script parser (INT/EXT) =======
   function parseScreenplayToScenes(text, extraKeywordsCsv=""){

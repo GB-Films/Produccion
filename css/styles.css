@@ -1510,3 +1510,29 @@ tr.groupRow td{
   }
   #reportsFilters .chip{ flex:0 0 auto; }
 }
+
+/* ================== Mobile/desktop tweak v4 ================== */
+/* Banco de Escenas: botón de colapsar/expandir más chico (especialmente en celular) */
+.bankDock{ height:56px; border-radius:14px; }
+.shootingLayout.bankCollapsed{ grid-template-columns: 48px 1fr; }
+
+#btnToggleBank, #btnToggleBankDock{
+  width:30px;
+  height:30px;
+  min-width:30px;
+  padding:0;
+  font-size:16px;
+  line-height:1;
+}
+
+@media (max-width: 820px){
+  .bankDock{ height:44px; border-radius:12px; }
+  .shootingLayout.bankCollapsed{ grid-template-columns: 40px 1fr; }
+
+  #btnToggleBank, #btnToggleBankDock{
+    width:26px;
+    height:26px;
+    min-width:26px;
+    font-size:14px;
+  }
+}
