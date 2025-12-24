@@ -1094,6 +1094,23 @@ tr.groupRow td{
   border-radius:14px;
   background:rgba(0,0,0,.08);
 }
+
+.dayplanBody{
+  display:grid;
+  grid-template-columns: 1fr 360px;
+  gap:12px;
+  align-items:start;
+}
+.dayplanBody .dayplanInspector{
+  margin-top:0;
+  max-height:min(72vh, 920px);
+  overflow:auto;
+}
+@media (max-width: 980px){
+  .dayplanBody{ grid-template-columns: 1fr; }
+  .dayplanBody .dayplanInspector{ margin-top:12px; max-height:none; overflow:visible; }
+}
+
 .dpTimeCol{
   position:relative;
   height:var(--dp-day-h, 1728px);

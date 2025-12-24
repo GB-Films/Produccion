@@ -3415,6 +3415,9 @@ function setupScheduleWheelScroll(){
         const block = e.target.closest(".dpBlock");
         if(!block) return;
 
+        e.preventDefault();
+        try{ block.setPointerCapture(e.pointerId); }catch(_){/*ignore*/}
+
         const action = e.target.closest("[data-action]")?.dataset.action || "";
         if(action === "palette" || action === "pickColor" || action === "delete" || action === "openScene") return;
 
@@ -3429,7 +3432,7 @@ function setupScheduleWheelScroll(){
         const ppm = DAYPLAN_PPM;
 
         const sc = el("dpScroller");
-        const rect = lane.getBoundingClientRect();
+        const rect = sc.getBoundingClientRect();
         const y = (e.clientY - rect.top) + (sc?.scrollTop||0);
         const pressAbsMin = clamp(y / ppm, 0, DAY_SPAN_MIN);
 
@@ -3469,8 +3472,9 @@ function setupScheduleWheelScroll(){
 
       lane.addEventListener("pointermove", (e)=>{
         if(!dayplanPointer) return;
+        e.preventDefault();
         const sc = el("dpScroller");
-        const rect = lane.getBoundingClientRect();
+        const rect = sc.getBoundingClientRect();
         const y = (e.clientY - rect.top) + (sc?.scrollTop||0);
         const p = dayplanPointer;
 
