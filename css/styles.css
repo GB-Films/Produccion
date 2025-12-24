@@ -1630,7 +1630,9 @@ tr.groupRow td{
   #reportsBoard{
     flex:1 1 auto;
     min-height:0;
-    overflow:auto;
+    overflow-x:auto;
+    overflow-y:auto;
+    align-items:flex-start;
     scrollbar-gutter: stable both-edges;
     overscroll-behavior-x: contain;
     overscroll-behavior-y: auto;
