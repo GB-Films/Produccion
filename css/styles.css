@@ -492,18 +492,6 @@ tr.groupRow td{
 
 .colTitle{ font-weight:900; opacity:.92; margin-bottom:8px; }
 
-
-/* ======= Detalle del día: menos aire entre título y contenido ======= */
-#dayDetailCard .colTitle{ margin-bottom:3px; }
-#dayDetailCard .catBlock{ margin-top:4px; }
-#dayDetailCard .crewAreaHeader{
-  margin-top:6px;
-  margin-bottom:6px;
-  padding:6px 8px;
-  border-radius:14px;
-}
-
-
 .crewAreaHeader{
   margin-top:12px;
   margin-bottom:8px;
@@ -539,6 +527,32 @@ tr.groupRow td{
 }
 .crewPickItem.selected .statusDot{ background: rgba(var(--ok-rgb),.95); }
 .crewPickItem .left{ display:flex; gap:10px; }
+
+
+/* ===== Day Detail (Plan de Rodaje) — tipografía + spacing (desktop/mobile) ===== */
+#dayDetailCard .colTitle{ margin-bottom:4px; }
+
+/* Reducir el “aire” entre título y primer bloque */
+#dayNeeds .catBlock, #dayCast .catBlock{ margin-top:6px; }
+#dayNeeds .catBlock:first-child, #dayCast .catBlock:first-child{ margin-top:0; }
+
+#dayCrewPicker .crewAreaHeader{ margin-top:6px; margin-bottom:6px; }
+#dayCrewPicker .crewAreaHeader:first-child{ margin-top:0; }
+
+/* Desktop: letra un poco más grande SOLO en Detalle del Día */
+@media (min-width: 821px){
+  #dayDetailCard{ font-size:15px; }
+  #dayDetailCard label{ font-size:13px; }
+  #dayDetailCard .input,
+  #dayDetailCard .textarea{ font-size:14px; }
+  #dayDetailCard .colTitle{ font-size:14px; }
+  #dayDetailCard .catBlock .hdr{ font-size:14px; }
+  #dayDetailCard .catBlock .items{ font-size:14px; }
+  #dayCrewPicker .crewPickItem .title{ font-size:14px; }
+  #dayCrewPicker .crewPickItem .meta{ font-size:13px; }
+  #dayCrewPicker .crewPickItem .muted.small{ font-size:13px; }
+}
+
 
 /* Banco colapsado */
 .bankDock{
@@ -1294,22 +1308,3 @@ tr.groupRow td{
   .muted{ color:#333; }
   .schedBoard, .reportsBoard{ overflow:visible; }
 }
-
-
-
-/* ======= Desktop: tipografía un poco más grande en toda la app ======= */
-@media (min-width: 861px){
-  body{ font-size:17px; }
-  .titleInput{ font-size:20px; }
-  .projectSwitch{ font-size:13px; }
-  label{ font-size:13px; }
-  .small{ font-size:13px; }
-  .pill{ font-size:13px; }
-  .cardTitle{ font-size:18px; }
-  .navBtn{ font-size:15px; text-transform:uppercase; letter-spacing:.8px; }
-  .table th, .table td{ font-size:14px; }
-  .dayHeader .m{ font-size:13px; }
-  .crewPickItem .meta{ font-size:13px; }
-  .calCell .tag{ font-size:13px; }
-}
-

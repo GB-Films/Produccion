@@ -1,6 +1,6 @@
 (function(){
   const el = (id)=>document.getElementById(id);
-  const views = ["breakdown","shooting","schedule","shotlist","elements","crew","reports","callsheet"];
+  const views = ["breakdown","shooting","schedule","shotlist","elements","crew","reports","callsheet","settings"];
 
   const cats = ["cast","props","wardrobe","art","makeup","sound","sfx","vfx","vehicles","animals","extras"];
   const catNames = {
@@ -757,7 +757,6 @@ function setupScheduleWheelScroll(){
 }
 
   function showView(name){
-    if(!views.includes(name)) name = "breakdown";
     views.forEach(v=>{
       const node = el(`view-${v}`);
       if(node) node.classList.toggle("hidden", v!==name);
@@ -774,7 +773,8 @@ function setupScheduleWheelScroll(){
     if(name==="crew"){ renderCrew(); }
     if(name==="reports"){ renderReportsFilters(); renderReports(); }
     if(name==="callsheet"){ renderCallSheetCalendar(); renderCallSheetDetail(); }
-}
+    if(name==="settings"){ loadCfgToUI(); }
+  }
 
   // ======= Script parser (INT/EXT) =======
   function parseScreenplayToScenes(text, extraKeywordsCsv=""){
@@ -3572,7 +3572,7 @@ el("scriptVerSelect")?.addEventListener("change", ()=>{
     refreshElementSuggestions();
 
     el("projectTitle").value = state.meta.title || "Proyecto";
-    { const _s = el("savedAtText"); if(_s) _s.textContent = new Date(state.meta.updatedAt).toLocaleString("es-AR"); }
+    el("savedAtText").textContent = new Date(state.meta.updatedAt).toLocaleString("es-AR");
 
     if(!state.scenes.length){
       state.scenes.push({
