@@ -724,11 +724,6 @@ function enforceScriptVersionsLimit(notify=false){
         <button id="mMenuBtn" class="mIconBtn" title="Menú">☰</button>
         <div class="mTopMid">
           <div id="mProjectTitle" class="mProjTitle">Proyecto</div>
-          <div class="mBadges">
-            <span class="pill" id="mSyncPill">Local</span>
-            <span class="pill muted" id="mStatusText">—</span>
-            <span class="pill muted">🕒 <span id="mSavedAtText">—</span></span>
-          </div>
         </div>
         <select id="mProjectSwitch" class="mProjectSwitch" title="Proyecto"></select>
       `;
@@ -823,47 +818,31 @@ function enforceScriptVersionsLimit(notify=false){
       });
     }
 
-    // Mirror badges (saved/sync/status/title)
-    const savedBase = el("savedAtText");
-    const syncBase = el("syncPill");
-    const statusBase = el("statusText");
+    // Mirror title (mobile topbar)
     const titleInput = el("projectTitle");
-
-    const savedM = el("mSavedAtText");
-    const syncM = el("mSyncPill");
-    const statusM = el("mStatusText");
     const titleM = el("mProjectTitle");
 
-    function syncBadges(){
-      if(savedBase && savedM) savedM.textContent = savedBase.textContent;
-      if(syncBase && syncM) syncM.textContent = syncBase.textContent;
-      if(statusBase && statusM) statusM.textContent = statusBase.textContent;
+    function syncTitle(){
       if(titleInput && titleM) titleM.textContent = (titleInput.value || titleInput.placeholder || "Proyecto");
     }
-    syncBadges();
+    syncTitle();
 
-    if(savedBase && savedBase.dataset.mObs2 !== "1"){
-      savedBase.dataset.mObs2 = "1";
-      const obs = new MutationObserver(syncBadges);
-      obs.observe(savedBase, { characterData:true, subtree:true, childList:true });
-      if(syncBase) obs.observe(syncBase, { characterData:true, subtree:true, childList:true });
-      if(statusBase) obs.observe(statusBase, { characterData:true, subtree:true, childList:true });
-    }
-    if(titleInput && titleInput.dataset.mBound2 !== "1"){
-      titleInput.dataset.mBound2 = "1";
-      titleInput.addEventListener("input", syncBadges);
+    if(titleInput && titleInput.dataset.mBoundTitle !== "1"){
+      titleInput.dataset.mBoundTitle = "1";
+      titleInput.addEventListener("input", syncTitle);
+      titleInput.addEventListener("change", syncTitle);
     }
 
-    if(!window.__mResizeBound){
+if(!window.__mResizeBound){
       window.__mResizeBound = true;
       window.addEventListener("resize", window.U.debounce(()=>{
         if(!isMobileUI()) closeDrawer();
         syncProjectSwitch();
-        syncBadges();
+        syncTitle();
       }, 120));
     }
 
-    window.MobileChrome = { openDrawer, closeDrawer, syncBadges, syncProjectSwitch };
+    window.MobileChrome = { openDrawer, closeDrawer, syncTitle, syncProjectSwitch };
   }
 
   function setupScheduleTopScrollbar(){
