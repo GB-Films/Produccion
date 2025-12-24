@@ -2,6 +2,10 @@
   --bg:#0b1220;
   --panel:#0f1a2c;
   --card:#111f36;
+  --bg-rgb:11,18,32;
+  --panel-rgb:15,26,44;
+  --panel-deep-rgb:13,22,38;
+  --card-rgb:17,31,54;
   --muted:rgba(255,255,255,.65);
   --text:rgba(255,255,255,.92);
   --border:rgba(255,255,255,.10);
@@ -11,6 +15,9 @@
   --accent-rgb:110,231,255;
 
   --danger:#ff5c5c;
+
+  --ok:#71ff7a;
+  --ok-rgb:113,255,122;
 
   --cat-cast:#ffb020;
   --cat-props:#56f0c2;
@@ -31,10 +38,19 @@ html[data-theme="pink"]{
   --panel:#14312a;
   --card:#1a3b33;
 
+  --bg-rgb:13,34,27;
+  --panel-rgb:20,49,42;
+  --panel-deep-rgb:18,44,37;
+  --card-rgb:26,59,51;
+
+
   --accent:#87d8c7;
   --accent-rgb:135,216,199;
 
   --danger:#ff6b85;
+
+  --ok:#87d8c7;
+  --ok-rgb:135,216,199;
 }
 .projectSwitch{
   margin-top:10px;
@@ -63,7 +79,7 @@ body{
 .sidebar{
   padding:14px;
   border-right:1px solid var(--border);
-  background: linear-gradient(180deg, rgba(17,31,54,.9), rgba(13,22,38,.92));
+  background: linear-gradient(180deg, rgba(var(--panel-rgb),.92), rgba(var(--panel-deep-rgb),.92));
   display:flex;
   flex-direction:column;
   gap:14px;
@@ -154,7 +170,7 @@ body{
 
 .card{
   border:1px solid var(--border);
-  background: rgba(17,31,54,.88);
+  background: rgba(var(--card-rgb),.88);
   border-radius:18px;
   box-shadow: var(--shadow);
   overflow:hidden;
@@ -218,7 +234,7 @@ label{ font-size:12px; color:var(--muted); }
   box-shadow: 0 0 0 2px rgba(var(--accent-rgb),.10);
 }
 select option{
-  background:#0f1a2c;
+  background:var(--panel);
   color:var(--text);
 }
 
@@ -499,10 +515,10 @@ tr.groupRow td{
   flex:0 0 auto;
 }
 .crewPickItem.selected{
-  border-color: rgba(113,255,122,.55);
-  background: rgba(113,255,122,.06);
+  border-color: rgba(var(--ok-rgb),.55);
+  background: rgba(var(--ok-rgb),.06);
 }
-.crewPickItem.selected .statusDot{ background: rgba(113,255,122,.95); }
+.crewPickItem.selected .statusDot{ background: rgba(var(--ok-rgb),.95); }
 .crewPickItem .left{ display:flex; gap:10px; }
 
 /* Banco colapsado */
@@ -538,7 +554,7 @@ tr.groupRow td{
 .sceneCard .title{ font-weight:900; }
 .sceneCard .meta{ font-size:12px; color:var(--muted); margin-top:4px; }
 .sceneCard .dragHandle{ cursor:grab; color:var(--muted); font-weight:900; }
-.sceneCard.assigned{ border-color: rgba(113,255,122,.55); }
+.sceneCard.assigned{ border-color: rgba(var(--ok-rgb),.55); }
 .sceneCard.unassigned{ border-color: rgba(255,92,92,.55); }
 
 /* Plan de rodaje: títulos de escenas un poco más chicos (banco + tablero) */
@@ -761,7 +777,7 @@ tr.groupRow td{
   right:10px;
   border:1px solid var(--border);
   border-radius:16px;
-  background: rgba(17,31,54,.92);
+  background: rgba(var(--card-rgb),.92);
   padding:12px;
   cursor:grab;
   user-select:none;
