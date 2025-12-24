@@ -1304,6 +1304,10 @@ tr.groupRow td{
   }
   .sidebar.mOpen{ transform: translateX(0); }
 
+  /* Mobile: títulos del menú en mayúsculas */
+  .sidebar.mOpen .navBtn{ text-transform: uppercase; letter-spacing: .8px; }
+
+
   .mBackdrop{
     display:block;
     position: fixed;
@@ -1549,18 +1553,16 @@ tr.groupRow td{
     overflow:visible;
     pointer-events:none;
   }
-  .shootingLayout.bankCollapsed #bankDock{
-    position: fixed;
-    right: 8px;
-    top: 50%;
-    transform: translateY(-50%);
-    height: auto;
-    border: none;
-    background: none;
-    padding: 0;
-    z-index: 75;
-    pointer-events:auto;
-  }
+  .shootingLayout.bankCollapsed #bankDock{ display:none !important; }
+
+  /* Mobile: el botón para reabrir el banco vuelve al header (al lado del título) */
+  .bankToggleSlot{ display:flex; align-items:center; }
+  .bankToggleSlot.hidden{ display:none; }
+
+  #daysBoardCard .cardHeader{ justify-content:flex-start; }
+  #daysBoardCard .cardHeader .row.gap{ margin-left:auto; }
+  #daysBoardCard .bankToggleSlot{ margin-right:6px; }
+  #daysBoardCard .bankToggleSlot .btn{ width:30px; height:30px; min-width:30px; padding:0; border-radius:12px; }
   .shootingLayout.bankCollapsed #btnToggleBankDock{
     width:28px;
     height:48px;
@@ -1609,3 +1611,29 @@ tr.groupRow td{
   }
 }
 
+
+@media (min-width: 821px){
+  /* Desktop: Reportes con scroll horizontal visible (como Cronograma) */
+  #view-reports{ overflow:hidden; }
+  #view-reports > .card{
+    height:100%;
+    display:flex;
+    flex-direction:column;
+    min-height:0;
+  }
+  #view-reports > .card .cardContent{
+    flex:1 1 auto;
+    min-height:0;
+    display:flex;
+    flex-direction:column;
+  }
+  #reportsBoard{
+    flex:1 1 auto;
+    min-height:0;
+    overflow:auto;
+    scrollbar-gutter: stable both-edges;
+    overscroll-behavior-x: contain;
+    overscroll-behavior-y: auto;
+    padding-bottom:8px;
+  }
+}

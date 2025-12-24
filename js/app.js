@@ -856,6 +856,7 @@ function enforceScriptVersionsLimit(notify=false){
         if(!isMobileUI()) closeDrawer();
         syncProjectSwitch();
         syncBadges();
+        applyBankCollapsedUI();
       }, 120));
     }
 
@@ -3300,7 +3301,42 @@ function setupScheduleWheelScroll(){
     if(!layout) return;
     const collapsed = localStorage.getItem("gb_bank_collapsed")==="1";
     layout.classList.toggle("bankCollapsed", collapsed);
-    el("bankDock")?.classList.toggle("hidden", !collapsed);
+
+    const isMobile = window.matchMedia("(max-width: 820px)").matches;
+
+    const dock = el("bankDock");
+    if(dock){
+      if(isMobile) dock.classList.add("hidden");
+      else dock.classList.toggle("hidden", !collapsed);
+    }
+    syncBankDockPlacement(collapsed, isMobile);
+  }
+
+  function syncBankDockPlacement(collapsed, isMobile){
+    const btn = el("btnToggleBankDock");
+    const dock = el("bankDock");
+    const header = el("daysBoardCard")?.querySelector(".cardHeader");
+    if(!btn || !dock || !header) return;
+
+    let slot = header.querySelector(".bankToggleSlot");
+    if(!slot){
+      slot = document.createElement("div");
+      slot.className = "bankToggleSlot hidden";
+      header.insertBefore(slot, header.firstChild);
+    }
+
+    if(isMobile){
+      if(collapsed){
+        slot.classList.remove("hidden");
+        if(btn.parentElement !== slot) slot.appendChild(btn);
+      }else{
+        slot.classList.add("hidden");
+        if(btn.parentElement !== dock) dock.appendChild(btn);
+      }
+    }else{
+      slot.classList.add("hidden");
+      if(btn.parentElement !== dock) dock.appendChild(btn);
+    }
   }
   function expandBank(){
     localStorage.setItem("gb_bank_collapsed","0");
