@@ -7,7 +7,26 @@
   <link rel="stylesheet" href="css/styles.css" />
 </head>
 <body>
-  <div class="shell">
+  
+  <!-- Mobile UI (only visible on small screens) -->
+  <div id="sidebarBackdrop" class="sidebarBackdrop hidden"></div>
+
+  <div id="mobileTopbar" class="mobileTopbar noPrint" aria-label="Barra móvil">
+    <button id="btnMobileMenu" class="btn icon" title="Menú">☰</button>
+
+    <div class="mobileTopbarMid">
+      <div id="mobileProjectTitle" class="mobileProjectTitle">—</div>
+      <div class="mobileMeta muted small">
+        <span>Guardado:</span> <span id="mobileSavedAtText">—</span>
+        <span class="sep">•</span>
+        <span id="mobileSyncPill" class="pill pillMini">Local</span>
+      </div>
+    </div>
+
+    <button id="btnMobileSettings" class="btn icon" title="Sync / Ajustes">⚙</button>
+  </div>
+
+<div class="shell">
     <aside class="sidebar">
       <div class="brand">
         <input id="projectTitle" class="titleInput" placeholder="Proyecto" />
@@ -550,6 +569,15 @@
 
     </main>
   </div>
+
+  <div id="mobileBottomNav" class="mobileBottomNav noPrint" aria-label="Navegación móvil">
+    <button class="mnav" data-view="breakdown" title="Breakdown">BD</button>
+    <button class="mnav" data-view="shooting" title="Plan de Rodaje">Rod</button>
+    <button class="mnav" data-view="schedule" title="Cronograma">Cron</button>
+    <button class="mnav" data-view="callsheet" title="Call Sheets">Call</button>
+    <button class="mnav" id="btnMobileMore" title="Más">Más</button>
+  </div>
+
 
   <script src="js/utils.js"></script>
   <script src="js/storage.js"></script>

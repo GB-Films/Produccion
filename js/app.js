@@ -132,6 +132,32 @@
   }
 
 
+  // ======= Mobile UI helpers (layout only) =======
+  function isMobileUI(){
+    try{ return window.matchMedia && window.matchMedia("(max-width: 860px)").matches; }catch{ return false; }
+  }
+  function setMobileNavOpen(open){
+    try{
+      document.body.classList.toggle("mobileNavOpen", !!open);
+      const bd = el("sidebarBackdrop");
+      if(bd) bd.classList.toggle("hidden", !open);
+    }catch{}
+  }
+  function updateMobileActiveNav(name){
+    document.querySelectorAll(".mnav[data-view]").forEach(b=>{
+      b.classList.toggle("active", b.dataset.view === name);
+    });
+  }
+  function updateMobileHeader(){
+    const t = el("mobileProjectTitle");
+    if(t) t.textContent = (state && state.meta && state.meta.title) ? state.meta.title : "Proyecto";
+    const s = el("mobileSavedAtText");
+    if(s && state && state.meta && state.meta.updatedAt){
+      s.textContent = new Date(state.meta.updatedAt).toLocaleString("es-AR");
+    }
+  }
+
+
   // ======= Reportes: filtros por categoría (local) =======
   const REPORT_FILTER_LS_KEY = "gb_reports_filter_v1";
   const REPORT_FILTER_KEYS = ["scenes","cast","crew", ...cats.filter(c=>c!=="cast")];
@@ -199,8 +225,16 @@
   function touch(){
     state.meta.updatedAt = new Date().toISOString();
     StorageLayer.saveLocal(state);
+
     const saved = el("savedAtText");
     if(saved) saved.textContent = new Date(state.meta.updatedAt).toLocaleString("es-AR");
+
+    const savedM = el("mobileSavedAtText");
+    if(savedM) savedM.textContent = new Date(state.meta.updatedAt).toLocaleString("es-AR");
+
+    const tM = el("mobileProjectTitle");
+    if(tM) tM.textContent = state.meta.title || "Proyecto";
+
     const st = el("statusText");
     if(st) st.textContent = "Guardado";
     if(syncReady) autosyncDebounced();
@@ -219,6 +253,8 @@
   function updateSyncPill(mode){
     const p = el("syncPill");
     if(p) p.textContent = mode;
+    const pm = el("mobileSyncPill");
+    if(pm) pm.textContent = mode;
   }
 
   function defaultState(title){
@@ -764,6 +800,9 @@ function setupScheduleWheelScroll(){
     document.querySelectorAll(".navBtn").forEach(b=>{
       b.classList.toggle("active", b.dataset.view===name);
     });
+
+    updateMobileActiveNav(name);
+    if(isMobileUI()) setMobileNavOpen(false);
 
     if(name==="breakdown"){ initCollapsibles(); renderScriptUI(); renderShotsEditor(); }
     if(name==="shooting"){ renderSceneBank(); renderDaysBoard(); renderDayDetail(); applyBankCollapsedUI(); }
@@ -3095,6 +3134,29 @@ function setupScheduleWheelScroll(){
       });
     });
 
+
+    // Mobile quick nav / drawer
+    el("btnMobileMenu")?.addEventListener("click", ()=>{
+      const open = document.body.classList.contains("mobileNavOpen");
+      setMobileNavOpen(!open);
+    });
+    el("btnMobileMore")?.addEventListener("click", ()=>{
+      const open = document.body.classList.contains("mobileNavOpen");
+      setMobileNavOpen(!open);
+    });
+    el("sidebarBackdrop")?.addEventListener("click", ()=> setMobileNavOpen(false));
+    el("btnMobileSettings")?.addEventListener("click", ()=>{
+      showView("settings");
+      setMobileNavOpen(false);
+    });
+    document.querySelectorAll(".mnav[data-view]").forEach(b=>{
+      b.addEventListener("click", ()=>{
+        const v = b.dataset.view;
+        if(v) showView(v);
+      });
+    });
+
+
     el("btnAddScene")?.addEventListener("click", addScene);
     el("btnDuplicateScene")?.addEventListener("click", duplicateScene);
     el("btnDeleteScene")?.addEventListener("click", deleteScene);
@@ -3573,6 +3635,12 @@ el("scriptVerSelect")?.addEventListener("change", ()=>{
 
     el("projectTitle").value = state.meta.title || "Proyecto";
     el("savedAtText").textContent = new Date(state.meta.updatedAt).toLocaleString("es-AR");
+    updateMobileHeader();
+    updateMobileHeader();
+    updateMobileHeader();
+    updateMobileHeader();
+    updateMobileHeader();
+    updateMobileHeader();
 
     if(!state.scenes.length){
       state.scenes.push({
@@ -3637,6 +3705,14 @@ el("scriptVerSelect")?.addEventListener("change", ()=>{
     loadCallSheetCursor();
 
     const cfg = StorageLayer.loadCfg();
+
+    // Mobile: default to a cleaner screen (collapse bank) on first run
+    try{
+      if(isMobileUI() && localStorage.getItem("gb_bank_collapsed") === null){
+        localStorage.setItem("gb_bank_collapsed","1");
+      }
+    }catch{}
+
 
     // Apply per-project theme (pink for Jubilada y Peligrosa)
     try{
