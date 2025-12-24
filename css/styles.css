@@ -163,6 +163,10 @@ body{
 }
 .hidden{ display:none !important; }
 
+.screenOnly{ display:block; }
+.printOnly{ display:none; }
+
+
 .grid2{
   display:grid;
   grid-template-columns: 1fr 1fr;
@@ -1034,6 +1038,10 @@ tr.groupRow td{
 
 .hidden{ display:none !important; }
 
+.screenOnly{ display:block; }
+.printOnly{ display:none; }
+
+
 /* ===== Breakdown: Planos ===== */
 .shotsWrap{ flex:1 1 auto; min-height:0; overflow:auto; max-height:none; }
 .shotsWrap .table th, .shotsWrap .table td{ padding:9px 10px; }
@@ -1043,7 +1051,7 @@ tr.groupRow td{
 /* Print */
 
 
-/* ===================== PLAN DEL DÍA ===================== */
+/* ===================== PLAN DE RODAJE (VISTA DIARIA) ===================== */
 .dayplanHeader{
   display:flex;
   justify-content:space-between;
@@ -1074,6 +1082,162 @@ tr.groupRow td{
   border-radius:12px;
   background:rgba(255,255,255,.03);
 }
+
+/* Timeline */
+.dpScroller{
+  display:grid;
+  grid-template-columns: 78px 1fr;
+  gap:10px;
+  height:min(72vh, 920px);
+  overflow:auto;
+  border:1px solid var(--border);
+  border-radius:14px;
+  background:rgba(0,0,0,.08);
+}
+.dpTimeCol{
+  position:relative;
+  height:var(--dp-day-h, 1728px);
+  padding-right:6px;
+}
+.dpTimeLabel{
+  position:absolute;
+  left:10px;
+  transform:translateY(-50%);
+  font-size:12px;
+  opacity:.78;
+  white-space:nowrap;
+}
+.dpLane{
+  position:relative;
+  height:var(--dp-day-h, 1728px);
+  border-left:1px solid rgba(255,255,255,.08);
+}
+.dpLine{
+  position:absolute;
+  left:0; right:0;
+  height:1px;
+  background:rgba(255,255,255,.08);
+}
+.dpLine.hour{ background:rgba(255,255,255,.18); }
+.dpLine.half{ background:rgba(255,255,255,.12); }
+
+.dpBlock{
+  position:absolute;
+  left:10px; right:10px;
+  border-radius:14px;
+  border:1px solid rgba(255,255,255,.14);
+  box-shadow:0 10px 24px rgba(0,0,0,.22);
+  padding:8px 10px 12px;
+  cursor:grab;
+  user-select:none;
+  overflow:hidden;
+}
+.dpBlock:active{ cursor:grabbing; }
+.dpBlock.sel{ outline:2px solid rgba(255,255,255,.22); }
+
+.dpBlockTop{
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  gap:10px;
+}
+.dpBlockTime{
+  font-size:12px;
+  opacity:.85;
+  white-space:nowrap;
+}
+.dpBlockBtns{
+  display:flex;
+  gap:6px;
+  align-items:center;
+}
+.dpMiniBtn{
+  border:1px solid rgba(255,255,255,.12);
+  background:rgba(0,0,0,.18);
+  color:inherit;
+  padding:2px 8px;
+  border-radius:10px;
+  cursor:pointer;
+  line-height:1.2;
+}
+.dpMiniBtn:hover{ background:rgba(0,0,0,.28); }
+.dpBlockTitle{
+  margin-top:4px;
+  font-weight:800;
+  line-height:1.15;
+}
+.dpBlockDetail{
+  margin-top:3px;
+  font-size:12px;
+  opacity:.86;
+  line-height:1.25;
+}
+.dpResize{
+  position:absolute;
+  left:0; right:0; bottom:0;
+  height:10px;
+  cursor:ns-resize;
+  border-top:1px dashed rgba(255,255,255,.18);
+  background:linear-gradient(to bottom, rgba(0,0,0,0), rgba(0,0,0,.18));
+}
+.dpPalettePop{
+  position:absolute;
+  top:26px;
+  right:8px;
+  padding:8px;
+  border:1px solid var(--border);
+  background:rgba(20,20,20,.96);
+  border-radius:12px;
+  display:none;
+  z-index:20;
+}
+.dpBlock.showPalette .dpPalettePop{ display:block; }
+.dpSwatches{
+  display:grid;
+  grid-template-columns: repeat(8, 18px);
+  gap:8px;
+}
+.dpSwatchBtn{
+  width:18px;
+  height:18px;
+  border-radius:7px;
+  border:1px solid rgba(255,255,255,.18);
+  cursor:pointer;
+}
+.dpSwatchBtn:hover{ transform:scale(1.06); }
+
+.dayplanInspector{
+  margin-top:12px;
+  padding:12px;
+  border:1px solid var(--border);
+  border-radius:14px;
+  background:rgba(255,255,255,.03);
+}
+.dayplanInspector .dpGrid{
+  display:grid;
+  grid-template-columns: 1fr 1fr;
+  gap:10px;
+}
+.dayplanInspector .dpGrid .field{ margin:0; }
+.dayplanInspector .dpActions{
+  display:flex;
+  gap:8px;
+  justify-content:flex-end;
+  flex-wrap:wrap;
+  margin-top:10px;
+}
+
+.dayplanPrintTable{
+  width:100%;
+  border-collapse:collapse;
+  font-size:10.5pt;
+}
+.dayplanPrintTable th, .dayplanPrintTable td{
+  border:1px solid #ddd;
+  padding:6px 8px;
+  vertical-align:top;
+}
+.dayplanPrintTable .muted{ color:#000; opacity:.75; }
 .dayplanTable .dpHandle{
   cursor:grab;
   user-select:none;
@@ -1114,6 +1278,10 @@ tr.groupRow td{
 }
 
 @media print{
+
+  .screenOnly{ display:none !important; }
+  .printOnly{ display:block !important; }
+
 
   /* Plan del día */
   .dayplanNotes{ background:#fff; border:1px solid #ddd; }

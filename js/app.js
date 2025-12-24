@@ -557,6 +557,16 @@ function enforceScriptVersionsLimit(notify=false){
     return `${cap} ${dd}/${mm}`;
   }
 
+  function formatDayTitleCompact(dateStr){
+    if(!dateStr) return "Sin fecha";
+    const d = new Date(dateStr+"T00:00:00");
+    const weekday = new Intl.DateTimeFormat("es-AR",{weekday:"long"}).format(d);
+    const cap = weekday.charAt(0).toUpperCase()+weekday.slice(1);
+    const dd = String(d.getDate());
+    return `${cap} ${dd}`;
+  }
+
+
   const DAY_SPAN_MIN = 24*60;
 
   function ensureDayTimingMaps(d){
@@ -3032,14 +3042,38 @@ function setupScheduleWheelScroll(){
 
   
 
-  // ===================== Plan del Día (itinerario con escenas + notas) =====================
-  let dayplanDragKey = null;
+  // ===================== Plan de Rodaje (vista diaria: escenas + notas) =====================
+  let dayplanSelectedKey = null;
+  let dayplanPaletteKey = null;
+  let dayplanPointer = null;
+
+  const DAYPLAN_PPM = 1.2; // px por minuto (altura total ~1728px)
+  const DAYPLAN_COLORS = [
+    "#E5E7EB", // gris
+    "#FDE68A", // amarillo
+    "#FDBA74", // naranja
+    "#FCA5A5", // rojo suave
+    "#FBCFE8", // rosa
+    "#DDD6FE", // violeta
+    "#BFDBFE", // azul
+    "#BBF7D0"  // verde
+  ];
+
 
   function safeHexColor(c, fallback="#bdbdbd"){
     const s = String(c||"").trim();
     if(/^#[0-9a-fA-F]{6}$/.test(s)) return s;
     return fallback;
   }
+
+  function hexToRgba(hex, a=0.22){
+    const h = safeHexColor(hex, "#bdbdbd").slice(1);
+    const r = parseInt(h.slice(0,2),16);
+    const g = parseInt(h.slice(2,4),16);
+    const b = parseInt(h.slice(4,6),16);
+    return `rgba(${r},${g},${b},${a})`;
+  }
+
 
   function getDayplanSnap(){
     const a = Number(el("dayplanSnap")?.value || 0);
@@ -3145,36 +3179,49 @@ function setupScheduleWheelScroll(){
   function renderDayPlan(){
     const sel = el("dayplanSelect");
     const head = el("dayplanHead");
-    const tbody = el("dayplanTbody");
-    if(!sel || !head || !tbody) return;
+    const timeCol = el("dpTimeCol");
+    const lane = el("dpLane");
+    const scroller = el("dpScroller");
+    const inspector = el("dayplanInspector");
+    const printWrap = el("dayplanPrint");
+    if(!sel || !head || !timeCol || !lane || !scroller || !inspector || !printWrap) return;
+
+    sortShootDaysInPlace();
 
     // selector de día
     sel.innerHTML = "";
-    for(const d of state.shootDays){
+    for(const d0 of state.shootDays){
       const opt = document.createElement("option");
-      opt.value = d.id;
-      opt.textContent = `${d.label||"Día"}${d.date?` — ${d.date}`:""}`;
+      opt.value = d0.id;
+      const main = formatDayTitleCompact(d0.date);
+      opt.textContent = `${main}${d0.label ? " · "+d0.label : ""}`;
       sel.appendChild(opt);
     }
 
     selectedDayplanDayId = selectedDayplanDayId || selectedDayId || state.shootDays?.[0]?.id || null;
+    if(!selectedDayplanDayId || !state.shootDays.some(x=>x.id===selectedDayplanDayId)){
+      selectedDayplanDayId = state.shootDays?.[0]?.id || null;
+    }
     if(selectedDayplanDayId) sel.value = selectedDayplanDayId;
 
     const d = selectedDayplanDayId ? getDay(selectedDayplanDayId) : null;
     if(!d){
       head.innerHTML = `<div class="muted">No hay días cargados.</div>`;
-      tbody.innerHTML = "";
+      timeCol.innerHTML = "";
+      lane.innerHTML = "";
+      inspector.innerHTML = "";
+      printWrap.innerHTML = "";
       return;
     }
 
     ensureDayTimingMaps(d);
     const snapMin = getDayplanSnap();
-
+    const base = minutesFromHHMM(d.callTime || "00:00"); // minutos absolutos del día
     const items = buildDayplanItems(d);
 
+    // Header (día seleccionado)
     const proj = esc(state.meta?.title || "Proyecto");
-    const label = esc(d.label || "Día");
-    const date = esc(d.date || "");
+    const dayTxt = `${formatDayTitleCompact(d.date)}${d.label ? " · "+esc(d.label) : ""}`;
     const call = esc(d.callTime || "");
     const loc = esc(d.location || "");
 
@@ -3182,7 +3229,7 @@ function setupScheduleWheelScroll(){
       <div class="dayplanHeader">
         <div class="dpTitle">
           <div class="dpProj">${proj}</div>
-          <div class="dpDay">${label}${date?` · ${date}`:""}</div>
+          <div class="dpDay">${dayTxt}</div>
         </div>
         <div class="dpMeta">
           <div><b>Call:</b> ${call||"—"}</div>
@@ -3192,200 +3239,473 @@ function setupScheduleWheelScroll(){
       ${d.notes ? `<div class="dayplanNotes"><b>Notas:</b> ${esc(d.notes)}</div>` : ``}
     `;
 
+    // Timeline sizing
+    const ppm = DAYPLAN_PPM;
+    const dayH = Math.round(DAY_SPAN_MIN * ppm);
+    scroller.style.setProperty("--dp-day-h", dayH+"px");
+    timeCol.style.height = dayH+"px";
+    lane.style.height = dayH+"px";
+
+    // Hour labels
+    const hourLabels = [];
+    for(let h=0; h<=24; h++){
+      const m = h*60;
+      const top = Math.round(m*ppm);
+      const label = `${String(h).padStart(2,"0")}:00`;
+      hourLabels.push(`<div class="dpTimeLabel" style="top:${top}px">${label}</div>`);
+    }
+    timeCol.innerHTML = hourLabels.join("");
+
+    // Grid lines (cada 30m)
+    const grid = [];
+    for(let m=0; m<=DAY_SPAN_MIN; m+=30){
+      const top = Math.round(m*ppm);
+      const cls = (m%60===0) ? "dpLine hour" : "dpLine half";
+      grid.push(`<div class="${cls}" style="top:${top}px"></div>`);
+    }
+
     const eattr = (s)=>esc(String(s||"")).replace(/"/g,"&quot;");
+    const blocks = items.map((it)=>{
+      const col = safeHexColor(it.color || (it.kind==="scene" ? "#BFDBFE" : "#E5E7EB"));
+      const bg = hexToRgba(col, 0.22);
+      const absStart = clamp(base + (it.start||0), 0, DAY_SPAN_MIN - snapMin);
+      const dur = clamp(Math.max(snapMin, it.dur||snapMin), snapMin, DAY_SPAN_MIN);
+      const absEnd = clamp(absStart + dur, 0, DAY_SPAN_MIN);
 
-    tbody.innerHTML = items.length ? items.map((it, idx)=>{
-      const clock = d.callTime ? fmtClockFromCall(d.callTime, it.start) : hhmmFromMinutes(it.start);
-      const color = safeHexColor(it.color);
-      const border = color ? `style="border-left:8px solid ${eattr(color)}"` : "";
-      const colorVal = eattr(color);
+      const top = Math.round(absStart * ppm);
+      const height = Math.max(Math.round(dur * ppm), Math.round(snapMin*ppm));
 
-      const itemCell = it.kind==="scene"
-        ? `<button class="linkBtn dpSceneLink" data-action="openScene" data-scene="${eattr(it.id)}">${esc(it.title)}</button>`
-        : `<input class="input compact dpInput" data-field="title" value="${eattr(it.title)}" placeholder="Tarea / Nota">`;
-
-      const detailCell = it.kind==="scene"
-        ? `<div class="muted small">${esc(it.detail||"")}</div>`
-        : `<input class="input compact dpInput" data-field="detail" value="${eattr(it.detail)}" placeholder="Detalle (opcional)">`;
+      const startTxt = hhmmFromMinutes(absStart);
+      const endTxt = hhmmFromMinutes(absEnd);
+      const isSel = (dayplanSelectedKey === it.key);
+      const showPal = (dayplanPaletteKey === it.key);
 
       const delBtn = it.kind==="block"
-        ? `<button class="btn icon danger noPrint" data-action="delete" title="Eliminar">🗑</button>`
-        : ``;
+        ? `<button class="dpMiniBtn noPrint" data-action="delete" title="Eliminar">🗑</button>`
+        : `<button class="dpMiniBtn noPrint" data-action="openScene" title="Abrir escena">↗</button>`;
 
       return `
-        <tr class="dpRow" draggable="true" data-kind="${it.kind}" data-id="${eattr(it.id)}" ${border}>
-          <td class="dpHandle noPrint" title="Arrastrar">⠿</td>
-          <td class="dpTime">
-            <input class="input compact dpInput" type="time" data-field="time" value="${eattr(clock)}">
-          </td>
-          <td class="dpDur">
-            <input class="input compact dpInput" type="number" data-field="dur" min="${snapMin}" step="${snapMin}" value="${Math.max(snapMin, Math.round(it.dur||snapMin))}">
-          </td>
-          <td class="dpItem">${itemCell}</td>
-          <td class="dpDetail">${detailCell}</td>
-          <td class="dpColor">
-            <span class="dpSwatch" style="background:${colorVal}"></span>
-            <input class="dpColorInput noPrint" type="color" data-field="color" value="${colorVal}" aria-label="Color">
-            ${delBtn}
-          </td>
+        <div class="dpBlock ${isSel?"sel":""} ${showPal?"showPalette":""}"
+             data-key="${eattr(it.key)}" data-kind="${eattr(it.kind)}" data-id="${eattr(it.id)}"
+             style="top:${top}px;height:${height}px;background:${eattr(bg)};border-left:8px solid ${eattr(col)};">
+          <div class="dpBlockTop">
+            <div class="dpBlockTime">${esc(startTxt)} – ${esc(endTxt)}</div>
+            <div class="dpBlockBtns">
+              <button class="dpMiniBtn noPrint" data-action="palette" title="Color">🎨</button>
+              ${delBtn}
+            </div>
+          </div>
+          <div class="dpBlockTitle">${esc(it.title||"")}</div>
+          ${it.detail ? `<div class="dpBlockDetail">${esc(it.detail)}</div>` : ``}
+
+          <div class="dpPalettePop noPrint" data-role="palette">
+            <div class="dpSwatches">
+              ${DAYPLAN_COLORS.map(c=>`<button class="dpSwatchBtn" data-action="pickColor" data-color="${eattr(c)}" style="background:${eattr(c)}" title="${eattr(c)}"></button>`).join("")}
+            </div>
+          </div>
+
+          <div class="dpResize noPrint" data-action="resize" title="Arrastrá para cambiar duración"></div>
+        </div>
+      `;
+    }).join("");
+
+    lane.innerHTML = grid.join("") + blocks;
+
+    // Print table (se ve solo al imprimir)
+    const rows = items.map((it)=>{
+      const col = safeHexColor(it.color || (it.kind==="scene" ? "#BFDBFE" : "#E5E7EB"));
+      const bg = hexToRgba(col, 0.14);
+      const absStart = clamp(base + (it.start||0), 0, DAY_SPAN_MIN - snapMin);
+      const dur = clamp(Math.max(snapMin, it.dur||snapMin), snapMin, DAY_SPAN_MIN);
+      const absEnd = clamp(absStart + dur, 0, DAY_SPAN_MIN);
+      const clock = `${hhmmFromMinutes(absStart)} – ${hhmmFromMinutes(absEnd)}`;
+      return `
+        <tr style="background:${eattr(bg)};border-left:8px solid ${eattr(col)};">
+          <td style="width:120px">${esc(clock)}</td>
+          <td style="width:70px">${esc(String(dur))}m</td>
+          <td>${esc(it.title||"")}</td>
+          <td>${esc(it.detail||"")}</td>
         </tr>
       `;
-    }).join("") : `<tr><td colspan="6" class="muted">No hay escenas ni notas para este día.</td></tr>`;
+    }).join("");
 
-    // Delegación de eventos (una sola vez)
-    if(tbody.dataset.bound !== "1"){
-      tbody.dataset.bound = "1";
+    printWrap.innerHTML = `
+      <div class="spacer"></div>
+      <div class="card" style="border:1px solid #ddd; box-shadow:none;">
+        <div class="cardHeader"><h3 class="cardTitle">Itinerario</h3></div>
+        <div class="cardContent">
+          <table class="dayplanPrintTable">
+            <thead>
+              <tr><th>Hora</th><th>Dur</th><th>Item</th><th>Detalle</th></tr>
+            </thead>
+            <tbody>${rows || `<tr><td colspan="4" class="muted">—</td></tr>`}</tbody>
+          </table>
+        </div>
+      </div>
+    `;
 
-      tbody.addEventListener("click", (e)=>{
-        const btn = e.target.closest("[data-action]");
-        if(!btn) return;
-        const tr = e.target.closest("tr.dpRow");
-        if(!tr) return;
-        const kind = tr.dataset.kind;
-        const id = tr.dataset.id;
-        const action = btn.dataset.action;
+    renderDayplanInspector(d, items);
 
-        if(action === "delete" && kind === "block"){
-          deleteDayplanBlock(selectedDayplanDayId, id);
+    // Bind interactions once
+    if(!lane.dataset.bound){
+      lane.dataset.bound = "1";
+
+      // Clicks: seleccionar, paleta, delete, open
+      lane.addEventListener("click", (e)=>{
+        const block = e.target.closest(".dpBlock");
+        if(!block) return;
+
+        const d = selectedDayplanDayId ? getDay(selectedDayplanDayId) : null;
+        if(!d) return;
+        ensureDayTimingMaps(d);
+
+        const key = block.dataset.key;
+        const kind = block.dataset.kind;
+        const id = block.dataset.id;
+
+        const actEl = e.target.closest("[data-action]");
+        const action = actEl?.dataset.action || "";
+
+        if(action === "palette"){
+          dayplanPaletteKey = (dayplanPaletteKey === key) ? null : key;
+          dayplanSelectedKey = key;
+          renderDayPlan();
           return;
         }
-        if(action === "openScene"){
-          const sid = btn.dataset.scene;
-          if(!sid) return;
-          selectedSceneId = sid;
+        if(action === "pickColor"){
+          const col = safeHexColor(actEl.dataset.color);
+          if(kind === "scene"){
+            d.sceneColors[id] = col;
+          }else{
+            const b = (d.blocks||[]).find(x=>x.id===id);
+            if(b) b.color = col;
+          }
+          dayplanPaletteKey = null;
+          dayplanSelectedKey = key;
+          touch();
+          renderDayPlan();
+          renderScheduleBoard();
+          renderCallSheetDetail();
+          renderReports();
+          return;
+        }
+        if(action === "delete" && kind === "block"){
+          deleteDayplanBlock(selectedDayplanDayId, id);
+          dayplanSelectedKey = null;
+          dayplanPaletteKey = null;
+          return;
+        }
+        if(action === "openScene" && kind === "scene"){
+          selectedSceneId = id;
           showView("breakdown");
           renderScenesTable();
           renderSceneEditor();
           renderShotsEditor();
           return;
         }
+
+        // selección simple
+        dayplanSelectedKey = key;
+        dayplanPaletteKey = null;
+        renderDayPlan();
       });
 
-      tbody.addEventListener("change", (e)=>{
-        const tr = e.target.closest("tr.dpRow");
-        if(!tr) return;
-        const field = e.target.dataset.field;
-        if(!field) return;
+      // Drag / resize
+      lane.addEventListener("pointerdown", (e)=>{
+        const block = e.target.closest(".dpBlock");
+        if(!block) return;
 
-        const d = selectedDayplanDayId ? getDay(selectedDayplanDayId) : null;
+        const action = e.target.closest("[data-action]")?.dataset.action || "";
+        if(action === "palette" || action === "pickColor" || action === "delete" || action === "openScene") return;
+
+        const dayId = selectedDayplanDayId || null;
+        const d = dayId ? getDay(dayId) : null;
         if(!d) return;
+        ensureDayTimingMaps(d);
 
-        const kind = tr.dataset.kind;
-        const id = tr.dataset.id;
         const snapMin = getDayplanSnap();
-
-        if(field === "time"){
-          const v = String(e.target.value||"");
-          const call = minutesFromHHMM(d.callTime||"08:00");
-          const abs = minutesFromHHMM(v||"00:00");
-          let startMin = abs - call;
-          if(!Number.isFinite(startMin)) startMin = 0;
-          startMin = clamp(startMin, 0, DAY_SPAN_MIN - snapMin);
-          startMin = snap(startMin, snapMin);
-
-          setDayplanStart(d, kind, id, startMin);
-          resolveOverlapsPushDown(d, snapMin);
-          touch();
-          renderDayPlan();
-          renderScheduleBoard();
-          renderCallSheetDetail();
-          renderReports();
-          return;
-        }
-
-        if(field === "dur"){
-          let durMin = Number(e.target.value||0);
-          if(!Number.isFinite(durMin) || durMin<=0) durMin = snapMin;
-          durMin = snap(durMin, snapMin);
-          durMin = clamp(durMin, snapMin, DAY_SPAN_MIN);
-
-          setDayplanDur(d, kind, id, durMin);
-          resolveOverlapsPushDown(d, snapMin);
-          touch();
-          renderDayPlan();
-          renderScheduleBoard();
-          renderCallSheetDetail();
-          renderReports();
-          return;
-        }
-
-        if(field === "color"){
-          const col = safeHexColor(e.target.value);
-          if(kind === "scene"){
-            d.sceneColors[id] = col;
-            touch();
-            renderDayPlan();
-            renderScheduleBoard();
-            renderCallSheetDetail();
-            return;
-          }
-          const b = (d.blocks||[]).find(x=>x.id===id);
-          if(b){ b.color = col; touch(); renderDayPlan(); renderCallSheetDetail(); }
-          return;
-        }
-      });
-
-      tbody.addEventListener("input", (e)=>{
-        const tr = e.target.closest("tr.dpRow");
-        if(!tr) return;
-        const field = e.target.dataset.field;
-        if(!field) return;
-        const d = selectedDayplanDayId ? getDay(selectedDayplanDayId) : null;
-        if(!d) return;
-        if(tr.dataset.kind !== "block") return;
-
-        const b = (d.blocks||[]).find(x=>x.id===tr.dataset.id);
-        if(!b) return;
-
-        if(field === "title"){ b.title = e.target.value; touch(); return; }
-        if(field === "detail"){ b.detail = e.target.value; touch(); return; }
-      });
-
-      // Drag & drop (reordenar moviendo el horario)
-      tbody.addEventListener("dragstart", (e)=>{
-        const tr = e.target.closest("tr.dpRow");
-        if(!tr) return;
-        dayplanDragKey = `${tr.dataset.kind}:${tr.dataset.id}`;
-        e.dataTransfer?.setData("text/plain", dayplanDragKey);
-        e.dataTransfer?.setDragImage?.(tr, 10, 10);
-      });
-      tbody.addEventListener("dragover", (e)=>{ e.preventDefault(); });
-      tbody.addEventListener("drop", (e)=>{
-        e.preventDefault();
-        const tr = e.target.closest("tr.dpRow");
-        if(!tr) return;
-
-        const targetKey = `${tr.dataset.kind}:${tr.dataset.id}`;
-        const dragKey = dayplanDragKey || e.dataTransfer?.getData("text/plain");
-        if(!dragKey || dragKey === targetKey) return;
-
-        const d = selectedDayplanDayId ? getDay(selectedDayplanDayId) : null;
-        if(!d) return;
-        const snapMin = getDayplanSnap();
-
+        const base = minutesFromHHMM(d.callTime || "00:00");
         const items = buildDayplanItems(d);
-        const fromIdx = items.findIndex(it=>`${it.kind}:${it.id}`===dragKey);
-        const toIdx = items.findIndex(it=>`${it.kind}:${it.id}`===targetKey);
-        if(fromIdx<0 || toIdx<0) return;
+        const ppm = DAYPLAN_PPM;
 
-        const target = items[toIdx];
-        const newStart = (toIdx > fromIdx)
-          ? (target.start + target.dur)
-          : Math.max(0, target.start - snapMin);
+        const sc = el("dpScroller");
+        const rect = lane.getBoundingClientRect();
+        const y = (e.clientY - rect.top) + (sc?.scrollTop||0);
+        const pressAbsMin = clamp(y / ppm, 0, DAY_SPAN_MIN);
 
-        const [k, id] = dragKey.split(":");
-        setDayplanStart(d, k, id, snap(newStart, snapMin));
-        resolveOverlapsPushDown(d, snapMin);
+        const key = block.dataset.key;
+        const kind = block.dataset.kind;
+        const id = block.dataset.id;
 
+        const it = items.find(x=>x.key===key);
+        if(!it) return;
+
+        const absStart0 = clamp(base + (it.start||0), 0, DAY_SPAN_MIN);
+        const dur0 = clamp(Math.max(snapMin, it.dur||snapMin), snapMin, DAY_SPAN_MIN);
+
+        const mode = (action === "resize") ? "resize" : "drag";
+        const grabOffset = clamp(pressAbsMin - absStart0, 0, dur0);
+
+        dayplanPointer = {
+          dayId,
+          base,
+          snapMin,
+          ppm,
+
+          key, kind, id, mode,
+          startY: y,
+          pressAbsMin,
+          grabOffset,
+          absStart0,
+          dur0,
+          el: block
+        };
+
+        dayplanSelectedKey = key;
+        dayplanPaletteKey = null;
+        block.setPointerCapture?.(e.pointerId);
+        e.preventDefault();
+      });
+
+      lane.addEventListener("pointermove", (e)=>{
+        if(!dayplanPointer) return;
+        const sc = el("dpScroller");
+        const rect = lane.getBoundingClientRect();
+        const y = (e.clientY - rect.top) + (sc?.scrollTop||0);
+        const p = dayplanPointer;
+
+        const d = p.dayId ? getDay(p.dayId) : null;
+        if(!d) return;
+        ensureDayTimingMaps(d);
+
+        const ppm = p.ppm || DAYPLAN_PPM;
+        const snapMin = p.snapMin || getDayplanSnap();
+        const base = p.base || minutesFromHHMM(d.callTime || "00:00");
+
+        if(p.mode === "drag"){
+          let absStart = (y/ppm) - p.grabOffset;
+          absStart = snap(absStart, snapMin);
+          absStart = clamp(absStart, 0, DAY_SPAN_MIN - p.dur0);
+
+          const offset = absStart - base;
+          setDayplanStart(d, p.kind, p.id, clamp(offset, 0, DAY_SPAN_MIN - snapMin));
+          // update UI live
+          p.el.style.top = Math.round(absStart*ppm) + "px";
+        }else if(p.mode === "resize"){
+          let dur = (y/ppm) - p.absStart0;
+          dur = snap(dur, snapMin);
+          dur = clamp(dur, snapMin, DAY_SPAN_MIN - p.absStart0);
+
+          setDayplanDur(d, p.kind, p.id, dur);
+          p.el.style.height = Math.round(dur*ppm) + "px";
+        }
+      });
+
+      function endPointer(){
+        if(!dayplanPointer) return;
+        const dayId = dayplanPointer.dayId;
+        const d2 = dayId ? getDay(dayId) : null;
+        if(!d2) { dayplanPointer = null; return; }
+        resolveOverlapsPushDown(d2, getDayplanSnap());
         touch();
+        dayplanPointer = null;
         renderDayPlan();
         renderScheduleBoard();
         renderCallSheetDetail();
         renderReports();
-      });
-      tbody.addEventListener("dragend", ()=>{ dayplanDragKey = null; });
+      }
+
+      lane.addEventListener("pointerup", endPointer);
+      lane.addEventListener("pointercancel", endPointer);
     }
   }
+
+  function renderDayplanInspector(d, items){
+    const box = el("dayplanInspector");
+    if(!box) return;
+
+    const snapMin = getDayplanSnap();
+    const base = minutesFromHHMM(d.callTime || "00:00");
+
+    const it = dayplanSelectedKey ? items.find(x=>x.key===dayplanSelectedKey) : null;
+    if(!it){
+      box.innerHTML = `<div class="muted">Seleccioná una escena o tarea para editarla.</div>`;
+      return;
+    }
+
+    const col = safeHexColor(it.color || (it.kind==="scene" ? "#BFDBFE" : "#E5E7EB"));
+    const absStart = clamp(base + (it.start||0), 0, DAY_SPAN_MIN - snapMin);
+    const dur = clamp(Math.max(snapMin, it.dur||snapMin), snapMin, DAY_SPAN_MIN);
+    const timeVal = hhmmFromMinutes(absStart);
+
+    const isBlock = it.kind==="block";
+
+    box.innerHTML = `
+      <div class="row gap" style="align-items:center;justify-content:space-between;flex-wrap:wrap">
+        <div><b>${it.kind==="scene" ? "Escena" : "Nota / tarea"}</b> <span class="muted">(${esc(it.title||"")})</span></div>
+        <div class="row gap" style="align-items:center">
+          <span class="muted small">Color</span>
+          <div class="dpSwatches">
+            ${DAYPLAN_COLORS.map(c=>`<button class="dpSwatchBtn" data-action="pickColorInspector" data-color="${esc(c)}" style="background:${esc(c)}" title="${esc(c)}"></button>`).join("")}
+          </div>
+        </div>
+      </div>
+
+      <div class="spacer"></div>
+
+      <div class="dpGrid">
+        <div class="field">
+          <label>Hora</label>
+          <input class="input" type="time" id="dpi_time" value="${esc(timeVal)}">
+        </div>
+        <div class="field">
+          <label>Duración (min)</label>
+          <input class="input" type="number" id="dpi_dur" min="${snapMin}" step="${snapMin}" value="${esc(String(dur))}">
+        </div>
+
+        ${isBlock ? `
+          <div class="field" style="grid-column:1/-1">
+            <label>Título</label>
+            <input class="input" id="dpi_title" value="${esc(it.title||"")}">
+          </div>
+          <div class="field" style="grid-column:1/-1">
+            <label>Detalle</label>
+            <textarea class="textarea smallArea" id="dpi_detail">${esc(it.detail||"")}</textarea>
+          </div>
+        ` : `
+          <div class="field" style="grid-column:1/-1">
+            <label>Detalle</label>
+            <div class="muted">${esc(it.detail||"—")}</div>
+          </div>
+        `}
+      </div>
+
+      <div class="dpActions">
+        ${it.kind==="scene" ? `<button class="btn" id="dpi_openScene">Abrir escena</button>` : ``}
+        ${it.kind==="block" ? `<button class="btn danger" id="dpi_delete">Eliminar</button>` : ``}
+      </div>
+    `;
+
+    // Bind once per render (clean approach: delegation)
+    if(!box.dataset.bound){
+      box.dataset.bound = "1";
+
+      box.addEventListener("click", (e)=>{
+        const act = e.target.closest("[data-action]")?.dataset.action || "";
+        if(act === "pickColorInspector"){
+          const d0 = selectedDayplanDayId ? getDay(selectedDayplanDayId) : null;
+          if(!d0) return;
+          const it0 = dayplanSelectedKey ? buildDayplanItems(d0).find(x=>x.key===dayplanSelectedKey) : null;
+          if(!it0) return;
+
+          const col = safeHexColor(e.target.closest("[data-action]")?.dataset.color);
+          if(it0.kind==="scene"){
+            d0.sceneColors[it0.id] = col;
+          }else{
+            const b = (d0.blocks||[]).find(x=>x.id===it0.id);
+            if(b) b.color = col;
+          }
+          touch();
+          renderDayPlan();
+          renderScheduleBoard();
+          renderCallSheetDetail();
+          renderReports();
+          return;
+        }
+      });
+
+      box.addEventListener("change", (e)=>{
+        const d0 = selectedDayplanDayId ? getDay(selectedDayplanDayId) : null;
+        if(!d0) return;
+        const items0 = buildDayplanItems(d0);
+        const it0 = dayplanSelectedKey ? items0.find(x=>x.key===dayplanSelectedKey) : null;
+        if(!it0) return;
+
+        const base0 = minutesFromHHMM(d0.callTime || "00:00");
+        const snap0 = getDayplanSnap();
+
+        if(e.target.id === "dpi_time"){
+          const abs = minutesFromHHMM(e.target.value || "00:00");
+          let offset = abs - base0;
+          offset = clamp(offset, 0, DAY_SPAN_MIN - snap0);
+          offset = snap(offset, snap0);
+          setDayplanStart(d0, it0.kind, it0.id, offset);
+          resolveOverlapsPushDown(d0, snap0);
+          touch();
+          renderDayPlan();
+          renderScheduleBoard();
+          renderCallSheetDetail();
+          renderReports();
+          return;
+        }
+
+        if(e.target.id === "dpi_dur"){
+          let dur = Number(e.target.value||0);
+          if(!Number.isFinite(dur) || dur<=0) dur = snap0;
+          dur = snap(dur, snap0);
+          dur = clamp(dur, snap0, DAY_SPAN_MIN);
+          setDayplanDur(d0, it0.kind, it0.id, dur);
+          resolveOverlapsPushDown(d0, snap0);
+          touch();
+          renderDayPlan();
+          renderScheduleBoard();
+          renderCallSheetDetail();
+          renderReports();
+          return;
+        }
+      });
+
+      box.addEventListener("input", (e)=>{
+        const d0 = selectedDayplanDayId ? getDay(selectedDayplanDayId) : null;
+        if(!d0) return;
+        if(!dayplanSelectedKey) return;
+
+        const items0 = buildDayplanItems(d0);
+        const it0 = items0.find(x=>x.key===dayplanSelectedKey);
+        if(!it0 || it0.kind!=="block") return;
+
+        const b = (d0.blocks||[]).find(x=>x.id===it0.id);
+        if(!b) return;
+
+        if(e.target.id === "dpi_title"){ b.title = e.target.value; touch(); renderDayPlan(); renderCallSheetDetail(); }
+        if(e.target.id === "dpi_detail"){ b.detail = e.target.value; touch(); renderDayPlan(); renderCallSheetDetail(); }
+      });
+
+      box.addEventListener("click", (e)=>{
+        const d0 = selectedDayplanDayId ? getDay(selectedDayplanDayId) : null;
+        if(!d0) return;
+        const items0 = buildDayplanItems(d0);
+        const it0 = dayplanSelectedKey ? items0.find(x=>x.key===dayplanSelectedKey) : null;
+        if(!it0) return;
+
+        if(e.target.id === "dpi_openScene" && it0.kind==="scene"){
+          selectedSceneId = it0.id;
+          showView("breakdown");
+          renderScenesTable();
+          renderSceneEditor();
+          renderShotsEditor();
+          return;
+        }
+        if(e.target.id === "dpi_delete" && it0.kind==="block"){
+          deleteDayplanBlock(selectedDayplanDayId, it0.id);
+          dayplanSelectedKey = null;
+          dayplanPaletteKey = null;
+          renderDayPlan();
+          return;
+        }
+      });
+    }
+
+    // highlight current color selection (simple)
+    const btns = box.querySelectorAll('.dpSwatchBtn[data-action="pickColorInspector"]');
+    btns.forEach(b=>{
+      const c = b.getAttribute("data-color");
+      if(c === col) b.style.outline = "2px solid rgba(255,255,255,.45)";
+      else b.style.outline = "none";
+    });
+  }
+
+
 
 function renderShotList(){
     const sel = el("shotDaySelect");

@@ -16,8 +16,8 @@
 
       <nav class="nav">
         <button class="navBtn" data-view="breakdown">Breakdown</button>
-        <button class="navBtn" data-view="shooting">Plan de Rodaje</button>
-        <button class="navBtn" data-view="dayplan">Plan del día</button>
+        <button class="navBtn" data-view="shooting">Call Diario</button>
+        <button class="navBtn" data-view="dayplan">Plan de Rodaje</button>
         <button class="navBtn" data-view="schedule">Cronograma</button>
         <button class="navBtn" data-view="shotlist">Shotlist</button>
         <button class="navBtn" data-view="elements">Elementos</button>
@@ -352,11 +352,11 @@
       </section>
 
 
-      <!-- ================= PLAN DEL DÍA ================= -->
+      <!-- ================= PLAN DE RODAJE (Vista diaria) ================= -->
       <section class="view hidden" id="view-dayplan">
         <div class="card" id="dayplanCard">
           <div class="cardHeader">
-            <h2 class="cardTitle">Plan del día</h2>
+            <h2 class="cardTitle">Plan de Rodaje</h2>
             <div class="row gap noPrint" style="flex-wrap:wrap">
               <select class="input compact" id="dayplanSelect"></select>
 
@@ -379,23 +379,15 @@
           <div class="cardContent">
             <div id="dayplanHead"></div>
             <div class="spacer"></div>
-
-            <div class="tableWrap">
-              <table class="table dayplanTable">
-                <thead>
-                  <tr>
-                    <th class="noPrint" style="width:36px"></th>
-                    <th style="width:120px">Hora</th>
-                    <th style="width:90px">Dur</th>
-                    <th>Item</th>
-                    <th>Detalle</th>
-                    <th style="width:150px">Color</th>
-                  </tr>
-                </thead>
-                <tbody id="dayplanTbody"></tbody>
-              </table>
+            <div class="dpScroller screenOnly" id="dpScroller">
+              <div class="dpTimeCol" id="dpTimeCol"></div>
+              <div class="dpLane" id="dpLane"></div>
             </div>
-          </div>
+
+            <div class="dayplanInspector noPrint" id="dayplanInspector"></div>
+
+            <div class="printOnly" id="dayplanPrint"></div>
+</div>
         </div>
       </section>
 
