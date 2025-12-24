@@ -724,11 +724,6 @@ function enforceScriptVersionsLimit(notify=false){
         <button id="mMenuBtn" class="mIconBtn" title="Menú">☰</button>
         <div class="mTopMid">
           <div id="mProjectTitle" class="mProjTitle">Proyecto</div>
-          <div class="mBadges">
-            <span class="pill" id="mSyncPill">Local</span>
-            <span class="pill muted" id="mStatusText">—</span>
-            <span class="pill muted">🕒 <span id="mSavedAtText">—</span></span>
-          </div>
         </div>
         <select id="mProjectSwitch" class="mProjectSwitch" title="Proyecto"></select>
       `;

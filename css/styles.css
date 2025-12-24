@@ -360,7 +360,7 @@ tr.groupRow td{
   gap:14px;
   align-items:start;
 }
-.shootingLayout .col{
+.shootingLayout > .col{
   min-height:0;
   display:flex;
   flex-direction:column;
@@ -490,13 +490,13 @@ tr.groupRow td{
   .dayDetail4col{ grid-template-columns: 1fr; }
 }
 
-.colTitle{ font-weight:900; opacity:.92; margin-bottom:8px; }
+.colTitle{ font-weight:900; opacity:.92; margin-bottom:4px; }
 
 .crewAreaHeader{
-  margin-top:12px;
-  margin-bottom:8px;
+  margin-top:8px;
+  margin-bottom:6px;
   font-weight:900;
-  padding:8px 10px;
+  padding:6px 8px;
   border-radius:14px;
   border:1px solid var(--border);
   background: rgba(var(--accent-rgb),.08);
@@ -592,6 +592,7 @@ tr.groupRow td{
 #dayCrewPicker .crewPickItem{
   padding:8px 10px;
   border-radius:14px;
+  margin-bottom:8px;
 }
 #dayCrewPicker .crewPickItem .title{ font-size:13px; }
 #dayCrewPicker .crewPickItem .left,
@@ -1536,3 +1537,36 @@ tr.groupRow td{
     font-size:14px;
   }
 }
+
+
+/* ================= Desktop typography bump (>= 981px) ================= */
+@media (min-width: 981px){
+  body{ font-size: 17px; }
+
+  /* más legible lo "chiquito" */
+  label,
+  .small,
+  .sub,
+  .sceneCard .meta,
+  .crewPickItem .meta,
+  .dayHeader .m,
+  .reportHead .m,
+  .scriptSceneItem .m,
+  .calCell .tag,
+  .sceneCatHead .count,
+  .hoverTip .m,
+  .hoverTip .grpTitle{
+    font-size: 13px;
+  }
+  .bankList .sceneCard .meta{ font-size: 12px; }
+
+  .table th, .table td{ font-size: 14px; }
+  .projectSwitch{ font-size: 13px; }
+
+  /* pestañas en mayúsculas (sidebar) */
+  .navBtn{
+    text-transform: uppercase;
+    letter-spacing: .8px;
+  }
+}
+
