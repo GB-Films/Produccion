@@ -3749,9 +3749,9 @@ el("scriptVerSelect")?.addEventListener("change", ()=>{
     refreshElementSuggestions();
 
     el("projectTitle").value = state.meta.title || "Proyecto";
-    el("savedAtText").textContent = new Date(state.meta.updatedAt).toLocaleString("es-AR");
-
-    if(!state.scenes.length){
+    const _savedAt = el("savedAtText");
+    if(_savedAt) _savedAt.textContent = new Date(state.meta.updatedAt).toLocaleString("es-AR");
+if(!state.scenes.length){
       state.scenes.push({
         id: uid("scene"),
         number:"1",
