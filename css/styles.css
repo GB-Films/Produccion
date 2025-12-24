@@ -704,6 +704,7 @@ tr.groupRow td{
 }
 
 .schedScrollTop{
+  display:none;
   height:22px;
   min-height:22px;
   overflow-x:scroll;
@@ -719,8 +720,7 @@ tr.groupRow td{
 .schedWrap{
   flex: 1 1 auto;
   min-height: 0;
-  overflow-y: auto;
-  overflow-x: hidden;
+  overflow: auto;
   scrollbar-gutter: stable both-edges;
   overscroll-behavior-x: contain;
   overscroll-behavior-y: auto;
@@ -730,18 +730,10 @@ tr.groupRow td{
 .schedBoard{
   display:flex;
   gap:12px;
-  overflow-x: auto;
-  overflow-y: visible;
-  padding-bottom: 22px; /* espacio para que no tape el dock */
-  flex: 0 0 auto;
-  min-height: 0;
-  overscroll-behavior-x: contain;
-  overscroll-behavior-y: auto;
-
-  /* ocultar este scrollbar: queremos ver solo el de abajo */
-  scrollbar-width: none;
+  width:max-content; /* permite scroll horizontal en el WRAP */
+  min-height:0;
+  padding-bottom:8px;
 }
-.schedBoard::-webkit-scrollbar{ height:0; }
 
 .schedDay{
   width:360px;

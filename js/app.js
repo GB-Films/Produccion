@@ -867,7 +867,8 @@ function enforceScriptVersionsLimit(notify=false){
     const top = el("schedScrollTop");
     const inner = el("schedScrollTopInner");
     const board = el("schedBoard");
-    if(!top || !inner || !board) return;
+    const wrap = el("schedWrap");
+    if(!top || !inner || !board || !wrap) return;
 
     // ancho del “contenido” del scrollbar superior = scrollWidth del board
     inner.style.width = `${board.scrollWidth}px`;
@@ -880,14 +881,14 @@ function enforceScriptVersionsLimit(notify=false){
       top.addEventListener("scroll", ()=>{
         if(lock) return;
         lock = true;
-        board.scrollLeft = top.scrollLeft;
+        wrap.scrollLeft = top.scrollLeft;
         lock = false;
       });
 
-      board.addEventListener("scroll", ()=>{
+      wrap.addEventListener("scroll", ()=>{
         if(lock) return;
         lock = true;
-        top.scrollLeft = board.scrollLeft;
+        top.scrollLeft = wrap.scrollLeft;
         lock = false;
       });
 
@@ -897,7 +898,7 @@ function enforceScriptVersionsLimit(notify=false){
     }
 
     // al render, igualamos posición
-    top.scrollLeft = board.scrollLeft;
+    top.scrollLeft = wrap.scrollLeft;
   }
 
 // ======= NUEVO: Scroll vertical con ruedita en cualquier lado (Cronograma) =======
@@ -2668,7 +2669,7 @@ function setupScheduleWheelScroll(){
         schedPress = null;
 
         const passive = { passive:true };
-        const startScrollLeft = board.scrollLeft;
+        const startScrollLeft = (wrap ? wrap.scrollLeft : board.scrollLeft);
         const startScrollTop = wrap ? wrap.scrollTop : 0;
 
         const cancelPress = ()=>{
@@ -2705,7 +2706,7 @@ function setupScheduleWheelScroll(){
 
           // Si hubo scroll, no iniciamos drag.
           const scrolled =
-            board.scrollLeft !== schedPress.startScrollLeft ||
+            (wrap ? wrap.scrollLeft : board.scrollLeft) !== schedPress.startScrollLeft ||
             (wrap && wrap.scrollTop !== schedPress.startScrollTop);
           if(scrolled){ cancelPress(); return; }
 
@@ -2734,6 +2735,11 @@ function setupScheduleWheelScroll(){
       }
 
       if(!schedDrag) return;
+
+      // En mobile, mientras draggeamos, evitamos que el scroll/gestos se mezclen con el drag.
+      if(isMobileUI() && e.pointerType === "touch"){
+        try{ e.preventDefault(); }catch{}
+      }
 
       // Durante drag (touch), frenamos el scroll del navegador.
       if(isMobileUI() && e.pointerType === "touch"){
