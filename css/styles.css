@@ -33,23 +33,30 @@
 }
 
 html[data-theme="pink"]{
-  /* JYP — Emerald ULTRA Soft (más claro, más grisáceo, menos saturado) */
-  --bg:#142a24;
-  --panel:#1b3530;
-  --card:#23413a;
+  /* JYP — Violeta pastel (desaturado, clarito) */
+  --bg:#12101a;
+  --panel:#1b1826;
+  --card:#201d2d;
 
-  --bg-rgb:20,42,36;
-  --panel-rgb:27,53,48;
-  --panel-deep-rgb:23,47,42;
-  --card-rgb:35,65,58;
+  --bg-rgb:18,16,26;
+  --panel-rgb:27,24,38;
+  --panel-deep-rgb:20,18,30;
+  --card-rgb:32,29,45;
 
-  --accent:#86c3b6;
-  --accent-rgb:134,195,182;
+  --text:#f3f1f7;
+  --muted:#b9b4c7;
 
-  --danger:#ff6b85;
+  --border:rgba(255,255,255,.08);
+  --border2:rgba(255,255,255,.14);
+  --shadow:rgba(0,0,0,.45);
 
-  --ok:#86c3b6;
-  --ok-rgb:134,195,182;
+  --accent:#c6b6ea;
+  --accent-rgb:198,182,234;
+
+  --danger:#ff6fb0;
+
+  --ok:#a7d7ce;
+  --ok-rgb:167,215,206;
 }
 
 .projectSwitch{
