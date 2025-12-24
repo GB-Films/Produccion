@@ -1,17 +1,17 @@
 <!doctype html>
-<html lang="es-AR"><head>
-  <meta charset="utf-8"/>
-  <meta content="width=device-width,initial-scale=1,viewport-fit=cover" name="viewport"/>
+<html lang="es-AR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>GB Production Board</title>
-  <link href="css/styles.css?v=20251224-4" rel="stylesheet"/>
+  <link rel="stylesheet" href="css/styles.css?v=20251224044408" />
 </head>
 <body>
   <div class="shell">
     <aside class="sidebar">
       <div class="brand">
-        <input class="titleInput" id="projectTitle" placeholder="Proyecto"/>
-        <select class="input projectSwitch" id="projectSwitch" title="Proyecto"></select>
-        
+        <input id="projectTitle" class="titleInput" placeholder="Proyecto" />
+        <select id="projectSwitch" class="input projectSwitch" title="Proyecto"></select>
       </div>
 
       <nav class="nav">
@@ -24,32 +24,30 @@
         <button class="navBtn" data-view="reports">Reportes</button>
         <button class="navBtn" data-view="callsheet">Call Sheets</button>
       </nav>
-
-      
     </aside>
 
     <main class="main">
-      <div class="toast" id="toast" style="display:none;"></div>
-      <div class="hoverTip" id="hoverTip" style="display:none;"></div>
+      <div id="toast" class="toast" style="display:none;"></div>
+      <div id="hoverTip" class="hoverTip" style="display:none;"></div>
 
       <!-- ================= BREAKDOWN ================= -->
-      <section class="view" id="view-breakdown">
+      <section id="view-breakdown" class="view">
         <!-- PRIMERO: Escenas + Editor -->
         <div class="grid2">
           <div class="card" id="sceneListCard">
             <div class="cardHeader">
               <h2 class="cardTitle">Escenas</h2>
               <div class="row gap">
-                <button class="btn" id="btnAddScene">+ Escena</button>
-                <button class="btn" id="btnDuplicateScene">Duplicar</button>
-                <button class="btn danger" id="btnDeleteScene">Borrar</button>
+                <button id="btnAddScene" class="btn">+ Escena</button>
+                <button id="btnDuplicateScene" class="btn">Duplicar</button>
+                <button id="btnDeleteScene" class="btn danger">Borrar</button>
               </div>
             </div>
 
             <div class="cardContent">
               <div class="row gap">
-                <input class="input grow" id="sceneSearch" placeholder="Buscar escena…"/>
-                <select class="input compact" id="sceneFilterTOD">
+                <input id="sceneSearch" class="input grow" placeholder="Buscar escena…" />
+                <select id="sceneFilterTOD" class="input compact">
                   <option value="">TOD</option>
                   <option value="Día">Día</option>
                   <option value="Noche">Noche</option>
@@ -59,7 +57,7 @@
               </div>
 
               <div class="tableWrap">
-                <table class="table" id="sceneTable">
+                <table id="sceneTable" class="table">
                   <thead>
                     <tr>
                       <th style="width:72px;">#</th>
@@ -78,53 +76,53 @@
           <div class="card" id="sceneEditorCard">
             <div class="cardHeader">
               <h2 class="cardTitle">Editor</h2>
-              <div class="muted small" id="selectedSceneHint">Seleccioná una escena</div>
+              <div id="selectedSceneHint" class="muted small">Seleccioná una escena</div>
             </div>
 
             <div class="cardContent">
               <div class="gridEditor">
                 <div class="field">
                   <label>Nro</label>
-                  <input class="input" id="scene_number"/>
+                  <input id="scene_number" class="input" />
                 </div>
                 <div class="field">
                   <label>Slugline</label>
-                  <input class="input" id="scene_slugline"/>
+                  <input id="scene_slugline" class="input" />
                 </div>
                 <div class="field">
                   <label>Locación</label>
-                  <input class="input" id="scene_location"/>
+                  <input id="scene_location" class="input" />
                 </div>
                 <div class="field">
                   <label>Momento del día</label>
-                  <input class="input" id="scene_timeOfDay" placeholder="Día / Noche"/>
+                  <input id="scene_timeOfDay" class="input" placeholder="Día / Noche" />
                 </div>
                 <div class="field">
                   <label>Páginas</label>
-                  <input class="input" id="scene_pages" min="0" step="0.25" type="number"/>
+                  <input id="scene_pages" class="input" type="number" min="0" step="0.25" />
                 </div>
               </div>
 
               <div class="field">
                 <label>Resumen</label>
-                <textarea class="textarea smallArea" id="scene_summary"></textarea>
+                <textarea id="scene_summary" class="textarea smallArea"></textarea>
               </div>
               <div class="field">
                 <label>Notas</label>
-                <textarea class="textarea smallArea" id="scene_notes"></textarea>
+                <textarea id="scene_notes" class="textarea smallArea"></textarea>
               </div>
 
               <div class="row gap alignEnd">
                 <div class="field">
                   <label>Categoría</label>
-                  <select class="input" id="elCategory"></select>
+                  <select id="elCategory" class="input"></select>
                 </div>
                 <div class="field grow">
                   <label>Elemento</label>
-                  <input class="input" id="elItem" list="elSuggestDatalist" placeholder="Ej: Pistola, Sombrero…"/>
+                  <input id="elItem" class="input" list="elSuggestDatalist" placeholder="Ej: Pistola, Sombrero…" />
                   <datalist id="elSuggestDatalist"></datalist>
                 </div>
-                <button class="btn primary" id="btnAddSceneElement">Agregar</button>
+                <button id="btnAddSceneElement" class="btn primary">Agregar</button>
               </div>
 
               <div class="spacer"></div>
@@ -132,10 +130,10 @@
               <div class="spacer"></div>
               <div class="row gap alignEnd">
                 <div class="colTitle" style="margin:0;">Planos</div>
-                <button class="btn" id="btnAddShot">+ Plano</button>
+                <button id="btnAddShot" class="btn">+ Plano</button>
               </div>
               <div class="tableWrap shotsWrap">
-                <table class="table" id="shotsTable">
+                <table id="shotsTable" class="table">
                   <thead>
                     <tr>
                       <th style="width:56px;">#</th>
@@ -162,7 +160,7 @@
               </div>
               <div class="cardContent">
                 <div class="row gap">
-                  <select class="input" id="scriptVerSelect" style="max-width:240px"></select>
+                  <select id="scriptVerSelect" class="input" style="max-width:240px"></select>
                   <button class="btn" id="btnNewScriptVersion">Nueva versión</button>
                   <button class="btn ghost" id="btnToggleScriptImport">Pegar / Procesar</button>
                   <span class="pill" id="scriptVerMeta">—</span>
@@ -183,17 +181,17 @@
                     <div class="row gap">
                       <div class="grow">
                         <label class="small">Slugline</label>
-                        <input class="input" id="scriptSceneSlugline" placeholder="INT. CASA - DÍA"/>
+                        <input class="input" id="scriptSceneSlugline" placeholder="INT. CASA - DÍA" />
                       </div>
                       <div style="max-width:120px">
                         <label class="small">Nº</label>
-                        <input class="input" id="scriptSceneNumber" placeholder="6A"/>
+                        <input class="input" id="scriptSceneNumber" placeholder="6A" />
                       </div>
                     </div>
                     <div class="row gap">
                       <div class="grow">
                         <label class="small">Lugar</label>
-                        <input class="input" id="scriptSceneLocation" placeholder="LIVING"/>
+                        <input class="input" id="scriptSceneLocation" placeholder="LIVING" />
                       </div>
                       <div style="max-width:140px">
                         <label class="small">Momento</label>
@@ -203,19 +201,19 @@
                       </div>
                     </div>
                     <label class="small">Texto de escena</label>
-                    <textarea class="input" id="scriptSceneBody" placeholder="Escribí o pegá acá el texto de la escena…" rows="16"></textarea>
+                    <textarea class="input" id="scriptSceneBody" rows="16" placeholder="Escribí o pegá acá el texto de la escena…"></textarea>
 
                     <div class="row gap" style="justify-content:flex-end">
                       <button class="btn" id="btnScriptSaveScene">Guardar cambios</button>
                     </div>
 
-                    <div class="scriptImportPanel hidden" id="scriptImportPanel">
+                    <div id="scriptImportPanel" class="scriptImportPanel hidden">
                       <div class="muted small">Pegá el guion completo acá y lo proceso a escenas (reemplaza la versión actual).</div>
-                      <textarea class="input" id="scriptImportText" placeholder="INT./EXT. por línea, como guion tradicional…" rows="8"></textarea>
+                      <textarea id="scriptImportText" class="input" rows="8" placeholder="INT./EXT. por línea, como guion tradicional…"></textarea>
                       <div class="row gap" style="align-items:flex-end">
                         <div class="grow">
                           <label class="small">Palabras clave (opcional)</label>
-                          <input class="input" id="scriptKeywords" placeholder="Ej: lluvia, persecución, dron…"/>
+                          <input id="scriptKeywords" class="input" placeholder="Ej: lluvia, persecución, dron…" />
                         </div>
                         <button class="btn" id="btnParseScript">Procesar</button>
                         <button class="btn ghost" id="btnCancelScriptImport">Ocultar</button>
@@ -240,31 +238,31 @@
       </section>
 
       <!-- ================= PLAN DE RODAJE ================= -->
-      <section class="view hidden" id="view-shooting">
-        <div class="shootingLayout" id="shootingLayout">
+      <section id="view-shooting" class="view hidden">
+        <div id="shootingLayout" class="shootingLayout">
           <!-- Banco -->
-          <div class="col" id="bankCol">
+          <div id="bankCol" class="col">
             <div class="card bankCard">
               <div class="cardHeader bankHeader" id="sceneBankHeader">
                 <h2 class="cardTitle">Banco de Escenas</h2>
-                <button class="btn icon" id="btnToggleBank" title="Colapsar/expandir">⟨</button>
+                <button id="btnToggleBank" class="btn icon" title="Colapsar/expandir">⟨</button>
               </div>
 
               <div class="cardContent" id="sceneBankBody">
                 <div class="row gap">
-                  <input class="input grow" id="bankSearch" placeholder="Buscar…"/>
-                  <select class="input compact" id="bankFilter">
+                  <input id="bankSearch" class="input grow" placeholder="Buscar…" />
+                  <select id="bankFilter" class="input compact">
                     <option value="all">Todas</option>
                     <option value="unassigned">No asignadas</option>
                   </select>
                 </div>
-                <div class="bankList" id="sceneBankList"></div>
+                <div id="sceneBankList" class="bankList"></div>
               </div>
             </div>
 
             <!-- Dock visible cuando está colapsado -->
-            <div class="bankDock hidden" id="bankDock">
-              <button class="btn icon" id="btnToggleBankDock" title="Expandir">⟩</button>
+            <div id="bankDock" class="bankDock hidden">
+              <button id="btnToggleBankDock" class="btn icon" title="Expandir">⟩</button>
             </div>
           </div>
 
@@ -274,20 +272,20 @@
               <div class="cardHeader">
                 <h2 class="cardTitle">Tablero de Días</h2>
                 <div class="row gap">
-                  <button class="btn" id="btnAddShootDay">+ Día</button>
-                  <button class="btn danger" id="btnDeleteShootDay">Borrar Día</button>
+                  <button id="btnAddShootDay" class="btn">+ Día</button>
+                  <button id="btnDeleteShootDay" class="btn danger">Borrar Día</button>
                 </div>
               </div>
               <div class="cardContent">
-                <div class="daysBoardWrap" id="daysBoardWrap">
-                  <div class="daysBoard" id="daysBoard"></div>
+                <div id="daysBoardWrap" class="daysBoardWrap">
+                  <div id="daysBoard" class="daysBoard"></div>
               </div>
             </div>
 
             <div class="card" id="dayDetailCard">
               <div class="cardHeader">
                 <h2 class="cardTitle" id="dayDetailTitle">Detalle del Día</h2>
-                <button class="btn" id="btnOpenCallSheet">Ver Call Sheet</button>
+                <button id="btnOpenCallSheet" class="btn">Ver Call Sheet</button>
               </div>
 
               <div class="cardContent">
@@ -296,31 +294,31 @@
   <div class="col">
     <div class="field">
       <label>Fecha</label>
-      <input class="input" id="day_date" type="date"/>
+      <input id="day_date" class="input" type="date" />
     </div>
 
     <div class="field">
       <label>Call Time</label>
       <div class="row gap">
-        <button class="btn icon" id="day_call_minus" title="-15">−</button>
-        <input class="input grow" id="day_call" placeholder="08:00"/>
-        <button class="btn icon" id="day_call_plus" title="+15">+</button>
+        <button id="day_call_minus" class="btn icon" title="-15">−</button>
+        <input id="day_call" class="input grow" placeholder="08:00" />
+        <button id="day_call_plus" class="btn icon" title="+15">+</button>
       </div>
     </div>
 
     <div class="field">
       <label>Locación</label>
-      <input class="input" id="day_location"/>
+      <input id="day_location" class="input" />
     </div>
 
     <div class="field">
       <label>Nombre</label>
-      <input class="input" id="day_label"/>
+      <input id="day_label" class="input" />
     </div>
 
     <div class="field">
       <label>Notas</label>
-      <textarea class="textarea smallArea" id="day_notes"></textarea>
+      <textarea id="day_notes" class="textarea smallArea"></textarea>
     </div>
   </div>
 
@@ -351,25 +349,25 @@
       </section>
 
       <!-- ================= CRONOGRAMA ================= -->
-      <section class="view hidden" id="view-schedule">
+      <section id="view-schedule" class="view hidden">
         <div class="card" id="scheduleCard">
           <div class="cardHeader">
             <h2 class="cardTitle">Cronograma</h2>
             <div class="row gap">
-              <input class="input" id="schedSearch" placeholder="Buscar…" style="max-width:260px"/>
+              <input id="schedSearch" class="input" style="max-width:260px" placeholder="Buscar…" />
               <label class="row gap small muted">Zoom
-                <select class="input compact" id="schedZoom">
+                <select id="schedZoom" class="input compact">
                   <option value="60">Bajo</option>
-                  <option selected="" value="90">Medio</option>
+                  <option value="90" selected>Medio</option>
                   <option value="120">Grande</option>
                   <option value="160">Gigante</option>
                 </select>
               </label>
               <label class="row gap small muted">Snap
-                <select class="input compact" id="schedSnap">
+                <select id="schedSnap" class="input compact">
                   <option value="5">5 min</option>
                   <option value="10">10 min</option>
-                  <option selected="" value="15">15 min</option>
+                  <option value="15" selected>15 min</option>
                   <option value="30">30 min</option>
                 </select>
               </label>
@@ -377,29 +375,29 @@
           </div>
           <div class="cardContent scheduleContent">
             <!-- Scroll horizontal superior (siempre accesible) -->
-            <div class="schedScrollTop" id="schedScrollTop">
-              <div class="schedScrollTopInner" id="schedScrollTopInner"></div>
+            <div id="schedScrollTop" class="schedScrollTop">
+              <div id="schedScrollTopInner" class="schedScrollTopInner"></div>
             </div>
 
-            <div class="schedWrap" id="schedWrap">
-              <div class="schedBoard" id="schedBoard"></div>
+            <div id="schedWrap" class="schedWrap">
+              <div id="schedBoard" class="schedBoard"></div>
             </div>
           </div>
         </div>
       </section>
 
       <!-- ================= SHOTLIST ================= -->
-      <section class="view hidden" id="view-shotlist">
+      <section id="view-shotlist" class="view hidden">
         <div class="card" id="shotlistCard">
           <div class="cardHeader">
             <h2 class="cardTitle">Shotlist</h2>
             <div class="row gap noPrint">
-              <select class="input compact" id="shotDaySelect"></select>
-              <button class="btn" id="btnShotPrint">Imprimir</button>
+              <select id="shotDaySelect" class="input compact"></select>
+              <button id="btnShotPrint" class="btn">Imprimir</button>
             </div>
           </div>
           <div class="cardContent">
-            <div class="muted small" id="shotlistSummary">—</div>
+            <div id="shotlistSummary" class="muted small">—</div>
             <div class="spacer"></div>
             <div id="shotlistWrap"></div>
           </div>
@@ -407,7 +405,7 @@
       </section>
 
       <!-- ================= ELEMENTOS ================= -->
-      <section class="view hidden" id="view-elements">
+      <section id="view-elements" class="view hidden">
         <div class="grid2">
           <div class="card">
             <div class="cardHeader">
@@ -415,9 +413,9 @@
             </div>
             <div class="cardContent">
               <div class="row gap">
-                <select class="input compact" id="elxCategory"></select>
-                <select class="input compact" id="elxDay"></select>
-                <input class="input grow" id="elxSearch" placeholder="Buscar elemento…"/>
+                <select id="elxCategory" class="input compact"></select>
+                <select id="elxDay" class="input compact"></select>
+                <input id="elxSearch" class="input grow" placeholder="Buscar elemento…" />
               </div>
               <div class="spacer"></div>
               <div id="elxList"></div>
@@ -431,21 +429,21 @@
               <div id="elxDetail"></div>
             </div>
         </div>
-      </div></section>
+      </section>
 
       <!-- ================= CREW ================= -->
-      <section class="view hidden" id="view-crew">
+      <section id="view-crew" class="view hidden">
         <div class="card" id="crewCard">
           <div class="cardHeader">
             <h2 class="cardTitle">Equipo técnico <span class="keepcase">(incluye Cast como área)</span></h2>
             <div class="row gap">
-              <input class="input grow" id="crewSearch" placeholder="Buscar por área / rol / nombre…"/>
-              <button class="btn" id="btnAddCrew">+ Integrante</button>
+              <input id="crewSearch" class="input grow" placeholder="Buscar por área / rol / nombre…" />
+              <button id="btnAddCrew" class="btn">+ Integrante</button>
             </div>
           </div>
           <div class="cardContent">
             <div class="tableWrap">
-              <table class="table" id="crewTable">
+              <table id="crewTable" class="table">
                 <thead>
                   <tr>
                     <th style="width:190px;">Área</th>
@@ -461,34 +459,34 @@
               </table>
             </div>
         </div>
-      </div></section>
+      </section>
 
       <!-- ================= REPORTES ================= -->
-      <section class="view hidden" id="view-reports">
+      <section id="view-reports" class="view hidden">
         <div class="card">
           <div class="cardHeader">
             <h2 class="cardTitle">Reportes por día</h2>
           </div>
           <div class="cardContent">
             <div class="row gap" style="margin-bottom:10px">
-              <input class="input grow" id="reportsSearch" placeholder="Buscar…"/>
+              <input id="reportsSearch" class="input grow" placeholder="Buscar…" />
             </div>
-            <div class="chips" id="reportsFilters" style="margin-bottom:10px"></div>
-            <div class="reportsBoard" id="reportsBoard"></div>
+            <div id="reportsFilters" class="chips" style="margin-bottom:10px"></div>
+            <div id="reportsBoard" class="reportsBoard"></div>
           </div>
         </div>
       </section>
 
       <!-- ================= CALL SHEETS ================= -->
-      <section class="view hidden" id="view-callsheet">
+      <section id="view-callsheet" class="view hidden">
         <div class="grid2">
           <div class="card noPrint" id="callCalCard">
             <div class="cardHeader">
               <h2 class="cardTitle">Calendario</h2>
               <div class="row gap">
-                <button class="btn icon" id="calPrev" title="Mes anterior">‹</button>
-                <div class="muted" id="calTitle"></div>
-                <button class="btn icon" id="calNext" title="Mes siguiente">›</button>
+                <button id="calPrev" class="btn icon" title="Mes anterior">‹</button>
+                <div id="calTitle" class="muted"></div>
+                <button id="calNext" class="btn icon" title="Mes siguiente">›</button>
               </div>
             </div>
             <div class="cardContent">
@@ -499,23 +497,18 @@
           <div class="card" id="callDetailCard">
             <div class="cardHeader">
               <h2 class="cardTitle">Call Sheet</h2>
-              <button class="btn primary" id="btnPrintCallSheet">Imprimir</button>
+              <button id="btnPrintCallSheet" class="btn primary">Imprimir</button>
             </div>
             <div class="cardContent">
               <div id="callSheetDetail"></div>
             </div>
         </div>
-      </div></section>
-
-      <!-- ================= SETTINGS ================= -->
-      
-
+      </section>
     </main>
   </div>
 
-  <script src="js/utils.js?v=20251224-4"></script>
-  <script src="js/storage.js?v=20251224-4"></script>
-  <script src="js/app.js?v=20251224-4"></script>
-
-
-</body></html>
+  <script src="js/utils.js?v=20251224044408"></script>
+  <script src="js/storage.js?v=20251224044408"></script>
+  <script src="js/app.js?v=20251224044408"></script>
+</body>
+</html>

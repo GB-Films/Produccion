@@ -690,163 +690,7 @@ function enforceScriptVersionsLimit(notify=false){
   }
 
   // ======= NUEVO: Scroll horizontal superior del cronograma =======
-  function isMobileUI(){
-    // Mobile = viewport chico. Evitamos falsos positivos en desktop táctil.
-    try{
-      return window.matchMedia("(max-width: 820px)").matches;
-    }catch{
-      return window.innerWidth <= 820;
-    }
-  }
-
-
-  // ======= Mobile chrome (topbar + dock + drawer) =======
-  function ensureMobileChrome(){
-    const sidebar = document.querySelector(".sidebar");
-    if(!sidebar) return;
-
-    // Backdrop
-    let back = el("mBackdrop");
-    if(!back){
-      back = document.createElement("div");
-      back.id = "mBackdrop";
-      back.className = "mBackdrop hidden";
-      document.body.appendChild(back);
-    }
-
-    // Topbar
-    let top = el("mTopbar");
-    if(!top){
-      top = document.createElement("div");
-      top.id = "mTopbar";
-      top.className = "mTopbar";
-      top.innerHTML = `
-        <button id="mMenuBtn" class="mIconBtn" title="Menú">☰</button>
-        <div class="mTopMid">
-          <div id="mProjectTitle" class="mProjTitle">Proyecto</div>
-        </div>
-        <select id="mProjectSwitch" class="mProjectSwitch" title="Proyecto"></select>
-      `;
-      document.body.appendChild(top);
-    }
-
-    // Dock
-    let dock = el("mDock");
-    if(!dock){
-      dock = document.createElement("div");
-      dock.id = "mDock";
-      dock.className = "mDock";
-      dock.innerHTML = `
-        <button class="mDockBtn" data-view="breakdown">BD</button>
-        <button class="mDockBtn" data-view="shooting">Rod</button>
-        <button class="mDockBtn" data-view="schedule">Cron</button>
-        <button class="mDockBtn" data-view="callsheet">Call</button>
-        <button class="mDockBtn" id="mMoreBtn" data-view="more">Más</button>
-      `;
-      document.body.appendChild(dock);
-    }
-
-    const menuBtn = el("mMenuBtn");
-    const moreBtn = el("mMoreBtn");
-    function openDrawer(){
-      sidebar.classList.add("mOpen");
-      back.classList.remove("hidden");
-      document.body.classList.add("mNoScroll");
-    }
-    function closeDrawer(){
-      sidebar.classList.remove("mOpen");
-      back.classList.add("hidden");
-      document.body.classList.remove("mNoScroll");
-    }
-    function toggleDrawer(){
-      if(sidebar.classList.contains("mOpen")) closeDrawer();
-      else openDrawer();
-    }
-
-    if(menuBtn && menuBtn.dataset.bound !== "1"){
-      menuBtn.dataset.bound = "1";
-      menuBtn.addEventListener("click", ()=>{ if(isMobileUI()) toggleDrawer(); });
-    }
-    if(moreBtn && moreBtn.dataset.bound !== "1"){
-      moreBtn.dataset.bound = "1";
-      moreBtn.addEventListener("click", ()=>{ if(isMobileUI()) toggleDrawer(); });
-    }
-    if(back && back.dataset.bound !== "1"){
-      back.dataset.bound = "1";
-      back.addEventListener("click", closeDrawer);
-    }
-
-    // Cerrar drawer al navegar desde el sidebar
-    sidebar.querySelectorAll(".navBtn").forEach(btn=>{
-      if(btn.dataset.mCloseBound === "1") return;
-      btn.dataset.mCloseBound = "1";
-      btn.addEventListener("click", ()=>{ if(isMobileUI()) closeDrawer(); }, true);
-    });
-
-    // Dock navegación
-    dock.querySelectorAll(".mDockBtn").forEach(btn=>{
-      if(btn.dataset.bound === "1") return;
-      btn.dataset.bound = "1";
-      btn.addEventListener("click", ()=>{
-        const v = btn.dataset.view;
-        if(v === "more") return toggleDrawer();
-        if(v) showView(v);
-        if(isMobileUI()) closeDrawer();
-      });
-    });
-
-    // Sync de proyectos (duplicamos el select, sin tocar la lógica)
-    const baseProj = el("projectSwitch");
-    const mProj = el("mProjectSwitch");
-    function syncProjectSwitch(){
-      if(!baseProj || !mProj) return;
-      mProj.innerHTML = baseProj.innerHTML;
-      mProj.value = baseProj.value;
-    }
-    syncProjectSwitch();
-
-    if(baseProj && baseProj.dataset.mObs !== "1"){
-      baseProj.dataset.mObs = "1";
-      baseProj.addEventListener("change", syncProjectSwitch);
-    }
-    if(mProj && mProj.dataset.bound !== "1"){
-      mProj.dataset.bound = "1";
-      mProj.addEventListener("change", ()=>{
-        if(!baseProj) return;
-        baseProj.value = mProj.value;
-        baseProj.dispatchEvent(new Event("change", { bubbles:true }));
-      });
-    }
-
-    // Mirror title (mobile topbar)
-    const titleInput = el("projectTitle");
-    const titleM = el("mProjectTitle");
-
-    function syncTitle(){
-      if(titleInput && titleM) titleM.textContent = (titleInput.value || titleInput.placeholder || "Proyecto");
-    }
-    syncTitle();
-
-    if(titleInput && titleInput.dataset.mBoundTitle !== "1"){
-      titleInput.dataset.mBoundTitle = "1";
-      titleInput.addEventListener("input", syncTitle);
-      titleInput.addEventListener("change", syncTitle);
-    }
-
-if(!window.__mResizeBound){
-      window.__mResizeBound = true;
-      window.addEventListener("resize", window.U.debounce(()=>{
-        if(!isMobileUI()) closeDrawer();
-        syncProjectSwitch();
-        syncTitle();
-      }, 120));
-    }
-
-    window.MobileChrome = { openDrawer, closeDrawer, syncTitle, syncProjectSwitch };
-  }
-
   function setupScheduleTopScrollbar(){
-    if(!isMobileUI()) return;
     const top = el("schedScrollTop");
     const inner = el("schedScrollTopInner");
     const board = el("schedBoard");
@@ -885,7 +729,6 @@ if(!window.__mResizeBound){
 
 // ======= NUEVO: Scroll vertical con ruedita en cualquier lado (Cronograma) =======
 function setupScheduleWheelScroll(){
-  if(!isMobileUI()) return;
   const view = el("view-schedule");
   const wrap = el("schedWrap");
   if(!view || !wrap) return;
@@ -914,11 +757,12 @@ function setupScheduleWheelScroll(){
 }
 
   function showView(name){
+    if(!views.includes(name)) name = "breakdown";
     views.forEach(v=>{
       const node = el(`view-${v}`);
       if(node) node.classList.toggle("hidden", v!==name);
     });
-    document.querySelectorAll(".navBtn, .mDockBtn").forEach(b=>{
+    document.querySelectorAll(".navBtn").forEach(b=>{
       b.classList.toggle("active", b.dataset.view===name);
     });
 
@@ -3244,7 +3088,7 @@ function setupScheduleWheelScroll(){
 
   // Bind events (igual que antes, pero llamamos setupScheduleTopScrollbar después de render schedule)
   function bindEvents(){
-    document.querySelectorAll(".navBtn, .mDockBtn").forEach(b=>{
+    document.querySelectorAll(".navBtn").forEach(b=>{
       b.addEventListener("click", ()=>{
         const v = b.dataset.view;
         if(v) showView(v);
@@ -3728,9 +3572,9 @@ el("scriptVerSelect")?.addEventListener("change", ()=>{
     refreshElementSuggestions();
 
     el("projectTitle").value = state.meta.title || "Proyecto";
-    const _savedAt = el("savedAtText");
-    if(_savedAt) _savedAt.textContent = new Date(state.meta.updatedAt).toLocaleString("es-AR");
-if(!state.scenes.length){
+    { const _s = el("savedAtText"); if(_s) _s.textContent = new Date(state.meta.updatedAt).toLocaleString("es-AR"); }
+
+    if(!state.scenes.length){
       state.scenes.push({
         id: uid("scene"),
         number:"1",
@@ -3835,7 +3679,6 @@ if(!state.scenes.length){
     selectedShotlistDayId = selectedDayId;
 
     bindEvents();
-    ensureMobileChrome();
     setupScheduleWheelScroll();
     hydrateAll();
     showView("breakdown");

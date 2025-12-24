@@ -77,23 +77,6 @@ body{
   color:var(--text);
 }
 
-
-/* ===================== Desktop typography bump ===================== */
-@media (min-width: 821px){
-  body{ font-size:15px; }
-  .titleInput{ font-size:20px; }
-  .sidebar .navBtn{
-    font-size:13.5px;
-    text-transform:uppercase;
-    letter-spacing:.85px;
-    font-weight:850;
-  }
-  .cardTitle{ font-size:17px; }
-  label{ font-size:13px; }
-  .table th, .table td{ font-size:14px; }
-  .small{ font-size:13px; }
-}
-
 .shell{
   height:100%;
   display:grid;
@@ -507,9 +490,19 @@ tr.groupRow td{
   .dayDetail4col{ grid-template-columns: 1fr; }
 }
 
-#dayDetailCard .colTitle{ margin-bottom:4px; }
-
 .colTitle{ font-weight:900; opacity:.92; margin-bottom:8px; }
+
+
+/* ======= Detalle del día: menos aire entre título y contenido ======= */
+#dayDetailCard .colTitle{ margin-bottom:3px; }
+#dayDetailCard .catBlock{ margin-top:4px; }
+#dayDetailCard .crewAreaHeader{
+  margin-top:6px;
+  margin-bottom:6px;
+  padding:6px 8px;
+  border-radius:14px;
+}
+
 
 .crewAreaHeader{
   margin-top:12px;
@@ -1304,254 +1297,19 @@ tr.groupRow td{
 
 
 
-/* ===================== Mobile chrome + densidad (solo celular) ===================== */
-/* Por defecto (desktop): oculto */
-.mTopbar, .mDock, .mBackdrop{ display:none; }
-
-@media (max-width: 820px){
-
-  /* Layout: sidebar como drawer */
-  .shell{ grid-template-columns: 1fr; }
-  .main{ padding: 68px 10px 74px; }
-
-  body.mNoScroll{ overflow:hidden; }
-
-  .sidebar{
-    position: fixed;
-    top:0;
-    bottom:0;
-    left:0;
-    width: min(86vw, 360px);
-    z-index: 60;
-    transform: translateX(-105%);
-    transition: transform .22s ease;
-    overflow:auto;
-    overscroll-behavior: contain;
-  }
-  .sidebar.mOpen{ transform: translateX(0); }
-
-  .mBackdrop{
-    display:block;
-    position: fixed;
-    inset:0;
-    z-index: 50;
-    background: rgba(0,0,0,.55);
-  }
-
-  /* Topbar */
-  .mTopbar{
-    display:flex;
-    position: fixed;
-    top:0;
-    left:0;
-    right:0;
-    height:58px;
-    z-index: 70;
-    gap:10px;
-    padding:10px 10px 8px;
-    background: rgba(var(--panel-rgb),.95);
-    border-bottom:1px solid var(--border);
-    backdrop-filter: blur(10px);
-  }
-  .mTopMid{ flex:1 1 auto; min-width:0; display:flex; flex-direction:column; gap:2px; justify-content:center; }
-  .mProjTitle{
-    font-weight: 950;
-    letter-spacing: .4px;
-    font-size: 13px;
-    text-transform: uppercase;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-  .mBadges{
-    display:flex;
-    gap:6px;
-    flex-wrap:nowrap;
-    overflow:hidden;
-  }
-  .mBadges .pill{
-    padding:5px 8px;
-    font-size:11px;
-    border-radius: 999px;
-  }
-
-  .mProjectSwitch{
-    max-width: 42vw;
-    padding:7px 10px;
-    border-radius:12px;
-    border:1px solid var(--border);
-    background: rgba(0,0,0,.18);
-    color: var(--text);
-    outline:none;
-    font-size:12px;
-  }
-
-  .mIconBtn{
-    width:38px;
-    height:38px;
-    border-radius:14px;
-    border:1px solid var(--border);
-    background: rgba(255,255,255,.03);
-    color: var(--text);
-    font-size:18px;
-    display:flex;
-    align-items:center;
-    justify-content:center;
-    cursor:pointer;
-  }
-
-  /* Dock */
-  .mDock{
-    display:flex;
-    position: fixed;
-    left:0;
-    right:0;
-    bottom:0;
-    height:62px;
-    z-index: 70;
-    gap:8px;
-    padding:10px 10px 10px;
-    background: rgba(var(--panel-rgb),.95);
-    border-top:1px solid var(--border);
-    backdrop-filter: blur(10px);
-  }
-  .mDockBtn{
-    flex:1 1 0;
-    border:1px solid var(--border);
-    background: rgba(255,255,255,.03);
-    color: var(--text);
-    border-radius:16px;
-    font-weight:900;
-    letter-spacing:.2px;
-    font-size:12px;
-    padding:10px 0;
-  }
-  .mDockBtn.active{
-    border-color: rgba(var(--accent-rgb),.55);
-    background: rgba(var(--accent-rgb),.14);
-    box-shadow: 0 0 0 2px rgba(var(--accent-rgb),.10) inset;
-  }
-
-  /* ===== Densidad general (solo mobile) ===== */
-  .cardHeader{ padding:8px 10px; gap:8px; }
-  .cardContent{ padding:8px 10px; }
-  .cardTitle{ font-size:14px; }
-  .gap{ gap:6px; }
-  .spacer{ height:8px; }
-  .field{ margin-bottom:8px; }
-  .colTitle{ margin-bottom:6px; }
-
-  .input, .textarea, select{
-    padding:8px 10px;
-    border-radius:12px;
-    font-size:13px;
-  }
-  .btn{
-    padding:8px 10px;
-    border-radius:12px;
-  }
-  .btn.icon{
-    width:32px;
-    height:32px;
-    border-radius:10px;
-  }
-
-  /* ===== Tablero de Días (más compacto) ===== */
-  .dayCol{ width:250px; border-radius:16px; }
-  .dayHeader{ padding:7px 8px; }
-  .dayHeader .m{ margin-top:3px; font-size:11px; }
-  .dropZone{ padding:6px; gap:6px; min-height:120px; }
-  .sceneCard{ padding:6px 7px; border-radius:14px; gap:8px; }
-  .bankList .sceneCard .title,
-  .dropZone .sceneCard .title{
-    font-size: 12.5px;
-    line-height: 1.15;
-  }
-  .bankList .sceneCard .meta{ font-size:11px; margin-top:2px; }
-
-  .sceneCard .sceneRemoveBtn{
-    width:22px;
-    height:22px;
-    border-radius:8px;
-    padding:0;
-    display:flex;
-    align-items:center;
-    justify-content:center;
-    font-size:14px;
-    line-height:1;
-  }
-
-  /* Detalle del día: picker crew menos esponjoso */
-  #dayCrewPicker .crewPickItem{
-    padding:6px 7px;
-    border-radius:12px;
-    margin-bottom:6px;
-  }
-
-  /* ===== Cronograma (compacto) ===== */
-  #scheduleCard .cardHeader{ flex-wrap:wrap; align-items:flex-start; }
-  #scheduleCard .cardHeader .row.gap{ flex-wrap:wrap; gap:4px; }
-  #scheduleCard .cardHeader label.row.gap{ gap:4px; }
-  #schedSearch{ max-width:170px !important; }
-  .input.compact{ width:112px; flex:0 0 112px; }
-
-  .schedDay{ width:280px; border-radius:16px; }
-  .schedHead{ padding:7px 8px; }
-  .schedHead .m{ font-size:11px; margin-top:3px; }
-  .schedBlock{ padding:8px; border-radius:14px; }
-  .schedBlock .meta{ font-size:11px; margin-top:4px; }
-  .hourLabel{ font-size:10px; }
-
-  /* ===== Call Sheets: calendario en una sola fila (scroll horizontal) ===== */
-  #callCalCard .cardContent{ overflow-x:auto; }
-  .calGrid{
-    display:flex;
-    flex-wrap:nowrap;
-    overflow-x:auto;
-    gap:8px;
-    padding-bottom:4px;
-    -webkit-overflow-scrolling:touch;
-  }
-  .calCell{
-    min-width:44px;
-    min-height:44px;
-    padding:8px;
-  }
-  .calCell[style*="opacity:0"]{ display:none; }
-  .calCell .tag{ display:none; }
-
-  /* ===== Reportes: filtros en una sola línea (scroll horizontal) ===== */
-  #reportsFilters.chips{
-    flex-wrap:nowrap;
-    overflow-x:auto;
-    -webkit-overflow-scrolling:touch;
-    padding-bottom:4px;
-  }
-  #reportsFilters .chip{ flex:0 0 auto; }
+/* ======= Desktop: tipografía un poco más grande en toda la app ======= */
+@media (min-width: 861px){
+  body{ font-size:17px; }
+  .titleInput{ font-size:20px; }
+  .projectSwitch{ font-size:13px; }
+  label{ font-size:13px; }
+  .small{ font-size:13px; }
+  .pill{ font-size:13px; }
+  .cardTitle{ font-size:18px; }
+  .navBtn{ font-size:15px; text-transform:uppercase; letter-spacing:.8px; }
+  .table th, .table td{ font-size:14px; }
+  .dayHeader .m{ font-size:13px; }
+  .crewPickItem .meta{ font-size:13px; }
+  .calCell .tag{ font-size:13px; }
 }
 
-/* ================== Mobile/desktop tweak v4 ================== */
-/* Banco de Escenas: botón de colapsar/expandir más chico (especialmente en celular) */
-.bankDock{ height:56px; border-radius:14px; }
-.shootingLayout.bankCollapsed{ grid-template-columns: 48px 1fr; }
-
-#btnToggleBank, #btnToggleBankDock{
-  width:30px;
-  height:30px;
-  min-width:30px;
-  padding:0;
-  font-size:16px;
-  line-height:1;
-}
-
-@media (max-width: 820px){
-  .bankDock{ height:44px; border-radius:12px; }
-  .shootingLayout.bankCollapsed{ grid-template-columns: 40px 1fr; }
-
-  #btnToggleBank, #btnToggleBankDock{
-    width:26px;
-    height:26px;
-    min-width:26px;
-    font-size:14px;
-  }
-}
