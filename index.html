@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>GB Production Board</title>
-  <link rel="stylesheet" href="css/styles.css?v=20251224-3" />
+  <link rel="stylesheet" href="css/styles.css?v=20251224-10" />
 </head>
 <body>
   <div class="shell">
@@ -12,10 +12,7 @@
       <div class="brand">
         <input id="projectTitle" class="titleInput" placeholder="Proyecto" />
         <select id="projectSwitch" class="input projectSwitch" title="Proyecto"></select>
-        <div class="sub">
-          Guardado: <span id="savedAtText">—</span>
-        </div>
-      </div>
+</div>
 
       <nav class="nav">
         <button class="navBtn" data-view="breakdown">Breakdown</button>
@@ -27,14 +24,6 @@
         <button class="navBtn" data-view="reports">Reportes</button>
         <button class="navBtn" data-view="callsheet">Call Sheets</button>
       </nav>
-
-      <div class="navBottom">
-        <div class="pillRow">
-          <span class="pill" id="syncPill">Local</span>
-          <span class="pill muted" id="statusText">—</span>
-        </div>
-        <button class="navBtn bottom" data-view="settings">Sync / Ajustes</button>
-      </div>
     </aside>
 
     <main class="main">
@@ -293,6 +282,8 @@
               </div>
             </div>
 
+            </div>
+
             <div class="card" id="dayDetailCard">
               <div class="cardHeader">
                 <h2 class="cardTitle" id="dayDetailTitle">Detalle del Día</h2>
@@ -515,44 +506,11 @@
             </div>
         </div>
       </section>
-
-      <!-- ================= SETTINGS ================= -->
-      <section id="view-settings" class="view hidden">
-        <div class="grid2">
-          <div class="card">
-            <div class="cardHeader">
-              <h2 class="cardTitle">JSONBin</h2>
-            </div>
-            <div class="cardContent">
-              <div class="field">
-                <label>Bin ID</label>
-                <input id="cfg_binId" class="input" readonly />
-              </div>
-              <div class="field">
-                <label>Access Key</label>
-                <input id="cfg_accessKey" class="input" readonly />
-              </div>
-              <div class="field">
-                <label>Autosync</label>
-                <select id="cfg_autosync" class="input" disabled>
-                  <option value="on">On</option>
-                </select>
-              </div>
-              <div class="row gap">
-                <button id="btnSaveCfg" class="btn">Guardar</button>
-                <button id="btnTestCfg" class="btn">Probar conexión</button>
-                <button id="btnPullRemote" class="btn">Traer remoto</button>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-    </main>
+</main>
   </div>
 
   <script src="js/utils.js"></script>
   <script src="js/storage.js"></script>
-  <script src="js/app.js?v=20251224-3"></script>
+  <script src="js/app.js?v=20251224-10"></script>
 </body>
 </html>
