@@ -2608,6 +2608,7 @@ function setupScheduleWheelScroll(){
 
   function bindScheduleDnD(){
     const board = el("schedBoard");
+    const wrap = el("schedWrap");
     if(!board) return;
 
     board.onpointerdown = (e)=>{
@@ -2658,19 +2659,61 @@ function setupScheduleWheelScroll(){
       };
 
       // Mobile (touch): long-press para mover, así no se pelea con el scroll.
+      // Importante: cancelamos el long-press si el usuario empieza a scrollear (scroll events),
+      // porque si no, se “traba” a mitad del swipe.
       if(isMobileUI() && e.pointerType === "touch" && !isResize){
+        // Limpieza de cualquier press anterior
         try{ if(schedPress?.timer) clearTimeout(schedPress.timer); }catch{}
+        try{ if(schedPress?.off) schedPress.off(); }catch{}
+        schedPress = null;
+
+        const passive = { passive:true };
+        const startScrollLeft = board.scrollLeft;
+        const startScrollTop = wrap ? wrap.scrollTop : 0;
+
+        const cancelPress = ()=>{
+          if(!schedPress) return;
+          try{ if(schedPress.timer) clearTimeout(schedPress.timer); }catch{}
+          try{ if(schedPress.off) schedPress.off(); }catch{}
+          schedPress = null;
+        };
+
+        const onAnyScroll = ()=> cancelPress();
+
+        board.addEventListener("scroll", onAnyScroll, passive);
+        if(wrap) wrap.addEventListener("scroll", onAnyScroll, passive);
+
+        const off = ()=>{
+          board.removeEventListener("scroll", onAnyScroll, passive);
+          if(wrap) wrap.removeEventListener("scroll", onAnyScroll, passive);
+        };
+
         schedPress = {
           pointerId: e.pointerId,
           startClientX: e.clientX,
           startClientY: e.clientY,
+          startScrollLeft,
+          startScrollTop,
           active: true,
-          timer: null
+          timer: null,
+          off
         };
+
+        // Un poquito más largo para evitar falsos positivos durante un swipe lento
         schedPress.timer = setTimeout(()=>{
           if(!schedPress || !schedPress.active || schedPress.pointerId !== e.pointerId) return;
+
+          // Si hubo scroll, no iniciamos drag.
+          const scrolled =
+            board.scrollLeft !== schedPress.startScrollLeft ||
+            (wrap && wrap.scrollTop !== schedPress.startScrollTop);
+          if(scrolled){ cancelPress(); return; }
+
+          // Ya estamos seguros: drag.
+          try{ if(schedPress.off) schedPress.off(); }catch{}
           startDragNow("move");
-        }, 260);
+        }, 360);
+
         return;
       }
 
@@ -2683,8 +2726,9 @@ function setupScheduleWheelScroll(){
       if(schedPress && !schedDrag && e.pointerId === schedPress.pointerId){
         const dx = e.clientX - schedPress.startClientX;
         const dy = e.clientY - schedPress.startClientY;
-        if(Math.abs(dx) > 8 || Math.abs(dy) > 8){
+        if(Math.abs(dx) > 4 || Math.abs(dy) > 4){
           try{ clearTimeout(schedPress.timer); }catch{}
+          try{ if(schedPress.off) schedPress.off(); }catch{}
           schedPress = null;
         }
       }
@@ -2753,6 +2797,7 @@ function setupScheduleWheelScroll(){
     board.onpointerup = (e)=>{
       if(schedPress && e.pointerId === schedPress.pointerId){
         try{ clearTimeout(schedPress.timer); }catch{}
+        try{ if(schedPress.off) schedPress.off(); }catch{}
         schedPress = null;
       }
       if(!schedDrag) return;
@@ -2834,6 +2879,7 @@ function setupScheduleWheelScroll(){
     board.onpointercancel = (e)=>{
       if(schedPress && e.pointerId === schedPress.pointerId){
         try{ clearTimeout(schedPress.timer); }catch{}
+        try{ if(schedPress.off) schedPress.off(); }catch{}
         schedPress = null;
       }
       if(schedDrag && e.pointerId === schedDrag.pointerId){
