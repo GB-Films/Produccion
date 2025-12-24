@@ -33,25 +33,25 @@
 }
 
 html[data-theme="pink"]{
-  /* JYP — Violeta pastel (desaturado, clarito) */
-  --bg:#12101a;
-  --panel:#1b1826;
-  --card:#201d2d;
+  /* JYP — Violeta suave (más vivo) */
+  --bg:#131020;
+  --panel:#1d1830;
+  --card:#241d3b;
 
-  --bg-rgb:18,16,26;
-  --panel-rgb:27,24,38;
-  --panel-deep-rgb:20,18,30;
-  --card-rgb:32,29,45;
+  --bg-rgb:19,16,32;
+  --panel-rgb:29,24,48;
+  --panel-deep-rgb:23,19,40;
+  --card-rgb:36,29,59;
 
-  --text:#f3f1f7;
-  --muted:#b9b4c7;
+  --text:#f4f2fb;
+  --muted:#c1bbd3;
 
   --border:rgba(255,255,255,.08);
   --border2:rgba(255,255,255,.14);
   --shadow:rgba(0,0,0,.45);
 
-  --accent:#c6b6ea;
-  --accent-rgb:198,182,234;
+  --accent:#a98bff;
+  --accent-rgb:169,139,255;
 
   --danger:#ff6fb0;
 
