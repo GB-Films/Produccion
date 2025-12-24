@@ -480,6 +480,13 @@ tr.groupRow td{
 }
 .dayDetail3col .col{ min-width:0; }
 
+@media (max-width:1200px){
+  .dayDetail3col{ grid-template-columns: 1fr 1fr; }
+}
+@media (max-width: 980px){
+  .dayDetail3col{ grid-template-columns: 1fr; }
+}
+
 .dayDetail4col{
   display:grid;
   grid-template-columns: 1.05fr 1fr 0.9fr 1.1fr;
@@ -494,6 +501,84 @@ tr.groupRow td{
   .dayDetail4col{ grid-template-columns: 1fr; }
 }
 
+
+
+/* Call Diario: hero + horarios individuales */
+.heroBlock{
+  border:1px solid var(--border);
+  border-radius:18px;
+  padding:12px;
+  background: rgba(255,255,255,.03);
+  margin-bottom:12px;
+}
+.heroBlock .field{ margin-bottom:10px; }
+.heroBlock .field:last-child{ margin-bottom:0; }
+.heroBlock label{ font-size:12px; letter-spacing:.02em; opacity:.85; }
+#day_date, #day_call{ font-size:18px; font-weight:900; padding:10px 12px; }
+#day_call{ text-align:center; }
+
+.callGroupBox{
+  border:1px solid var(--border);
+  border-radius:18px;
+  padding:10px 12px;
+  background: rgba(255,255,255,.02);
+  margin-bottom:10px;
+}
+.callGroupRow{
+  display:flex;
+  align-items:center;
+  gap:8px;
+}
+.callGroupRow .lbl{ font-weight:900; opacity:.92; min-width:78px; }
+
+.callPeopleList{ display:flex; flex-direction:column; gap:8px; }
+.callPersonRow{
+  border:1px solid var(--border);
+  border-radius:16px;
+  padding:10px 12px;
+  background: rgba(255,255,255,.02);
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:10px;
+}
+.callPersonRow .left{ display:flex; align-items:center; gap:10px; min-width:0; }
+.callPersonRow .title{ font-weight:900; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.callPersonRow .dot{ width:10px; height:10px; border-radius:999px; flex:0 0 auto; }
+
+.callPersonRow.override{
+  border-color: rgba(255, 208, 0, .55);
+  background: rgba(255, 208, 0, .06);
+}
+
+.timeInput{ width:110px; }
+.timeOverride{
+  background: rgba(255, 208, 0, .18) !important;
+  border-color: rgba(255, 208, 0, .55) !important;
+}
+
+.crewAreaHeaderRow{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:10px;
+}
+.crewAreaHeaderRow .areaName{ font-weight:900; }
+.crewAreaHeaderRow .areaCallCtl{ display:flex; align-items:center; gap:8px; flex-wrap:wrap; justify-content:flex-end; }
+.crewAreaHeaderRow .areaCallCtl .timeInput{ width:110px; }
+
+.crewPickItem .right{ display:flex; flex-direction:column; align-items:flex-end; gap:6px; }
+.crewPickItem .right .timeInput{ width:110px; }
+.crewPickItem .right input[disabled]{ opacity:.45; }
+
+@media (max-width: 520px){
+  .callGroupRow{ flex-wrap:wrap; }
+  .callGroupRow .lbl{ min-width:100%; }
+  .timeInput{ width:100%; }
+  .crewPickItem{ flex-direction:column; align-items:stretch; }
+  .crewPickItem .right{ align-items:stretch; }
+  .crewPickItem .right .timeInput{ width:100%; }
+}
 .colTitle{ font-weight:900; opacity:.92; margin-bottom:4px; }
 
 .crewAreaHeader{

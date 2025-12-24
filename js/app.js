@@ -577,6 +577,12 @@ function enforceScriptVersionsLimit(notify=false){
     d.blocks = Array.isArray(d.blocks) ? d.blocks : [];
     d.sceneColors = (d.sceneColors && typeof d.sceneColors === "object") ? d.sceneColors : {};
 
+    // Horarios de cita (Call Diario)
+    d.castCallTime = (typeof d.castCallTime === "string") ? d.castCallTime : "";
+    d.castCallTimes = (d.castCallTimes && typeof d.castCallTimes === "object") ? d.castCallTimes : {};
+    d.crewAreaCallTimes = (d.crewAreaCallTimes && typeof d.crewAreaCallTimes === "object") ? d.crewAreaCallTimes : {};
+    d.crewCallTimes = (d.crewCallTimes && typeof d.crewCallTimes === "object") ? d.crewCallTimes : {};
+
     // Normalizar bloques (notas/tareas del día)
     for(const b of d.blocks){
       if(!b || typeof b !== "object") continue;
@@ -594,6 +600,70 @@ function enforceScriptVersionsLimit(notify=false){
       if(typeof d.times[sid] !== "number") d.times[sid] = 0;
     }
   }
+
+  
+  // ======= Call times (Cast/Crew) =======
+  function normalizeHHMM(val){
+    const t = String(val||"").trim();
+    if(!t) return "";
+    const m = minutesFromHHMM(t);
+    if(!Number.isFinite(m)) return "";
+    return hhmmFromMinutes(m);
+  }
+
+  function baseDayCall(d){
+    return normalizeHHMM(d?.callTime) || "08:00";
+  }
+  function baseCastCall(d){
+    const day = baseDayCall(d);
+    const b = normalizeHHMM(d?.castCallTime);
+    return b || day;
+  }
+  function effectiveCastCall(d, name){
+    const base = baseCastCall(d);
+    const ov = normalizeHHMM(d?.castCallTimes?.[name]);
+    return ov || base;
+  }
+  function baseCrewAreaCall(d, area){
+    const day = baseDayCall(d);
+    const b = normalizeHHMM(d?.crewAreaCallTimes?.[area]);
+    return b || day;
+  }
+  function effectiveCrewCall(d, crew){
+    const area = normalizeCrewArea(crew?.area) || "Otros";
+    const base = baseCrewAreaCall(d, area);
+    const ov = normalizeHHMM(d?.crewCallTimes?.[crew?.id]);
+    return ov || base;
+  }
+
+  function cleanupDayCallTimes(d){
+    if(!d) return;
+    ensureDayTimingMaps(d);
+
+    const day = baseDayCall(d);
+
+    // Cast base: si está igual que el día, no lo guardamos
+    if(normalizeHHMM(d.castCallTime) === day) d.castCallTime = "";
+
+    const castBase = baseCastCall(d);
+    for(const [name, t] of Object.entries(d.castCallTimes||{})){
+      if(normalizeHHMM(t) === castBase) delete d.castCallTimes[name];
+    }
+
+    // Áreas de crew: si están igual que el día, no lo guardamos
+    for(const [area, t] of Object.entries(d.crewAreaCallTimes||{})){
+      if(normalizeHHMM(t) === day) delete d.crewAreaCallTimes[area];
+    }
+
+    // Crew individual: si está igual que su base de área, no lo guardamos
+    for(const [id, t] of Object.entries(d.crewCallTimes||{})){
+      const crew = state.crew?.find?.(c=>c.id===id);
+      const area = crew ? normalizeCrewArea(crew.area) : "Otros";
+      const base = baseCrewAreaCall(d, area);
+      if(normalizeHHMM(t) === base) delete d.crewCallTimes[id];
+    }
+  }
+
 
   function sortShootDaysInPlace(){
     state.shootDays.sort((a,b)=>{
@@ -1980,11 +2050,12 @@ function setupScheduleWheelScroll(){
 
   function renderDayDetail(){
     const d = selectedDayId ? getDay(selectedDayId) : null;
+    if(d) ensureDayTimingMaps(d);
 
     const title = el("dayDetailTitle");
     if(title){
       if(d){
-        const t = `${formatDayTitle(d.date)}${d.label? " · "+d.label:""}`;
+        const t = `${formatDayTitleCompact(d.date)}${d.label? " · "+d.label:""}`;
         title.textContent = `Detalle del Día — ${t}`;
       }else{
         title.textContent = "Detalle del Día";
@@ -1999,7 +2070,6 @@ function setupScheduleWheelScroll(){
       node.value = d ? (d[map[id]] || "") : "";
     }
 
-    renderDayNeeds();
     renderDayCast();
     renderDayCrewPicker();
   }
@@ -2047,6 +2117,9 @@ function setupScheduleWheelScroll(){
     const d = selectedDayId ? getDay(selectedDayId) : null;
     if(!d){ wrap.innerHTML = `<div class="muted">Seleccioná un día</div>`; return; }
 
+    ensureDayTimingMaps(d);
+    cleanupDayCallTimes(d);
+
     const scenes = dayScenes(d);
     const cast = union(scenes.flatMap(s=>s.elements?.cast || []));
     if(!cast.length){
@@ -2054,12 +2127,88 @@ function setupScheduleWheelScroll(){
       return;
     }
 
+    const dayBase = baseDayCall(d);
+    const castBase = baseCastCall(d);
+
+    const top = document.createElement("div");
+    top.className = "callGroupBox";
+    top.innerHTML = `
+      <div class="callGroupRow">
+        <div class="lbl">Call Cast</div>
+        <input class="input compact timeInput" id="castCallAll" value="${esc(castBase)}" placeholder="${esc(dayBase)}"/>
+        <button class="btn ghost small" id="castCallApply">Aplicar</button>
+        <button class="btn icon ghost small" id="castCallReset" title="Igualar al Call del día">↺</button>
+      </div>
+      <div class="muted small" style="margin-top:6px;">Por defecto igual al Call del día. Cambios individuales quedan marcados.</div>
+    `;
+    wrap.appendChild(top);
+
+    const inputAll = top.querySelector("#castCallAll");
+    const applyBtn = top.querySelector("#castCallApply");
+    const resetBtn = top.querySelector("#castCallReset");
+
+    applyBtn.addEventListener("click", ()=>{
+      const v = normalizeHHMM(inputAll.value);
+      if(!v){ toast("Hora inválida"); inputAll.value = baseCastCall(d); return; }
+      d.castCallTime = (v === dayBase) ? "" : v;
+      d.castCallTimes = {};
+      cleanupDayCallTimes(d);
+      touch();
+      renderDayCast();
+      renderCallSheetDetail();
+    });
+
+    resetBtn.addEventListener("click", ()=>{
+      d.castCallTime = "";
+      d.castCallTimes = {};
+      cleanupDayCallTimes(d);
+      touch();
+      renderDayCast();
+      renderCallSheetDetail();
+    });
+
+    const list = document.createElement("div");
+    list.className = "callPeopleList";
+
     for(const name of cast){
-      const chip = document.createElement("div");
-      chip.className = "catBlock";
-      chip.innerHTML = `<div class="hdr"><span class="dot" style="background:${catColors.cast}"></span>${esc(name)}</div>`;
-      wrap.appendChild(chip);
+      const eff = effectiveCastCall(d, name);
+      const hasOv = !!d.castCallTimes?.[name];
+
+      const row = document.createElement("div");
+      row.className = "callPersonRow" + (hasOv ? " override" : "");
+      row.innerHTML = `
+        <div class="left">
+          <span class="dot" style="background:${catColors.cast}"></span>
+          <div class="title">${esc(name)}</div>
+        </div>
+        <input class="input compact timeInput ${hasOv ? 'timeOverride' : ''}" value="${esc(eff)}"/>
+      `;
+
+      const input = row.querySelector("input");
+      input.addEventListener("click", (e)=>e.stopPropagation());
+      input.addEventListener("keydown", (e)=>{ if(e.key==="Enter"){ input.blur(); } });
+      input.addEventListener("blur", ()=>{
+        const v = normalizeHHMM(input.value);
+        if(!v){ input.value = eff; return; }
+
+        const base = baseCastCall(d);
+        if(v === base){
+          if(d.castCallTimes) delete d.castCallTimes[name];
+        }else{
+          d.castCallTimes = d.castCallTimes || {};
+          d.castCallTimes[name] = v;
+        }
+
+        cleanupDayCallTimes(d);
+        touch();
+        renderDayCast();
+        renderCallSheetDetail();
+      });
+
+      list.appendChild(row);
     }
+
+    wrap.appendChild(list);
   }
 
   function groupCrewByArea(list){
@@ -2093,6 +2242,9 @@ function setupScheduleWheelScroll(){
     const d = selectedDayId ? getDay(selectedDayId) : null;
     if(!d){ wrap.innerHTML = `<div class="muted">Seleccioná un día</div>`; return; }
 
+    ensureDayTimingMaps(d);
+    cleanupDayCallTimes(d);
+
     const crewAll = state.crew
       .map(c=>({ ...c, area: normalizeCrewArea(c.area) }))
       .filter(c=>c.area!=="Cast");
@@ -2105,14 +2257,58 @@ function setupScheduleWheelScroll(){
     const selected = new Set(d.crewIds || []);
     const grouped = groupCrewByArea(crewAll);
 
+    const dayBase = baseDayCall(d);
+
     for(const [area, arr] of grouped){
+      const areaBase = baseCrewAreaCall(d, area);
+
       const hdr = document.createElement("div");
-      hdr.className = "crewAreaHeader";
-      hdr.textContent = area;
+      hdr.className = "crewAreaHeader crewAreaHeaderRow";
+      hdr.innerHTML = `
+        <div class="areaName">${esc(area)}</div>
+        <div class="areaCallCtl">
+          <span class="muted small">Call área</span>
+          <input class="input compact timeInput" value="${esc(areaBase)}"/>
+          <button class="btn ghost small">Aplicar</button>
+          <button class="btn icon ghost small" title="Igualar al Call del día">↺</button>
+        </div>
+      `;
+
+      const areaInput = hdr.querySelector("input");
+      const btnApply = hdr.querySelectorAll("button")[0];
+      const btnReset = hdr.querySelectorAll("button")[1];
+
+      const applyArea = (val)=>{
+        const v = normalizeHHMM(val);
+        if(!v){ toast("Hora inválida"); areaInput.value = baseCrewAreaCall(d, area); return; }
+
+        d.crewAreaCallTimes = d.crewAreaCallTimes || {};
+        if(v === dayBase) delete d.crewAreaCallTimes[area];
+        else d.crewAreaCallTimes[area] = v;
+
+        // Aplicar a toda el área: borra overrides individuales
+        d.crewCallTimes = d.crewCallTimes || {};
+        for(const c of arr){ delete d.crewCallTimes[c.id]; }
+
+        cleanupDayCallTimes(d);
+        touch();
+        renderDayCrewPicker();
+        renderReports();
+        renderCallSheetDetail();
+      };
+
+      btnApply.addEventListener("click", ()=>applyArea(areaInput.value));
+      btnReset.addEventListener("click", ()=>applyArea(dayBase));
+      areaInput.addEventListener("click", (e)=>e.stopPropagation());
+      areaInput.addEventListener("keydown", (e)=>{ if(e.key==="Enter"){ areaInput.blur(); } });
+
       wrap.appendChild(hdr);
 
       for(const c of arr){
         const isSel = selected.has(c.id);
+        const eff = effectiveCrewCall(d, c);
+        const hasOv = !!d.crewCallTimes?.[c.id];
+
         const item = document.createElement("div");
         item.className = "crewPickItem" + (isSel ? " selected" : "");
         item.innerHTML = `
@@ -2123,8 +2319,33 @@ function setupScheduleWheelScroll(){
               <div class="meta">${esc(area)} · ${esc(c.role||"")} ${c.phone? " · "+esc(c.phone):""}</div>
             </div>
           </div>
-          <div class="muted small">${isSel ? "Citado" : "No citado"}</div>
+          <div class="right">
+            <input class="input compact timeInput ${hasOv ? 'timeOverride' : ''}" value="${esc(eff)}" ${isSel? '' : 'disabled'} />
+            <div class="muted small">${isSel ? 'Citado' : 'No citado'}</div>
+          </div>
         `;
+
+        const timeInput = item.querySelector("input");
+        timeInput.addEventListener("click", (e)=>e.stopPropagation());
+        timeInput.addEventListener("keydown", (e)=>{ if(e.key==="Enter"){ timeInput.blur(); } });
+        timeInput.addEventListener("blur", ()=>{
+          if(!isSel) return;
+          const v = normalizeHHMM(timeInput.value);
+          if(!v){ timeInput.value = eff; return; }
+          const base = baseCrewAreaCall(d, area);
+          if(v === base){
+            if(d.crewCallTimes) delete d.crewCallTimes[c.id];
+          }else{
+            d.crewCallTimes = d.crewCallTimes || {};
+            d.crewCallTimes[c.id] = v;
+          }
+          cleanupDayCallTimes(d);
+          touch();
+          renderDayCrewPicker();
+          renderReports();
+          renderCallSheetDetail();
+        });
+
         item.addEventListener("click", ()=>{
           d.crewIds = d.crewIds || [];
           const idx = d.crewIds.indexOf(c.id);
@@ -2136,6 +2357,7 @@ function setupScheduleWheelScroll(){
           renderReports();
           renderCallSheetDetail();
         });
+
         wrap.appendChild(item);
       }
     }
@@ -4054,7 +4276,7 @@ function renderShotList(){
     castBox.className = "catBlock callCast";
     castBox.innerHTML = `
       <div class="hdr"><span class="dot" style="background:${catColors.cast}"></span>Cast</div>
-      <div class="items">${cast.length ? cast.map(n=>`<div>${esc(n)}</div>`).join("") : "<div>—</div>"}</div>
+      <div class="items">${cast.length ? cast.map(n=>{ const t = effectiveCastCall(d,n); return `<div><b>${esc(t)}</b> · ${esc(n)}</div>`; }).join("") : "<div>—</div>"}</div>
     `;
     wrap.appendChild(castBox);
 
@@ -4069,7 +4291,7 @@ function renderShotList(){
       crewItems.innerHTML = crewGrouped.map(([area, arr])=>`
         <div style="margin-top:10px;">
           <div style="font-weight:900; margin-bottom:6px;">${esc(area)}</div>
-          ${arr.map(c=>`<div>${esc(c.name)}${c.role? ` (${esc(c.role)})`:""}${c.phone? ` · ${esc(c.phone)}`:""}</div>`).join("")}
+          ${arr.map(c=>{ const t = effectiveCrewCall(d, c); return `<div><b>${esc(t)}</b> · ${esc(c.name)}${c.role? ` (${esc(c.role)})`:''}${c.phone? ` · ${esc(c.phone)}`:''}</div>`; }).join("")}
         </div>
       `).join("");
     }
@@ -4595,6 +4817,7 @@ el("scriptVerSelect")?.addEventListener("change", ()=>{
         const d = selectedDayId ? getDay(selectedDayId) : null;
         if(!d) return;
         d[dayMap[id]] = el(id).value;
+        if(id==="day_call") cleanupDayCallTimes(d);
         sortShootDaysInPlace();
         touch();
         renderDaysBoard();
@@ -4611,16 +4834,18 @@ el("scriptVerSelect")?.addEventListener("change", ()=>{
       if(!d) return;
       d.callTime = hhmmFromMinutes(minutesFromHHMM(d.callTime||"08:00") - 15);
       el("day_call").value = d.callTime;
+      cleanupDayCallTimes(d);
       touch();
-      renderDaysBoard(); renderScheduleBoard(); renderReports(); renderCallSheetDetail();
+      renderDaysBoard(); renderDayDetail(); renderScheduleBoard(); renderReports(); renderCallSheetDetail();
     });
     el("day_call_plus")?.addEventListener("click", ()=>{
       const d = selectedDayId ? getDay(selectedDayId) : null;
       if(!d) return;
       d.callTime = hhmmFromMinutes(minutesFromHHMM(d.callTime||"08:00") + 15);
       el("day_call").value = d.callTime;
+      cleanupDayCallTimes(d);
       touch();
-      renderDaysBoard(); renderScheduleBoard(); renderReports(); renderCallSheetDetail();
+      renderDaysBoard(); renderDayDetail(); renderScheduleBoard(); renderReports(); renderCallSheetDetail();
     });
 
     el("btnOpenCallSheet")?.addEventListener("click", ()=>{
