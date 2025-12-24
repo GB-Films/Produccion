@@ -115,6 +115,7 @@
     }catch{}
   }
   let schedDrag = null;
+  let schedPress = null; // long-press (mobile) antes de iniciar drag en Cronograma
 
   function uid(p="id"){ return `${p}_${Math.random().toString(16).slice(2)}_${Date.now().toString(16)}`; }
   function esc(s){
@@ -737,9 +738,9 @@ function enforceScriptVersionsLimit(notify=false){
       dock.id = "mDock";
       dock.className = "mDock";
       dock.innerHTML = `
-        <button class="mDockBtn" data-view="breakdown">BD</button>
         <button class="mDockBtn" data-view="shooting">Rod</button>
         <button class="mDockBtn" data-view="schedule">Cron</button>
+        <button class="mDockBtn" data-view="shotlist">Shot</button>
         <button class="mDockBtn" data-view="callsheet">Call</button>
         <button class="mDockBtn" id="mMoreBtn" data-view="more">Más</button>
       `;
@@ -2626,6 +2627,7 @@ function setupScheduleWheelScroll(){
       ensureDayTimingMaps(d);
 
       const grid = block.closest(".schedGrid");
+      if(!grid) return;
       const gridRect = grid.getBoundingClientRect();
       const startMin0 = d.times[sceneId] ?? 0;
       const dur0 = d.durations[sceneId] ?? 60;
@@ -2633,31 +2635,66 @@ function setupScheduleWheelScroll(){
       const blockRect = block.getBoundingClientRect();
       const offsetY = e.clientY - blockRect.top;
 
-      schedDrag = {
-        mode: isResize ? "resize" : "move",
-        block,
-        dayId,
-        sceneId,
-        startMin0,
-        dur0,
-        offsetY,
-        gridRect,
-        snapMin,
-        pxPerMin,
-        pointerId: e.pointerId,
-        startClientX: e.clientX,
-        startClientY: e.clientY,
-        moved: false,
-        captured: false
+      const startDragNow = (mode)=>{
+        schedDrag = {
+          mode,
+          block,
+          dayId,
+          sceneId,
+          startMin0,
+          dur0,
+          offsetY,
+          gridRect,
+          snapMin,
+          pxPerMin,
+          pointerId: e.pointerId,
+          startClientX: e.clientX,
+          startClientY: e.clientY,
+          moved: false,
+          captured: false
+        };
+        hideHoverTip();
+        // Importante: no capturamos el puntero aún; lo hacemos recién cuando hay drag real.
       };
 
-      hideHoverTip();
-      // Importante: no capturamos el puntero aún; lo hacemos recién cuando hay drag real.
+      // Mobile (touch): long-press para mover, así no se pelea con el scroll.
+      if(isMobileUI() && e.pointerType === "touch" && !isResize){
+        try{ if(schedPress?.timer) clearTimeout(schedPress.timer); }catch{}
+        schedPress = {
+          pointerId: e.pointerId,
+          startClientX: e.clientX,
+          startClientY: e.clientY,
+          active: true,
+          timer: null
+        };
+        schedPress.timer = setTimeout(()=>{
+          if(!schedPress || !schedPress.active || schedPress.pointerId !== e.pointerId) return;
+          startDragNow("move");
+        }, 260);
+        return;
+      }
+
+      startDragNow(isResize ? "resize" : "move");
 
     };
 
     board.onpointermove = (e)=>{
+      // Si estamos esperando long-press y el usuario empieza a scrollear, cancelamos.
+      if(schedPress && !schedDrag && e.pointerId === schedPress.pointerId){
+        const dx = e.clientX - schedPress.startClientX;
+        const dy = e.clientY - schedPress.startClientY;
+        if(Math.abs(dx) > 8 || Math.abs(dy) > 8){
+          try{ clearTimeout(schedPress.timer); }catch{}
+          schedPress = null;
+        }
+      }
+
       if(!schedDrag) return;
+
+      // Durante drag (touch), frenamos el scroll del navegador.
+      if(isMobileUI() && e.pointerType === "touch"){
+        try{ e.preventDefault(); }catch{}
+      }
 
       // Umbral de drag: si no se movió, no hacemos nada (así el doble click funciona)
       if(!schedDrag.moved){
@@ -2714,6 +2751,10 @@ function setupScheduleWheelScroll(){
     };
 
     board.onpointerup = (e)=>{
+      if(schedPress && e.pointerId === schedPress.pointerId){
+        try{ clearTimeout(schedPress.timer); }catch{}
+        schedPress = null;
+      }
       if(!schedDrag) return;
       const { mode, dayId, sceneId, snapMin, pxPerMin } = schedDrag;
 
@@ -2788,6 +2829,17 @@ function setupScheduleWheelScroll(){
       renderReports();
       renderCallSheetCalendar();
       renderCallSheetDetail();
+    };
+
+    board.onpointercancel = (e)=>{
+      if(schedPress && e.pointerId === schedPress.pointerId){
+        try{ clearTimeout(schedPress.timer); }catch{}
+        schedPress = null;
+      }
+      if(schedDrag && e.pointerId === schedDrag.pointerId){
+        schedDrag = null;
+        renderScheduleBoard();
+      }
     };
   }
 
