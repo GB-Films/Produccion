@@ -33,25 +33,25 @@
 }
 
 html[data-theme="pink"]{
-  /* JYP — Emerald Soft (menos saturado, un toque más claro) */
-  --bg:#0d221b;
-  --panel:#14312a;
-  --card:#1a3b33;
+  /* JYP — Emerald ULTRA Soft (más claro, más grisáceo, menos saturado) */
+  --bg:#142a24;
+  --panel:#1b3530;
+  --card:#23413a;
 
-  --bg-rgb:13,34,27;
-  --panel-rgb:20,49,42;
-  --panel-deep-rgb:18,44,37;
-  --card-rgb:26,59,51;
+  --bg-rgb:20,42,36;
+  --panel-rgb:27,53,48;
+  --panel-deep-rgb:23,47,42;
+  --card-rgb:35,65,58;
 
-
-  --accent:#87d8c7;
-  --accent-rgb:135,216,199;
+  --accent:#86c3b6;
+  --accent-rgb:134,195,182;
 
   --danger:#ff6b85;
 
-  --ok:#87d8c7;
-  --ok-rgb:135,216,199;
+  --ok:#86c3b6;
+  --ok-rgb:134,195,182;
 }
+
 .projectSwitch{
   margin-top:10px;
   padding:8px 10px;
