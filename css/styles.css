@@ -2023,3 +2023,27 @@ tr.groupRow td{
     padding-bottom:8px;
   }
 }
+
+
+/* ===== Plan de Rodaje (pantalla completa) ===== */
+#view-dayplan{ overflow:hidden; }
+#dayplanCard{ height:100%; display:flex; flex-direction:column; min-height:0; }
+#dayplanCard .cardContent{ flex:1 1 auto; min-height:0; display:flex; flex-direction:column; }
+#dayplanHead{ flex:0 0 auto; }
+.dayplanBody{ flex:1 1 auto; min-height:0; }
+.dpScroller{ height:auto !important; max-height:none !important; flex:1 1 auto; }
+.dayplanBody .dayplanInspector{ max-height:none !important; }
+
+/* ===== Plan General: notas/tareas ===== */
+.schedBlock.note{
+  border-style:dashed;
+  background: rgba(255,255,255,.035);
+}
+.schedBlock.note .resize{
+  background: rgba(var(--accent-rgb),.14);
+}
+
+/* ===== Print: matar UI mobile sí o sí ===== */
+@media print{
+  #mTopbar, #mDock, #mBackdrop, .mTopbar, .mDock, .mBackdrop, .mDockBtn{ display:none !important; }
+}
