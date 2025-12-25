@@ -551,11 +551,15 @@ tr.groupRow td{
   background: rgba(255, 208, 0, .06);
 }
 
-.timeInput{ width:110px; }
-.timeOverride{
-  background: rgba(255, 208, 0, .18) !important;
-  border-color: rgba(255, 208, 0, .55) !important;
-}
+.timeInput{ width:110px; padding:6px 10px; height:34px; border-radius:12px; }
+.btn.ghost{ background: rgba(255,255,255,.02); }
+.btn.small{ padding:6px 10px; border-radius:12px; font-size:12px; height:34px; }
+.btn.icon.small{ width:34px; height:34px; border-radius:12px; padding:0; display:flex; align-items:center; justify-content:center; }
+.timeDiffDay{ background: rgba(255, 208, 0, .18) !important; border-color: rgba(255, 208, 0, .55) !important; }
+.timeDiffArea{ background: rgba(255, 92, 92, .18) !important; border-color: rgba(255, 92, 92, .55) !important; }
+.callBadge{ font-size:11px; padding:4px 8px; border-radius:999px; border:1px solid var(--border); background: rgba(255,255,255,.03); color: var(--muted); white-space:nowrap; }
+.callBadge.ok{ border-color: rgba(var(--ok-rgb),.55); color: rgba(var(--ok-rgb),.95); background: rgba(var(--ok-rgb),.06); }
+.callBadge.off{ border-color: rgba(255,92,92,.45); }
 
 .crewAreaHeaderRow{
   display:flex;
@@ -567,7 +571,7 @@ tr.groupRow td{
 .crewAreaHeaderRow .areaCallCtl{ display:flex; align-items:center; gap:8px; flex-wrap:wrap; justify-content:flex-end; }
 .crewAreaHeaderRow .areaCallCtl .timeInput{ width:110px; }
 
-.crewPickItem .right{ display:flex; flex-direction:column; align-items:flex-end; gap:6px; }
+.crewPickItem .right{ display:flex; flex-direction:row; align-items:center; gap:8px; }
 .crewPickItem .right .timeInput{ width:110px; }
 .crewPickItem .right input[disabled]{ opacity:.45; }
 
@@ -576,7 +580,7 @@ tr.groupRow td{
   .callGroupRow .lbl{ min-width:100%; }
   .timeInput{ width:100%; }
   .crewPickItem{ flex-direction:column; align-items:stretch; }
-  .crewPickItem .right{ align-items:stretch; }
+  .crewPickItem .right{ flex-direction:column; align-items:stretch; gap:6px; }
   .crewPickItem .right .timeInput{ width:100%; }
 }
 .colTitle{ font-weight:900; opacity:.92; margin-bottom:4px; }

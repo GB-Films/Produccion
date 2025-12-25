@@ -2135,7 +2135,7 @@ function setupScheduleWheelScroll(){
     top.innerHTML = `
       <div class="callGroupRow">
         <div class="lbl">Call Cast</div>
-        <input class="input compact timeInput" id="castCallAll" value="${esc(castBase)}" placeholder="${esc(dayBase)}"/>
+        <input type="time" step="300" class="input compact timeInput" id="castCallAll" value="${esc(castBase)}"/>
         <button class="btn ghost small" id="castCallApply">Aplicar</button>
         <button class="btn icon ghost small" id="castCallReset" title="Igualar al Call del día">↺</button>
       </div>
@@ -2172,21 +2172,22 @@ function setupScheduleWheelScroll(){
 
     for(const name of cast){
       const eff = effectiveCastCall(d, name);
-      const hasOv = !!d.castCallTimes?.[name];
+      const diffDay = (eff !== dayBase);
 
       const row = document.createElement("div");
-      row.className = "callPersonRow" + (hasOv ? " override" : "");
+      row.className = "callPersonRow" + (diffDay ? " diffDay" : "");
       row.innerHTML = `
         <div class="left">
           <span class="dot" style="background:${catColors.cast}"></span>
           <div class="title">${esc(name)}</div>
         </div>
-        <input class="input compact timeInput ${hasOv ? 'timeOverride' : ''}" value="${esc(eff)}"/>
+        <input type="time" step="300" class="input compact timeInput ${diffDay ? 'timeDiffDay' : ''}" value="${esc(eff)}"/>
       `;
 
       const input = row.querySelector("input");
       input.addEventListener("click", (e)=>e.stopPropagation());
       input.addEventListener("keydown", (e)=>{ if(e.key==="Enter"){ input.blur(); } });
+      input.addEventListener("change", ()=>{ input.blur(); });
       input.addEventListener("blur", ()=>{
         const v = normalizeHHMM(input.value);
         if(!v){ input.value = eff; return; }
@@ -2268,7 +2269,7 @@ function setupScheduleWheelScroll(){
         <div class="areaName">${esc(area)}</div>
         <div class="areaCallCtl">
           <span class="muted small">Call área</span>
-          <input class="input compact timeInput" value="${esc(areaBase)}"/>
+          <input type="time" step="300" class="input compact timeInput" value="${esc(areaBase)}"/>
           <button class="btn ghost small">Aplicar</button>
           <button class="btn icon ghost small" title="Igualar al Call del día">↺</button>
         </div>
@@ -2307,7 +2308,9 @@ function setupScheduleWheelScroll(){
       for(const c of arr){
         const isSel = selected.has(c.id);
         const eff = effectiveCrewCall(d, c);
-        const hasOv = !!d.crewCallTimes?.[c.id];
+        const diffArea = isSel && (eff !== areaBase);
+        const diffDay  = isSel && !diffArea && (eff !== dayBase);
+        const timeCls  = diffArea ? "timeDiffArea" : (diffDay ? "timeDiffDay" : "");
 
         const item = document.createElement("div");
         item.className = "crewPickItem" + (isSel ? " selected" : "");
@@ -2320,14 +2323,15 @@ function setupScheduleWheelScroll(){
             </div>
           </div>
           <div class="right">
-            <input class="input compact timeInput ${hasOv ? 'timeOverride' : ''}" value="${esc(eff)}" ${isSel? '' : 'disabled'} />
-            <div class="muted small">${isSel ? 'Citado' : 'No citado'}</div>
+            <input type="time" step="300" class="input compact timeInput ${timeCls}" value="${esc(eff)}" ${isSel? '' : 'disabled'} />
+            <span class="callBadge ${isSel ? 'ok' : 'off'}">${isSel ? 'Citado' : 'No citado'}</span>
           </div>
         `;
 
         const timeInput = item.querySelector("input");
         timeInput.addEventListener("click", (e)=>e.stopPropagation());
         timeInput.addEventListener("keydown", (e)=>{ if(e.key==="Enter"){ timeInput.blur(); } });
+        timeInput.addEventListener("change", ()=>{ timeInput.blur(); });
         timeInput.addEventListener("blur", ()=>{
           if(!isSel) return;
           const v = normalizeHHMM(timeInput.value);
