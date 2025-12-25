@@ -621,6 +621,14 @@ function enforceScriptVersionsLimit(notify=false){
     }
   }
 
+
+
+// ======= Shotlist helpers =======
+function ensureDayShotsDone(d){
+  if(!d || typeof d !== "object") return;
+  d.shotsDone = (d.shotsDone && typeof d.shotsDone === "object") ? d.shotsDone : {};
+}
+
   
   // ======= Call times (Cast/Crew) =======
   function normalizeHHMM(val){
@@ -2796,42 +2804,6 @@ function setupScheduleWheelScroll(){
       }
 
 
-// Notas / tareas del día (sincronizadas desde Plan de Rodaje)
-for(const b of (d.blocks||[])){
-  if(!b) continue;
-  if(q){
-    const hay = `${b.title||""} ${b.detail||""}`.toLowerCase();
-    if(!hay.includes(q)) continue;
-  }
-
-  const startMin = clamp(Number(b.startMin ?? 0) || 0, 0, DAY_SPAN_MIN-1);
-  const durMin   = clamp(Number(b.durMin ?? 30) || 30, 5, DAY_SPAN_MIN);
-
-  const top = (preOffset + startMin) * pxPerMin;
-  const height = Math.max(34, durMin * pxPerMin);
-
-  const col = safeHexColor(b.color || "#E5E7EB", "#E5E7EB");
-  const bg = hexToRgba(col, 0.18);
-
-  const block = document.createElement("div");
-  block.className = "schedBlock";
-  block.dataset.kind = "block";
-  block.dataset.itemId = b.id;
-  block.dataset.dayId = d.id;
-  block.style.top = `${top}px`;
-  block.style.height = `${height}px`;
-  block.style.background = bg;
-  block.style.borderLeft = `6px solid ${col}`;
-  block.innerHTML = `
-    <div class="title">🗒 ${esc(b.title||"Tarea")}</div>
-    <div class="meta">${esc(fmtClockFromCall(d.callTime, startMin))} · ${esc(formatDuration(durMin))}</div>
-    <div class="resize" title="Cambiar duración"></div>
-  `;
-
-  grid.appendChild(block);
-  shownBlocks++;
-}
-
       if(q && shownBlocks===0){
         const hhay = `${formatDayTitle(d.date)} ${d.label||""} ${d.location||""} ${d.callTime||""}`.toLowerCase();
         if(!hhay.includes(q)) continue;
@@ -2949,6 +2921,43 @@ for(const b of (d.blocks||[])){
         grid.appendChild(block);
         shownBlocks++;
       }
+
+
+// Notas / tareas (sincronizadas desde Plan de Rodaje)
+for(const b of (d.blocks||[])){
+  if(!b) continue;
+  if(q){
+    const hay = `${b.title||""} ${b.detail||""}`.toLowerCase();
+    if(!hay.includes(q)) continue;
+  }
+
+  const startMin = clamp(Number(b.startMin ?? 0) || 0, 0, DAY_SPAN_MIN-1);
+  const durMin   = clamp(Number(b.durMin ?? 30) || 30, 5, DAY_SPAN_MIN);
+
+  const top = (preOffset + startMin) * pxPerMin;
+  const height = Math.max(34, durMin * pxPerMin);
+
+  const col = safeHexColor(b.color || "#E5E7EB", "#E5E7EB");
+  const bg = hexToRgba(col, 0.18);
+
+  const block = document.createElement("div");
+  block.className = "schedBlock";
+  block.dataset.kind = "block";
+  block.dataset.itemId = b.id;
+  block.dataset.dayId = d.id;
+  block.style.top = `${top}px`;
+  block.style.height = `${height}px`;
+  block.style.background = bg;
+  block.style.borderLeft = `6px solid ${col}`;
+  block.innerHTML = `
+    <div class="title">🗒 ${esc(b.title||"Tarea")}</div>
+    <div class="meta">${esc(fmtClockFromCall(d.callTime, startMin))} · ${esc(formatDuration(durMin))}</div>
+    <div class="resize" title="Cambiar duración"></div>
+  `;
+
+  grid.appendChild(block);
+  shownBlocks++;
+}
 
       if(q && shownBlocks===0){
         const hhay = `${formatDayTitle(d.date)} ${d.label||""} ${d.location||""}`.toLowerCase();
@@ -3484,7 +3493,7 @@ function updateScheduleDayDOM(dayId){
 
     ensureDayTimingMaps(d);
     const snapMin = getDayplanSnap();
-    const base = minutesFromHHMM(d.callTime || "00:00"); // minutos absolutos del día
+    const base = minutesFromHHMM(d.callTime || "08:00"); // minutos absolutos del día
     const dpStartAbs = Math.floor(base/60)*60; // arranca en la hora exacta (hacia abajo)
     const dpEndAbs = DAY_SPAN_MIN; // hasta 24:00
     const dpSpanMin = dpEndAbs - dpStartAbs;
@@ -3699,7 +3708,7 @@ const height = Math.max(Math.round((absEnd - absStart) * ppm), Math.round(snapMi
         ensureDayTimingMaps(d);
 
 const snapMin = getDayplanSnap();
-const base = minutesFromHHMM(d.callTime || "00:00");
+const base = minutesFromHHMM(d.callTime || "08:00");
 const dpStartAbs = Math.floor(base/60)*60;
 const dpEndAbs = DAY_SPAN_MIN;
 const items = buildDayplanItems(d);
@@ -3760,7 +3769,7 @@ dayplanPointer = {
 
   const ppm = p.ppm || DAYPLAN_PPM;
   const snapMin = p.snapMin || getDayplanSnap();
-  const base = p.base || minutesFromHHMM(d.callTime || "00:00");
+  const base = p.base || minutesFromHHMM(d.callTime || "08:00");
   const dpStartAbs = Number.isFinite(p.dpStartAbs) ? p.dpStartAbs : Math.floor(base/60)*60;
   const dpEndAbs = Number.isFinite(p.dpEndAbs) ? p.dpEndAbs : DAY_SPAN_MIN;
 
@@ -3810,7 +3819,7 @@ dayplanPointer = {
     if(!box) return;
 
     const snapMin = getDayplanSnap();
-    const base = minutesFromHHMM(d.callTime || "00:00");
+    const base = minutesFromHHMM(d.callTime || "08:00");
 
     const it = dayplanSelectedKey ? items.find(x=>x.key===dayplanSelectedKey) : null;
     if(!it){
@@ -3906,7 +3915,7 @@ dayplanPointer = {
         const it0 = dayplanSelectedKey ? items0.find(x=>x.key===dayplanSelectedKey) : null;
         if(!it0) return;
 
-        const base0 = minutesFromHHMM(d0.callTime || "00:00");
+        const base0 = minutesFromHHMM(d0.callTime || "08:00");
         const snap0 = getDayplanSnap();
 
         if(e.target.id === "dpi_time"){
@@ -3938,23 +3947,73 @@ dayplanPointer = {
           renderReports();
           return;
         }
+
+if(e.target.id === "dpi_title" || e.target.id === "dpi_detail"){
+  if(it0.kind !== "block") return;
+  const b = (d0.blocks||[]).find(x=>x.id===it0.id);
+  if(!b) return;
+  if(e.target.id === "dpi_title") b.title = e.target.value;
+  if(e.target.id === "dpi_detail") b.detail = e.target.value;
+  touch();
+  renderDayPlan();
+  renderScheduleBoard();
+  renderCallSheetDetail();
+  renderReports();
+  return;
+}
       });
 
-      box.addEventListener("input", (e)=>{
-        const d0 = selectedDayplanDayId ? getDay(selectedDayplanDayId) : null;
-        if(!d0) return;
-        if(!dayplanSelectedKey) return;
+      
+const dpTextSave = window.U.debounce(()=>{ touch(); }, 450);
 
-        const items0 = buildDayplanItems(d0);
-        const it0 = items0.find(x=>x.key===dayplanSelectedKey);
-        if(!it0 || it0.kind!=="block") return;
+function updateLaneBlock(bid, title, detail){
+  const escAttr = (v)=> String(v||"").replace(/\\/g,"\\\\").replace(/"/g,'\\"');
+  const node = document.querySelector(`.dpBlock[data-kind="block"][data-id="${escAttr(bid)}"]`);
+  if(!node) return;
 
-        const b = (d0.blocks||[]).find(x=>x.id===it0.id);
-        if(!b) return;
+  const t = node.querySelector(".dpBlockTitle");
+  if(t) t.textContent = title || "";
 
-        if(e.target.id === "dpi_title"){ b.title = e.target.value; touch(); renderDayPlan(); renderCallSheetDetail(); }
-        if(e.target.id === "dpi_detail"){ b.detail = e.target.value; touch(); renderDayPlan(); renderCallSheetDetail(); }
-      });
+  let dEl = node.querySelector(".dpBlockDetail");
+  const should = String(detail||"").trim();
+  if(should){
+    if(!dEl){
+      dEl = document.createElement("div");
+      dEl.className = "dpBlockDetail";
+      const before = node.querySelector(".dpPalettePop") || node.querySelector(".dpResize");
+      if(before) node.insertBefore(dEl, before);
+      else node.appendChild(dEl);
+    }
+    dEl.textContent = detail;
+  }else{
+    if(dEl) dEl.remove();
+  }
+}
+
+box.addEventListener("input", (e)=>{
+  const d0 = selectedDayplanDayId ? getDay(selectedDayplanDayId) : null;
+  if(!d0) return;
+  if(!dayplanSelectedKey) return;
+
+  const items0 = buildDayplanItems(d0);
+  const it0 = items0.find(x=>x.key===dayplanSelectedKey);
+  if(!it0 || it0.kind!=="block") return;
+
+  const b = (d0.blocks||[]).find(x=>x.id===it0.id);
+  if(!b) return;
+
+  if(e.target.id === "dpi_title"){
+    b.title = e.target.value;
+    updateLaneBlock(b.id, b.title, b.detail);
+    dpTextSave();
+  }
+  if(e.target.id === "dpi_detail"){
+    b.detail = e.target.value;
+    updateLaneBlock(b.id, b.title, b.detail);
+    dpTextSave();
+  }
+});
+
 
       box.addEventListener("click", (e)=>{
         const d0 = selectedDayplanDayId ? getDay(selectedDayplanDayId) : null;
