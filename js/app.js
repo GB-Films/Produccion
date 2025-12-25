@@ -540,6 +540,26 @@ function enforceScriptVersionsLimit(notify=false){
     const mi = String(mm%60).padStart(2,"0");
     return `${String(h).padStart(2,"0")}:${mi}`;
   }
+  function formatDuration(mins){
+    const n = Math.max(0, Math.round(Number(mins)||0));
+    if(n >= 60){
+      const h = Math.floor(n/60);
+      const m = n % 60;
+      return m ? `${h}hr ${m}m` : `${h}hr`;
+    }
+    return `${n}m`;
+  }
+
+  function preOffsetFromCall(callHHMM){
+    const callM = minutesFromHHMM(callHHMM || "08:00");
+    const baseM = Math.floor(callM/60)*60;
+    return callM - baseM;
+  }
+  function baseHourFromCall(callHHMM){
+    const callM = minutesFromHHMM(callHHMM || "08:00");
+    return Math.floor(callM/60)*60;
+  }
+
   function snap(v, step){ return Math.round(v/step)*step; }
   function clamp(v, a, b){ return Math.max(a, Math.min(b, v)); }
   function fmtClockFromCall(callHHMM, offsetMin){
@@ -2826,9 +2846,14 @@ function setupScheduleWheelScroll(){
       grid.className = "schedGrid";
       let shownBlocks = 0;
       grid.dataset.dayId = d.id;
-      grid.style.height = `${Math.ceil(DAY_SPAN_MIN * pxPerMin)}px`;
+      const preOffset = preOffsetFromCall(d.callTime||"08:00");
+      const baseHour = baseHourFromCall(d.callTime||"08:00");
+      const totalSpan = DAY_SPAN_MIN + preOffset;
+      const numHours = Math.ceil(totalSpan/60);
 
-      for(let h=0; h<=24; h++){
+      grid.style.height = `${Math.ceil(totalSpan * pxPerMin)}px`;
+
+      for(let h=0; h<=numHours; h++){
         const y = h * 60 * pxPerMin;
         const line = document.createElement("div");
         line.className = "hourLine";
@@ -2838,7 +2863,7 @@ function setupScheduleWheelScroll(){
         const lab = document.createElement("div");
         lab.className = "hourLabel";
         lab.style.top = `${y}px`;
-        lab.textContent = hhmmFromMinutes(minutesFromHHMM(d.callTime||"08:00")+h*60);
+        lab.textContent = hhmmFromMinutes(baseHour + h*60);
         grid.appendChild(lab);
       }
 
@@ -2853,7 +2878,7 @@ function setupScheduleWheelScroll(){
         const startMin = clamp(d.times[sid] ?? 0, 0, DAY_SPAN_MIN-1);
         const durMin   = clamp(d.durations[sid] ?? 60, 5, DAY_SPAN_MIN);
 
-        const top = startMin * pxPerMin;
+        const top = (preOffset + startMin) * pxPerMin;
         const height = Math.max(34, durMin * pxPerMin);
 
         const involved = sceneCatsWithItems(s);
@@ -2872,7 +2897,7 @@ function setupScheduleWheelScroll(){
         block.innerHTML = `
           ${ticks}
           <div class="title">#${esc(s.number||"")} — ${esc(s.slugline||"")}</div>
-          <div class="meta">${esc(fmtClockFromCall(d.callTime, startMin))} · ${durMin} min</div>
+          <div class="meta">${esc(fmtClockFromCall(d.callTime, startMin))} · ${esc(formatDuration(durMin))}</div>
           <div class="resize" title="Cambiar duración"></div>
         `;
 
@@ -3065,8 +3090,10 @@ function setupScheduleWheelScroll(){
         const gridRect = schedDrag.gridRect;
         const y = e.clientY - gridRect.top;
 
+        const preOffset = preOffsetFromCall(d.callTime||"08:00");
+
         const currentStart = d.times?.[sceneId] ?? schedDrag.startMin0;
-        const rawH = y - (currentStart * pxPerMin);
+        const rawH = y - ((preOffset + currentStart) * pxPerMin);
 
         let newDur = snap(rawH / pxPerMin, snapMin);
         newDur = clamp(newDur, snapMin, DAY_SPAN_MIN - currentStart);
@@ -3088,13 +3115,15 @@ function setupScheduleWheelScroll(){
       const gridRect = targetGrid ? targetGrid.getBoundingClientRect() : schedDrag.gridRect;
       const y = e.clientY - gridRect.top;
 
+      const preOffsetT = preOffsetFromCall(targetDay.callTime||"08:00");
+
       const rawTopPx = y - schedDrag.offsetY;
-      let newStart = snap(rawTopPx / pxPerMin, snapMin);
+      let newStart = snap((rawTopPx / pxPerMin) - preOffsetT, snapMin);
 
       const dur = (targetDay.durations[sceneId] ?? (getDay(dayId)?.durations?.[sceneId] ?? schedDrag.dur0));
       newStart = clamp(newStart, 0, Math.max(0, DAY_SPAN_MIN - dur));
 
-      schedDrag.block.style.top = `${newStart * pxPerMin}px`;
+      schedDrag.block.style.top = `${(preOffsetT + newStart) * pxPerMin}px`;
     };
 
     board.onpointerup = (e)=>{
@@ -3147,7 +3176,8 @@ function setupScheduleWheelScroll(){
       const y = e.clientY - gridRect.top;
       const rawTopPx = y - schedDrag.offsetY;
 
-      let newStart = snap(rawTopPx / pxPerMin, snapMin);
+      const preOffsetT = preOffsetFromCall(toDay.callTime||"08:00");
+      let newStart = snap((rawTopPx / pxPerMin) - preOffsetT, snapMin);
       const dur = (toDay.durations[sceneId] ?? fromDay.durations[sceneId] ?? 60);
       newStart = clamp(newStart, 0, Math.max(0, DAY_SPAN_MIN - dur));
 
@@ -3199,6 +3229,8 @@ function setupScheduleWheelScroll(){
     const zoom = Number(el("schedZoom")?.value || 90);
     const pxPerMin = zoom/60;
 
+    const preOffset = preOffsetFromCall(d.callTime||"08:00");
+
     resolveOverlapsPushDown(d, snapMin);
 
     const grid = document.querySelector(`.schedGrid[data-day-id="${CSS.escape(dayId)}"]`);
@@ -3208,10 +3240,10 @@ function setupScheduleWheelScroll(){
       const sid = block.dataset.sceneId;
       const start = d.times[sid] ?? 0;
       const dur = d.durations[sid] ?? 60;
-      block.style.top = `${start * pxPerMin}px`;
+      block.style.top = `${(preOffset + start) * pxPerMin}px`;
       block.style.height = `${Math.max(34, dur * pxPerMin)}px`;
       const meta = block.querySelector(".meta");
-      if(meta) meta.textContent = `${fmtClockFromCall(d.callTime, start)} · ${dur} min`;
+      if(meta) meta.textContent = `${fmtClockFromCall(d.callTime, start)} · ${formatDuration(dur)}`;
     }
   }
 
@@ -3548,7 +3580,7 @@ function setupScheduleWheelScroll(){
       return `
         <tr style="background:${eattr(bg)};border-left:8px solid ${eattr(col)};">
           <td style="width:120px">${esc(clock)}</td>
-          <td style="width:70px">${esc(String(dur))}m</td>
+          <td style="width:70px">${esc(formatDuration(dur))}</td>
           <td>${esc(it.title||"")}</td>
           <td>${esc(it.detail||"")}</td>
         </tr>
@@ -4048,7 +4080,7 @@ function renderShotList(){
         <div class="shotSceneHead">
           <div>
             <div class="t">#${esc(sc.number||"")} — ${esc(sc.slugline||"")}</div>
-            <div class="m">${esc(scStart||"")} → ${esc(scEnd||"")} · Escena: ${du} min · Planos: ${shotsMin} min</div>
+            <div class="m">${esc(scStart||"")} → ${esc(scEnd||"")} · Escena: ${esc(formatDuration(du))} · Planos: ${esc(formatDuration(shotsMin))}</div>
           </div>
           ${warn ? `<div class="warn">${esc(warn)}</div>` : ""}
         </div>
@@ -4269,7 +4301,7 @@ function renderShotList(){
 
         const sub = (it.kind==="scene" && it.detail) ? `<div class="muted small">${esc(it.detail)}</div>` : ``;
 
-        return `<div style="${border}"><b>${time}</b> · <span class="muted">(${du}m)</span> · ${main}${sub}</div>`;
+        return `<div style="${border}"><b>${time}</b> · <span class="muted">(${esc(formatDuration(du))})</span> · ${main}${sub}</div>`;
       }).join("");
     }
 

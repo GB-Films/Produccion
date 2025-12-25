@@ -1408,6 +1408,7 @@ tr.groupRow td{
   }
   body{ background:#fff; color:#000; }
   .sidebar, .noPrint, #toast, #hoverTip { display:none !important; }
+  .mTopbar, .mDock, .mBackdrop { display:none !important; }
   .shell{ grid-template-columns: 1fr; }
   .main{ padding:0; }
   .view{ height:auto; overflow:visible; }
@@ -1649,6 +1650,7 @@ tr.groupRow td{
   }
   body{ background:#fff; color:#000; }
   .sidebar, .noPrint, #toast, #hoverTip { display:none !important; }
+  .mTopbar, .mDock, .mBackdrop { display:none !important; }
   .shell{ grid-template-columns: 1fr; }
   .main{ padding:0; }
   .view{ height:auto; overflow:visible; }
