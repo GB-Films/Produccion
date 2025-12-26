@@ -494,6 +494,21 @@ tr.groupRow td{
 }
 .dayDetail3col .col{ min-width:0; }
 
+
+/* Input fecha DD/MM/AAAA (mantiene date picker oculto) */
+.dateDual{ display:flex; align-items:center; gap:8px; }
+.dateDual #day_date_display{ flex:1 1 auto; }
+.dateDual .datePickBtn{ flex:0 0 auto; padding:6px 10px; }
+.dateDual .hiddenDate{
+  position:absolute;
+  left:-9999px;
+  top:0;
+  width:1px;
+  height:1px;
+  opacity:0;
+  pointer-events:none;
+}
+
 @media (max-width:1200px){
   .dayDetail3col{ grid-template-columns: 1fr 1fr; }
 }
@@ -1001,7 +1016,10 @@ tr.groupRow td{
   body.gbPrintingCallsheet .catBlock .hdr{ background:#f6f6f6 !important; border-bottom:1px solid #ddd !important; color:#111 !important; }
   body.gbPrintingCallsheet .kpi{ background:#f6f6f6 !important; border:1px solid #ddd !important; color:#111 !important; }
 
-  /* Arrancar pegado arriba */
+  
+  /* KPIs (numeritos) en negro para contraste */
+  body.gbPrintingCallsheet .kpi b{ color:#000 !important; }
+/* Arrancar pegado arriba */
   body.gbPrintingCallsheet #gbPrintRoot .catBlock:first-child{ margin-top:0 !important; }
 
   /* Título (día / call / locación) con más presencia */

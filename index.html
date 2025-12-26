@@ -3,7 +3,7 @@
   <meta charset="utf-8"/>
   <meta content="width=device-width,initial-scale=1,viewport-fit=cover" name="viewport"/>
   <title>GB Production Board</title>
-  <link href="css/styles.css?v=20251226-14" rel="stylesheet"/>
+  <link href="css/styles.css?v=20251226-15" rel="stylesheet"/>
 </head>
 <body>
   <div class="shell">
@@ -313,7 +313,11 @@
     <div class="heroBlock">
     <div class="field">
       <label>Fecha</label>
-      <input class="input" id="day_date" type="date"/>
+      <div class="dateDual">
+        <input class="input" id="day_date_display" type="text" inputmode="numeric" placeholder="dd/mm/aaaa"/>
+        <button class="btn icon datePickBtn" id="day_date_pick" type="button" title="Elegir fecha">📅</button>
+        <input class="input hiddenDate" id="day_date" type="date"/>
+      </div>
     </div>
 
     <div class="field">
@@ -615,9 +619,9 @@
     </main>
   </div>
 
-  <script src="js/utils.js?v=20251226-14"></script>
-  <script src="js/storage.js?v=20251226-14"></script>
-  <script src="js/app.js?v=20251226-14"></script>
+  <script src="js/utils.js?v=20251226-15"></script>
+  <script src="js/storage.js?v=20251226-15"></script>
+  <script src="js/app.js?v=20251226-15"></script>
 
 
 </body></html>

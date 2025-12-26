@@ -638,6 +638,32 @@ function enforceScriptVersionsLimit(notify=false){
   }
 
 
+  function formatDDMMYYYY(dateIso){
+    if(!dateIso) return "";
+    const parts = String(dateIso).split("-");
+    if(parts.length !== 3) return "";
+    const [yyyy, mm, dd] = parts;
+    if(!yyyy || !mm || !dd) return "";
+    return `${dd}/${mm}/${yyyy}`;
+  }
+
+  function parseDDMMYYYY(txt){
+    const s = String(txt||"").trim();
+    const m = s.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{4})$/);
+    if(!m) return null;
+    const dd = Number(m[1]);
+    const mm = Number(m[2]);
+    const yyyy = Number(m[3]);
+    if(!(yyyy>=1900 && yyyy<=2500)) return null;
+    if(mm<1 || mm>12) return null;
+    if(dd<1 || dd>31) return null;
+    const iso = `${String(yyyy).padStart(4,"0")}-${String(mm).padStart(2,"0")}-${String(dd).padStart(2,"0")}`;
+    const d = new Date(iso+"T00:00:00");
+    if(d.getFullYear()!==yyyy || (d.getMonth()+1)!==mm || d.getDate()!==dd) return null;
+    return iso;
+  }
+
+
   const DAY_SPAN_MIN = 24*60;
 
   function ensureDayTimingMaps(d){
@@ -2163,6 +2189,15 @@ function setupScheduleWheelScroll(){
       node.disabled = !d;
       node.value = d ? (d[map[id]] || "") : "";
     }
+
+    const dateDisp = el("day_date_display");
+    if(dateDisp){
+      dateDisp.disabled = !d;
+      dateDisp.value = d ? formatDDMMYYYY(d.date) : "";
+    }
+
+    const datePickBtn = el("day_date_pick");
+    if(datePickBtn) datePickBtn.disabled = !d;
 
     renderDayCast();
     renderDayCrewPicker();
@@ -5627,6 +5662,10 @@ el("scriptVerSelect")?.addEventListener("change", ()=>{
         const d = selectedDayId ? getDay(selectedDayId) : null;
         if(!d) return;
         d[dayMap[id]] = el(id).value;
+        if(id==="day_date"){
+          const disp = el("day_date_display");
+          if(disp) disp.value = formatDDMMYYYY(d.date);
+        }
         if(id==="day_call") cleanupDayCallTimes(d);
         sortShootDaysInPlace();
         touch();
@@ -5639,7 +5678,38 @@ el("scriptVerSelect")?.addEventListener("change", ()=>{
       });
     }
 
-    el("day_call_minus")?.addEventListener("click", ()=>{
+    
+    // Fecha DD/MM/AAAA en Call Diario (mantiene el date picker real oculto)
+    const dayDateDisp = el("day_date_display");
+    const dayDatePickBtn = el("day_date_pick");
+    if(dayDatePickBtn){
+      dayDatePickBtn.addEventListener("click", ()=>{
+        const hid = el("day_date");
+        if(hid && typeof hid.showPicker === "function") hid.showPicker();
+        else hid?.focus();
+      });
+    }
+    if(dayDateDisp){
+      dayDateDisp.addEventListener("input", ()=>{
+        const d = selectedDayId ? getDay(selectedDayId) : null;
+        if(!d) return;
+        const iso = parseDDMMYYYY(dayDateDisp.value);
+        if(!iso) return;
+        d.date = iso;
+        const hid = el("day_date");
+        if(hid) hid.value = iso;
+        sortShootDaysInPlace();
+        touch();
+        renderDaysBoard();
+        renderDayDetail();
+        renderReports();
+        renderScheduleBoard();
+        renderCallSheetCalendar();
+        renderReportsDetail();
+      });
+    }
+
+el("day_call_minus")?.addEventListener("click", ()=>{
       const d = selectedDayId ? getDay(selectedDayId) : null;
       if(!d) return;
       d.callTime = hhmmFromMinutes(minutesFromHHMM(d.callTime||"08:00") - 15);
