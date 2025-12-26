@@ -575,6 +575,32 @@ function enforceScriptVersionsLimit(notify=false){
     return `${n}m`;
   }
 
+  // Duración en formato hh mm (para plan de rodaje)
+  function durToHM(mins){
+    const n = Math.max(0, Math.round(Number(mins)||0));
+    return { h: Math.floor(n/60), m: n % 60 };
+  }
+  function formatDurHHMM(mins){
+    const {h,m} = durToHM(mins);
+    const hh = String(h).padStart(2,"0");
+    const mm = String(m).padStart(2,"0");
+    return `${hh}h ${mm}m`;
+  }
+  function formatDurHHMMCompact(mins){
+    const {h,m} = durToHM(mins);
+    const hh = String(h).padStart(2,"0");
+    const mm = String(m).padStart(2,"0");
+    return `${hh}h${mm}m`;
+  }
+  function minuteOptionsFromSnap(snapMin){
+    const step = Math.max(1, Math.round(Number(snapMin)||1));
+    if(step >= 60) return [0];
+    const arr = [];
+    for(let m=0; m<60; m+=step) arr.push(m);
+    return arr.length ? arr : [0];
+  }
+
+
   function preOffsetFromCall(callHHMM){
     const callM = minutesFromHHMM(callHHMM || "08:00");
     const baseM = Math.floor(callM/60)*60;
@@ -3644,7 +3670,7 @@ const height = Math.max(Math.round((absEnd - absStart) * ppm), Math.round(snapMi
              data-key="${eattr(it.key)}" data-kind="${eattr(it.kind)}" data-id="${eattr(it.id)}"
              style="top:${top}px;height:${height}px;background:${eattr(bg)};border-left:8px solid ${eattr(col)};">
           <div class="dpBlockTop">
-            <div class="dpBlockTime">${esc(startTxt)} – ${esc(endTxt)}</div>
+            <div class="dpBlockTime">${esc(startTxt)} – ${esc(endTxt)} <span class="dpBlockDur">· ${esc(formatDurHHMM(dur))}</span></div>
             <div class="dpBlockBtns">
               <button class="dpMiniBtn noPrint" data-action="palette" title="Color">🎨</button>
               ${delBtn}
@@ -3769,13 +3795,15 @@ ${
 
     // Print table (se ve solo al imprimir)
     const rows = items.map((it)=>{
-      const col = safeHexColor(it.color || (it.kind==="scene" ? "#BFDBFE" : "#E5E7EB"));
-      const bg = hexToRgba(col, 0.14);
       const absStart = clamp(base + (it.start||0), 0, DAY_SPAN_MIN - snapMin);
       const dur = clamp(Math.max(snapMin, it.dur||snapMin), snapMin, DAY_SPAN_MIN);
       const absEnd = clamp(absStart + dur, 0, DAY_SPAN_MIN);
-      const clock = `${hhmmFromMinutes(absStart)} – ${hhmmFromMinutes(absEnd)}`;
       const isNote = it.kind==="block";
+      const col = safeHexColor(it.color || (it.kind==="scene" ? "#BFDBFE" : "#E5E7EB"));
+      const bg = hexToRgba(col, isNote ? 0.10 : 0.12);
+      const tA = hhmmFromMinutes(absStart);
+      const tB = hhmmFromMinutes(absEnd);
+      const clockHTML = `<div class="dpClock2"><div>${esc(tA)}</div><div>${esc(tB)}</div></div>`;
 const num = isNote ? "NOTA" : (it.number||"");
 const title = isNote ? (it.title||"") : (it.slugline||it.title||"");
 const ie = isNote ? "" : (it.intExt||"");
@@ -3785,14 +3813,14 @@ const pagesTxt = isNote ? "" : ((Number(it.pages)||0) > 0 ? fmtPages(it.pages) :
 const sumTxt = isNote ? (it.detail||"") : (it.summary||"");
 return `
   <tr class="${isNote ? "dpPrintNote" : ""}" style="background:${eattr(bg)};border-left:8px solid ${eattr(col)};">
-    <td style="width:118px">${esc(clock)}</td>
-    <td style="width:62px">${esc(formatDuration(dur))}</td>
-    <td style="width:62px">${esc(num)}</td>
+    <td style="width:64px">${clockHTML}</td>
+    <td style="width:50px">${esc(formatDurHHMMCompact(dur))}</td>
+    <td style="width:46px">${esc(num)}</td>
     <td>${esc(title)}</td>
-    <td style="width:70px">${esc(ie)}</td>
+    <td style="width:52px">${esc(ie)}</td>
     <td>${esc(locTxt)}</td>
-    <td style="width:92px">${esc(todTxt)}</td>
-    <td style="width:78px">${esc(pagesTxt)}</td>
+    <td style="width:86px">${esc(todTxt)}</td>
+    <td style="width:52px">${esc(pagesTxt)}</td>
     <td>${esc(sumTxt)}</td>
   </tr>
 `;
@@ -4019,6 +4047,10 @@ dayplanPointer = {
     const absStart = clamp(base + (it.start||0), 0, DAY_SPAN_MIN - snapMin);
     const dur = clamp(Math.max(snapMin, it.dur||snapMin), snapMin, DAY_SPAN_MIN);
     const timeVal = hhmmFromMinutes(absStart);
+    const hm = durToHM(dur);
+    const minOpts = minuteOptionsFromSnap(snapMin);
+    let selM = hm.m;
+    if(!minOpts.includes(selM)) selM = minOpts[0];
 
     const isBlock = it.kind==="block";
 
@@ -4041,8 +4073,16 @@ dayplanPointer = {
           <input class="input" type="time" id="dpi_time" value="${esc(timeVal)}">
         </div>
         <div class="field">
-          <label>Duración (min)</label>
-          <input class="input" type="number" id="dpi_dur" min="${snapMin}" step="${snapMin}" value="${esc(String(dur))}">
+          <label>Duración</label>
+          <div class="dpDurRow">
+            <input class="input dpDurH" type="number" id="dpi_dur_h" min="0" step="1" value="${esc(String(hm.h))}">
+            <span class="muted small">h</span>
+            <select class="input dpDurM" id="dpi_dur_m">
+              ${minOpts.map(n=>`<option value="${n}"${(n===selM)?" selected":""}>${String(n).padStart(2,"0")}</option>`).join("")}
+            </select>
+            <span class="muted small">m</span>
+          </div>
+          <div class="muted small" style="margin-top:6px">Total: <b>${esc(formatDurHHMM(dur))}</b></div>
         </div>
 
         ${isBlock ? `
@@ -4054,13 +4094,23 @@ dayplanPointer = {
             <label>Detalle</label>
             <textarea class="textarea smallArea" id="dpi_detail">${esc(it.detail||"")}</textarea>
           </div>
-        ` : `
+                ` : `
           <div class="field" style="grid-column:1/-1">
-            <label>Detalle</label>
-            <div class="muted">${esc(it.detail||"—")}</div>
+            <label>Datos de escena</label>
+            <div class="dpSceneTop"><b>#${esc(it.number||"")}</b> ${esc(it.slugline||"")}</div>
+            <div class="dpFacts">
+              <div class="dpFact"><div class="k">Int/Ext</div><div class="v">${esc(it.intExt||"—")}</div></div>
+              <div class="dpFact"><div class="k">Lugar</div><div class="v">${esc(it.location||"—")}</div></div>
+              <div class="dpFact"><div class="k">Momento</div><div class="v">${esc(it.timeOfDay||"—")}</div></div>
+              <div class="dpFact"><div class="k">Largo (Pág)</div><div class="v">${esc((Number(it.pages)||0) > 0 ? fmtPages(it.pages) : "—")}</div></div>
+            </div>
+          </div>
+          <div class="field" style="grid-column:1/-1">
+            <label>Resumen</label>
+            <div class="muted dpSceneResText">${esc(it.summary||"—")}</div>
           </div>
         `}
-      </div>
+</div>
 
       <div class="dpActions">
         ${it.kind==="scene" ? `<button class="btn" id="dpi_openScene">Abrir escena</button>` : ``}
@@ -4120,9 +4170,10 @@ dayplanPointer = {
           renderReports();
           return;
         }
-
-        if(e.target.id === "dpi_dur"){
-          let dur = Number(e.target.value||0);
+        if(e.target.id === "dpi_dur_h" || e.target.id === "dpi_dur_m"){
+          const h = Number(el("dpi_dur_h")?.value || 0);
+          const m = Number(el("dpi_dur_m")?.value || 0);
+          let dur = (Number.isFinite(h)?h:0) * 60 + (Number.isFinite(m)?m:0);
           if(!Number.isFinite(dur) || dur<=0) dur = snap0;
           dur = snap(dur, snap0);
           dur = clamp(dur, snap0, DAY_SPAN_MIN);
@@ -4673,7 +4724,6 @@ function renderShotList(){
       const absStart = clamp(base + (it.start||0), 0, DAY_SPAN_MIN - snapMin);
       const dur = clamp(Math.max(snapMin, it.dur||snapMin), snapMin, DAY_SPAN_MIN);
       const absEnd = clamp(absStart + dur, 0, DAY_SPAN_MIN);
-      const clock = `${hhmmFromMinutes(absStart)} – ${hhmmFromMinutes(absEnd)}`;
       const isNote = it.kind==="block";
 const num = isNote ? "NOTA" : (it.number||"");
 const title = isNote ? (it.title||"") : (it.slugline||it.title||"");
@@ -4683,17 +4733,20 @@ const todTxt = isNote ? "" : (it.timeOfDay||"");
 const pagesTxt = isNote ? "" : ((Number(it.pages)||0) > 0 ? fmtPages(it.pages) : "");
 const sumTxt = isNote ? (it.detail||"") : (it.summary||"");
 const col = safeHexColor(it.color || (it.kind==="scene" ? "#BFDBFE" : "#E5E7EB"));
-      const bg = hexToRgba(col, 0.14);
+      const bg = hexToRgba(col, isNote ? 0.10 : 0.12);
+      const tA = hhmmFromMinutes(absStart);
+      const tB = hhmmFromMinutes(absEnd);
+      const clockHTML = `<div class="dpClock2"><div>${esc(tA)}</div><div>${esc(tB)}</div></div>`;
       return `
         <tr class="${isNote ? "dpPrintNote" : ""}" style="background:${eattr(bg)};border-left:8px solid ${eattr(col)};">
-    <td style="width:118px">${esc(clock)}</td>
-    <td style="width:62px">${esc(formatDuration(dur))}</td>
-    <td style="width:62px">${esc(num)}</td>
+    <td style="width:64px">${clockHTML}</td>
+    <td style="width:50px">${esc(formatDurHHMMCompact(dur))}</td>
+    <td style="width:46px">${esc(num)}</td>
     <td>${esc(title)}</td>
-    <td style="width:70px">${esc(ie)}</td>
+    <td style="width:52px">${esc(ie)}</td>
     <td>${esc(locTxt)}</td>
-    <td style="width:92px">${esc(todTxt)}</td>
-    <td style="width:78px">${esc(pagesTxt)}</td>
+    <td style="width:86px">${esc(todTxt)}</td>
+    <td style="width:52px">${esc(pagesTxt)}</td>
     <td>${esc(sumTxt)}</td>
   </tr>
 `;
