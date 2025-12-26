@@ -3945,11 +3945,12 @@ return `
         const block = e.target.closest(".dpBlock");
         if(!block) return;
 
+        const action = e.target.closest("[data-action]")?.dataset.action || "";
+        if(action === "palette" || action === "pickColor" || action === "delete" || action === "removeScene" || action === "openScene") return;
+
         e.preventDefault();
         try{ block.setPointerCapture(e.pointerId); }catch(_){/*ignore*/}
 
-        const action = e.target.closest("[data-action]")?.dataset.action || "";
-        if(action === "palette" || action === "pickColor" || action === "delete" || action === "openScene") return;
 
         const dayId = selectedDayplanDayId || null;
         const d = dayId ? getDay(dayId) : null;
@@ -4715,14 +4716,19 @@ function renderShotList(){
   }
 
   function renderReportsDetail(){
-    const d = dayIdOverride ? getDay(dayIdOverride) : (callSheetDayId ? getDay(callSheetDayId) : (selectedDayId ? getDay(selectedDayId) : null));
+    const dayId = getReportsSelectedDayId();
+    const d = dayId ? getDay(dayId) : null;
+
     if(reportsTab==="dayplan"){
       renderReportDayplanDetail(d);
-    }else if(reportsTab==="shotlist"){
-      renderReportShotlistDetail(d);
-    }else{
-      renderCallSheetDetail();
+      return;
     }
+    if(reportsTab==="shotlist"){
+      renderReportShotlistDetail(d);
+      return;
+    }
+    // Call Sheet
+    renderCallSheetDetail(null, dayId);
   }
 
   function renderReportDayplanDetail(d){
