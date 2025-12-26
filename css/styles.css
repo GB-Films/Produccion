@@ -378,6 +378,7 @@ tr.groupRow td{
   gap:14px;
   align-items:start;
 }
+.shootingLayout.noBank{ grid-template-columns: 1fr !important; }
 .shootingLayout > .col{
   min-height:0;
   display:flex;
@@ -496,17 +497,21 @@ tr.groupRow td{
 
 
 /* Input fecha DD/MM/AAAA (mantiene date picker oculto) */
-.dateDual{ display:flex; align-items:center; gap:8px; }
+.dateDual{ position:relative; display:flex; align-items:center; gap:8px; }
 .dateDual #day_date_display{ flex:1 1 auto; font-size:18px; font-weight:900; }
-.dateDual .datePickBtn{ flex:0 0 auto; padding:6px 10px; }
+.dateDual .datePickBtn{ flex:0 0 auto; padding:6px 10px; position:relative; z-index:1; }
 .dateDual .hiddenDate{
+  /* queda encima del botón 📅 para que el click sea "real" sobre el input date */
   position:absolute;
-  left:-9999px;
+  right:0;
   top:0;
-  width:1px;
-  height:1px;
-  opacity:0;
-  pointer-events:none;
+  left:auto;
+  width:42px;
+  height:38px;
+  opacity:0.01;
+  pointer-events:auto;
+  z-index:2;
+  cursor:pointer;
 }
 
 @media (max-width:1200px){

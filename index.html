@@ -3,7 +3,7 @@
   <meta charset="utf-8"/>
   <meta content="width=device-width,initial-scale=1,viewport-fit=cover" name="viewport"/>
   <title>GB Production Board</title>
-  <link href="css/styles.css?v=20251226-16" rel="stylesheet"/>
+  <link href="css/styles.css?v=20251226-17" rel="stylesheet"/>
 </head>
 <body>
   <div class="shell">
@@ -257,41 +257,14 @@
 
       <!-- ================= PLAN DE RODAJE ================= -->
       <section class="view hidden" id="view-shooting">
-        <div class="shootingLayout" id="shootingLayout">
-          <!-- Banco -->
-          <div class="col" id="bankCol">
-            <div class="card bankCard">
-              <div class="cardHeader bankHeader" id="sceneBankHeader">
-                <h2 class="cardTitle">Banco de Escenas</h2>
-                <button class="btn icon" id="btnToggleBank" title="Colapsar/expandir">⟨</button>
-              </div>
-
-              <div class="cardContent" id="sceneBankBody">
-                <div class="row gap">
-                  <input class="input grow" id="bankSearch" placeholder="Buscar…"/>
-                  <select class="input compact" id="bankFilter">
-                    <option value="all">Todas</option>
-                    <option value="unassigned">No asignadas</option>
-                  </select>
-                </div>
-                <div class="bankList" id="sceneBankList"></div>
-              </div>
-            </div>
-
-            <!-- Dock visible cuando está colapsado -->
-            <div class="bankDock hidden" id="bankDock">
-              <button class="btn icon" id="btnToggleBankDock" title="Expandir">⟩</button>
-            </div>
-          </div>
-
+        <div class="shootingLayout noBank" id="shootingLayout">
           <!-- Tablero + Detalle -->
           <div class="col">
             <div class="card" id="daysBoardCard">
               <div class="cardHeader">
                 <h2 class="cardTitle">Tablero de Días</h2>
                 <div class="row gap">
-                  <button class="btn" id="btnAddShootDay">+ Día</button>
-                  <button class="btn danger" id="btnDeleteShootDay">Borrar Día</button>
+<button class="btn danger" id="btnDeleteShootDay">Borrar Día</button>
                 </div>
               </div>
               <div class="cardContent">
@@ -403,6 +376,7 @@
             <h2 class="cardTitle">Plan de Rodaje</h2>
             <div class="row gap noPrint" style="flex-wrap:wrap">
               <select class="input compact" id="dayplanSelect"></select>
+              <button class="btn" id="btnAddShootDay">+ Día</button>
 
               <div class="row gap" style="align-items:center">
                 <span class="muted">Snap</span>

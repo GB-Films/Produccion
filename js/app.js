@@ -1981,6 +1981,9 @@ function setupScheduleWheelScroll(){
         if(d.times) delete d.times[scene.id];
         if(d.durations) delete d.durations[scene.id];
         selectedDayId = d.id;
+        selectedDayplanDayId = d.id;
+        selectedShotlistDayId = selectedShotlistDayId || d.id;
+        callSheetDayId = callSheetDayId || d.id;
         touch();
         renderSceneBank();
         renderDaysBoard();
@@ -2054,11 +2057,16 @@ function setupScheduleWheelScroll(){
     state.shootDays.push(d);
     sortShootDaysInPlace();
     selectedDayId = d.id;
+    selectedDayplanDayId = d.id;
+    selectedShotlistDayId = selectedShotlistDayId || d.id;
+    callSheetDayId = callSheetDayId || d.id;
     touch();
     renderDaysBoard();
     renderDayDetail();
     renderReports();
     renderScheduleBoard();
+    renderDayPlan();
+    renderSceneBank();
     renderCallSheetCalendar();
     renderReportsDetail();
   }
@@ -2072,11 +2080,14 @@ function setupScheduleWheelScroll(){
     state.shootDays = state.shootDays.filter(x=>x.id!==d.id);
     sortShootDaysInPlace();
     selectedDayId = state.shootDays[0]?.id || null;
+    if(selectedDayplanDayId === d.id) selectedDayplanDayId = selectedDayId;
     touch();
     renderDaysBoard();
     renderDayDetail();
     renderReports();
     renderScheduleBoard();
+    renderDayPlan();
+    renderSceneBank();
     renderCallSheetCalendar();
     renderReportsDetail();
   }
@@ -5689,8 +5700,7 @@ el("scriptVerSelect")?.addEventListener("change", ()=>{
 
         // Prefer native picker when available
         if(typeof hid.showPicker === "function"){
-          hid.showPicker();
-          return;
+          try{ hid.showPicker(); return; }catch(err){}
         }
 
         // Fallback: temporarily place the hidden input over the button and click it
