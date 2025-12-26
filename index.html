@@ -64,10 +64,11 @@
                   <thead>
                     <tr>
                       <th style="width:72px;">#</th>
-                      <th>Slugline</th>
-                      <th>Locación</th>
-                      <th style="width:120px;">TOD</th>
-                      <th style="width:80px;">Pág</th>
+                      <th style="width:90px;">Int/Ext</th>
+                      <th>Título</th>
+                      <th>Lugar</th>
+                      <th style="width:130px;">Momento</th>
+                      <th style="width:110px;">Largo (pág)</th>
                     </tr>
                   </thead>
                   <tbody></tbody>
@@ -89,20 +90,35 @@
                   <input class="input" id="scene_number"/>
                 </div>
                 <div class="field">
-                  <label>Slugline</label>
-                  <input class="input" id="scene_slugline"/>
-                </div>
-                <div class="field">
-                  <label>Locación</label>
-                  <input class="input" id="scene_location"/>
+                  <label>Int / Ext</label>
+                  <select class="input" id="scene_intExt">
+                    <option value="">—</option>
+                    <option value="Int">Int</option>
+                    <option value="Ext">Ext</option>
+                  </select>
                 </div>
                 <div class="field">
                   <label>Momento del día</label>
-                  <input class="input" id="scene_timeOfDay" placeholder="Día / Noche"/>
+                  <select class="input" id="scene_timeOfDay">
+                    <option value="">—</option>
+                    <option value="Día">Día</option>
+                    <option value="Noche">Noche</option>
+                    <option value="Amanecer">Amanecer</option>
+                    <option value="Atardecer">Atardecer</option>
+                  </select>
                 </div>
                 <div class="field">
-                  <label>Páginas</label>
-                  <input class="input" id="scene_pages" min="0" step="0.25" type="number"/>
+                  <label>Largo páginas</label>
+                  <input class="input" id="scene_pages" min="0" step="0.5" type="number"/>
+                </div>
+
+                <div class="field" style="grid-column:1/-1">
+                  <label>Título</label>
+                  <input class="input" id="scene_slugline"/>
+                </div>
+                <div class="field" style="grid-column:1/-1">
+                  <label>Lugar</label>
+                  <input class="input" id="scene_location"/>
                 </div>
               </div>
 

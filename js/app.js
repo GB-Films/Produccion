@@ -346,6 +346,12 @@
 
   function ensureSceneExtras(s){
     if(!s) return;
+
+    // core fields (compat hacia atrás)
+    if(s.intExt==null) s.intExt = "";
+    s.intExt = normalizeIntExt(s.intExt);
+    if(s.timeOfDay!=null) s.timeOfDay = normalizeTOD(s.timeOfDay);
+
     // ensure elements structure
     if(!s.elements){
       s.elements = Object.fromEntries(cats.map(c=>[c,[]]));
@@ -472,6 +478,18 @@ function enforceScriptVersionsLimit(notify=false){
 
   function sluglineToLocTOD(slugline){
     const s = String(slugline||"").trim();
+
+    // INT / EXT (si es ambiguo tipo INT/EXT lo dejamos vacío)
+    let intExt = "";
+    const pref = s.match(/^\s*(INT\/EXT\.?|INT\.?\/EXT\.?|I\/E\.?|INT\.?|EXT\.?|INTERIOR|EXTERIOR)\b/i);
+    if(pref){
+      const p = String(pref[0]||"").toUpperCase();
+      if(p.startsWith("INT") && !p.includes("/")) intExt = "Int";
+      if(p.startsWith("EXT") && !p.includes("/")) intExt = "Ext";
+      if(p.startsWith("INTERIOR")) intExt = "Int";
+      if(p.startsWith("EXTERIOR")) intExt = "Ext";
+    }
+
     const parts = s.split(/\s[-–—]\s/g).map(p=>p.trim()).filter(Boolean);
     let location = "";
     let tod = "";
@@ -488,7 +506,23 @@ function enforceScriptVersionsLimit(notify=false){
         .replace(/^(INTERIOR|EXTERIOR)\s*/i,"")
         .trim();
     }
-    return { location, timeOfDay: tod };
+    return { location, timeOfDay: tod, intExt };
+  }
+
+  function normalizeIntExt(raw){
+    const t = (raw||"").trim().toLowerCase();
+    const map = {
+      "int":"Int", "interior":"Int", "i":"Int",
+      "ext":"Ext", "exterior":"Ext", "e":"Ext",
+    };
+    return map[t] || (raw||"").trim();
+  }
+
+  function formatPages(p){
+    const n = Number(p);
+    if(!Number.isFinite(n) || n<=0) return "";
+    const s = String(Math.round(n*10)/10);
+    return s.replace(".",",");
   }
 
 
@@ -1159,6 +1193,7 @@ function setupScheduleWheelScroll(){
       id: uid("scene"),
       number: String(s.number),
       slugline: s.slugline,
+      intExt: s.intExt || "",
       location: s.location,
       timeOfDay: s.timeOfDay,
       pages: 0,
@@ -1176,27 +1211,11 @@ function setupScheduleWheelScroll(){
 
       const slugline = stripSceneNumber(heading).trim();
 
-      const parts = slugline.split(/\s[-–—]\s/g).map(p=>p.trim()).filter(Boolean);
-      let location = "";
-      let tod = "";
-
-      if(parts.length >= 2){
-        tod = normalizeTOD(parts[parts.length-1]);
-        const mid = parts.slice(0, parts.length-1).join(" - ");
-        location = mid
-          .replace(/^(INT\/EXT\.?|INT\.\/EXT\.?|I\/E\.?|INT\.?|EXT\.?)\s*/i,"")
-          .replace(/^(INTERIOR|EXTERIOR)\s*/i,"")
-          .trim();
-      }else{
-        location = slugline
-          .replace(/^(INT\/EXT\.?|INT\.\/EXT\.?|I\/E\.?|INT\.?|EXT\.?)\s*/i,"")
-          .replace(/^(INTERIOR|EXTERIOR)\s*/i,"")
-          .trim();
-      }
+      const { location, timeOfDay: tod, intExt } = sluglineToLocTOD(slugline);
 
       const bodyText = (s.body||[]).join(" ");
       const summary = bodyText.slice(0, 220);
-      return { number:num, slugline, location, timeOfDay:tod, summary };
+      return { number:num, slugline, intExt, location, timeOfDay:tod, summary };
     }
   }
 
@@ -1249,6 +1268,7 @@ function setupScheduleWheelScroll(){
       id: uid("scrScene"),
       number: canonSceneNumber(String(s.number)),
       slugline: s.slugline,
+      intExt: s.intExt || "",
       location: s.location,
       timeOfDay: s.timeOfDay,
       body: s.body.join("\n").trim(),
@@ -1263,11 +1283,11 @@ function setupScheduleWheelScroll(){
       if(mNum) num = canonSceneNumber(mNum[1] + (mNum[2]||""));
 
       const slugline = stripSceneNumber(heading).trim();
-      const { location, timeOfDay } = sluglineToLocTOD(slugline);
+      const { location, timeOfDay, intExt } = sluglineToLocTOD(slugline);
 
       const bodyText = (s.body||[]).join(" ").trim();
       const summary = bodyText.slice(0, 220);
-      return { number:num, slugline, location, timeOfDay, body: s.body||[], summary };
+      return { number:num, slugline, intExt, location, timeOfDay, body: s.body||[], summary };
     }
   }
 
@@ -1288,6 +1308,7 @@ function setupScheduleWheelScroll(){
       id: uid("scrScene"),
       number: canonSceneNumber(sc.number||""),
       slugline: sc.slugline||"",
+      intExt: sc.intExt||"",
       location: sc.location||"",
       timeOfDay: sc.timeOfDay||"",
       body: sc.body||"",
@@ -1380,7 +1401,7 @@ function setupScheduleWheelScroll(){
     tbody.innerHTML = "";
 
     const list = state.scenes.filter(s=>{
-      const hay = `${s.number} ${s.slugline} ${s.location} ${s.summary}`.toLowerCase();
+      const hay = `${s.number} ${s.intExt||""} ${s.slugline} ${s.location} ${s.timeOfDay||""} ${s.summary}`.toLowerCase();
       if(q && !hay.includes(q)) return false;
       if(tod && (s.timeOfDay||"")!==tod) return false;
       return true;
@@ -1391,10 +1412,11 @@ function setupScheduleWheelScroll(){
       tr.className = (s.id===selectedSceneId) ? "selected" : "";
       tr.innerHTML = `
         <td>${esc(s.number||"")}</td>
+        <td>${esc(s.intExt||"")}</td>
         <td>${esc(s.slugline||"")}</td>
         <td>${esc(s.location||"")}</td>
         <td>${esc(s.timeOfDay||"")}</td>
-        <td>${s.pages? esc(String(s.pages)) : ""}</td>
+        <td>${s.pages? esc(formatPages(s.pages)) : ""}</td>
       `;
       tr.addEventListener("click", ()=>{
         selectedSceneId = s.id;
@@ -1445,7 +1467,7 @@ function setupScheduleWheelScroll(){
     const hint = el("selectedSceneHint");
     if(hint) hint.textContent = s ? `Editando escena #${s.number}` : "Seleccioná una escena";
 
-    const fields = ["number","slugline","location","timeOfDay","pages","summary","notes"];
+    const fields = ["number","intExt","timeOfDay","pages","slugline","location","summary","notes"];
     for(const f of fields){
       const node = el(`scene_${f}`);
       if(!node) continue;
@@ -1638,13 +1660,14 @@ function setupScheduleWheelScroll(){
     if(!list) return;
     list.innerHTML = "";
     for(const sc of (version.scenes||[])){
+      const meta = [sc.intExt, sc.location, sc.timeOfDay].filter(Boolean).join(" · ");
       const item = document.createElement("div");
       item.className = "scriptSceneItem" + (sc.id===selectedScriptSceneId ? " selected" : "");
       item.innerHTML = `
         <div class="n">${esc(canonSceneNumber(sc.number||""))}</div>
         <div class="grow">
           <div class="h">${esc(sc.slugline||"")}</div>
-          <div class="m">${esc(sc.location||"")}${sc.timeOfDay? " · "+esc(sc.timeOfDay):""}</div>
+          <div class="m">${esc(meta||"")}</div>
         </div>
       `;
       item.addEventListener("click", ()=>{
@@ -1712,9 +1735,10 @@ function setupScheduleWheelScroll(){
         const scc = (v.scenes||[]).find(s=>s.id===selectedScriptSceneId);
         if(!scc) return;
         scc.slugline = inSlug.value;
-        const { location, timeOfDay } = sluglineToLocTOD(scc.slugline);
+        const { location, timeOfDay, intExt } = sluglineToLocTOD(scc.slugline);
         scc.location = location;
         scc.timeOfDay = timeOfDay;
+        scc.intExt = intExt;
         v.updatedAt = new Date().toISOString();
         touch();
         renderScriptSceneList(v);
@@ -1741,6 +1765,7 @@ function setupScheduleWheelScroll(){
       id: uid("scene"),
       number: nextNewSceneNumber(),
       slugline:"",
+      intExt:"",
       location:"",
       timeOfDay:"",
       pages:0,
@@ -1863,13 +1888,20 @@ function setupScheduleWheelScroll(){
     node.draggable = true;
     node.dataset.sceneId = scene.id;
 
+    const meta = [
+      scene.intExt,
+      scene.location,
+      scene.timeOfDay,
+      scene.pages ? `${formatPages(scene.pages)} pág` : ""
+    ].filter(Boolean).join(" · ");
+
     if(mode==="bank"){
       const assigned = !!sceneAssignedDayId(scene.id);
       node.classList.add(assigned ? "assigned" : "unassigned");
       node.innerHTML = `
         <div class="left">
           <div class="title">#${esc(scene.number||"")} — ${esc(scene.slugline||"")}</div>
-          <div class="meta">${esc(scene.location||"")} · ${esc(scene.timeOfDay||"")}</div>
+          <div class="meta">${esc(meta||"")}</div>
         </div>
         <div class="right"><span class="dragHandle">⠿</span></div>
       `;
@@ -1878,6 +1910,7 @@ function setupScheduleWheelScroll(){
       node.innerHTML = `
         <div class="left">
           <div class="title">#${esc(scene.number||"")} — ${esc(scene.slugline||"")}</div>
+          <div class="meta">${esc(meta||"")}</div>
         </div>
         <div class="right">
           <button class="btn icon sceneRemoveBtn" title="Quitar del día">×</button>
@@ -3394,8 +3427,13 @@ function updateScheduleDayDOM(dayId){
         id:sid,
         start: Number(d.times?.[sid] ?? 0) || 0,
         dur: Number(d.durations?.[sid] ?? 60) || 0,
-        title: `#${sc.number||""} ${sc.slugline||""}`.trim(),
-        detail: [sc.location||"", sc.timeOfDay||""].filter(Boolean).join(" · "),
+        title: `#${sc.number||""} — ${sc.slugline||""}`.trim(),
+        detail: [
+          sc.intExt||"",
+          sc.location||"",
+          sc.timeOfDay||"",
+          sc.pages ? `${formatPages(sc.pages)} pág` : ""
+        ].filter(Boolean).join(" · "),
         color: d.sceneColors?.[sid] || ""
       });
     }
@@ -3623,12 +3661,28 @@ const height = Math.max(Math.round((absEnd - absStart) * ppm), Math.round(snapMi
       const dur = clamp(Math.max(snapMin, it.dur||snapMin), snapMin, DAY_SPAN_MIN);
       const absEnd = clamp(absStart + dur, 0, DAY_SPAN_MIN);
       const clock = `${hhmmFromMinutes(absStart)} – ${hhmmFromMinutes(absEnd)}`;
+
+      const isScene = (it.kind === "scene");
+      const sc = isScene ? getScene(it.id) : null;
+      const num = isScene ? (sc?.number||"") : "";
+      const title = isScene ? (sc?.slugline||it.title||"") : (it.title||"");
+      const ie = isScene ? (sc?.intExt||"") : "";
+      const loc = isScene ? (sc?.location||"") : "";
+      const tod = isScene ? (sc?.timeOfDay||"") : "";
+      const pages = isScene && sc?.pages ? formatPages(sc.pages) : "";
+      const notes = isScene ? (sc?.summary||"") : (it.detail||"");
+
       return `
         <tr style="background:${eattr(bg)};border-left:8px solid ${eattr(col)};">
           <td style="width:120px">${esc(clock)}</td>
-          <td style="width:70px">${esc(formatDuration(dur))}</td>
-          <td>${esc(it.title||"")}</td>
-          <td>${esc(it.detail||"")}</td>
+          <td style="width:60px">${esc(formatDuration(dur))}</td>
+          <td style="width:60px">${esc(num)}</td>
+          <td>${esc(title)}</td>
+          <td style="width:70px">${esc(ie)}</td>
+          <td>${esc(loc)}</td>
+          <td style="width:110px">${esc(tod)}</td>
+          <td style="width:70px">${esc(pages)}</td>
+          <td>${esc(notes)}</td>
         </tr>
       `;
     }).join("");
@@ -3640,9 +3694,19 @@ const height = Math.max(Math.round((absEnd - absStart) * ppm), Math.round(snapMi
         <div class="cardContent">
           <table class="dayplanPrintTable">
             <thead>
-              <tr><th>Hora</th><th>Dur</th><th>Item</th><th>Detalle</th></tr>
+              <tr>
+                <th>Hora</th>
+                <th>Dur</th>
+                <th>#</th>
+                <th>Título / Item</th>
+                <th>Int/Ext</th>
+                <th>Lugar</th>
+                <th>Momento</th>
+                <th>Pág</th>
+                <th>Notas</th>
+              </tr>
             </thead>
-            <tbody>${rows || `<tr><td colspan="4" class="muted">—</td></tr>`}</tbody>
+            <tbody>${rows || `<tr><td colspan="9" class="muted">—</td></tr>`}</tbody>
           </table>
         </div>
       </div>
@@ -4625,14 +4689,26 @@ function renderShotList(){
       renderCallSheetDetail();
     });
 
-    ["slugline","location","timeOfDay","pages","summary","notes"].forEach(k=>{
+    ["slugline","intExt","location","timeOfDay","pages","summary","notes"].forEach(k=>{
       const node = el(`scene_${k}`);
-      node?.addEventListener("input", ()=>{
+      if(!node) return;
+      const evt = (k==="timeOfDay" || k==="intExt") ? "change" : "input";
+      node.addEventListener(evt, ()=>{
         const s = selectedSceneId ? getScene(selectedSceneId) : null;
         if(!s) return;
         if(k==="pages") s[k] = Number(node.value||0);
         else if(k==="timeOfDay") s[k] = normalizeTOD(node.value);
+        else if(k==="intExt") s[k] = normalizeIntExt(node.value);
         else s[k] = node.value;
+
+        // Autocompleta si pegás una slugline clásica (INT./EXT. ... - TOD)
+        if(k==="slugline"){
+          const parsed = sluglineToLocTOD(s.slugline);
+          if(!s.intExt && parsed.intExt){ s.intExt = parsed.intExt; el("scene_intExt").value = parsed.intExt; }
+          if(!s.location && parsed.location){ s.location = parsed.location; el("scene_location").value = parsed.location; }
+          if(!s.timeOfDay && parsed.timeOfDay){ s.timeOfDay = parsed.timeOfDay; el("scene_timeOfDay").value = parsed.timeOfDay; }
+        }
+
         touch();
         renderScenesTable();
         renderSceneBank();
@@ -4816,6 +4892,7 @@ el("scriptVerSelect")?.addEventListener("change", ()=>{
           id: uid("scrScene"),
           number: "1",
           slugline: "INT. (NUEVA ESCENA) - DÍA",
+	          intExt: "Int",
           location: "(NUEVA ESCENA)",
           timeOfDay: "Día",
           body: "",
@@ -4840,6 +4917,7 @@ el("scriptVerSelect")?.addEventListener("change", ()=>{
         id: uid("scrScene"),
         number: nextNum,
         slugline: "INT. (NUEVA ESCENA) - DÍA",
+	        intExt: "Int",
         location: "(NUEVA ESCENA)",
         timeOfDay: "Día",
         body: "",
@@ -4870,6 +4948,7 @@ el("scriptVerSelect")?.addEventListener("change", ()=>{
           ensureSceneExtras(existing);
           existing.number = num;
           existing.slugline = sc.slugline || existing.slugline;
+          existing.intExt = sc.intExt || existing.intExt || "";
           existing.location = sc.location || existing.location;
           existing.timeOfDay = sc.timeOfDay || existing.timeOfDay;
           existing.summary = sc.summary || String(sc.body||"").replace(/\s+/g," ").trim().slice(0,220) || existing.summary;
@@ -4879,6 +4958,7 @@ el("scriptVerSelect")?.addEventListener("change", ()=>{
             id: uid("scene"),
             number: num,
             slugline: sc.slugline || "",
+            intExt: sc.intExt || "",
             location: sc.location || "",
             timeOfDay: sc.timeOfDay || "",
             pages: 0,
@@ -4922,10 +5002,12 @@ el("scriptVerSelect")?.addEventListener("change", ()=>{
       for(let i=start;i<rows.length;i++){
         const r = rows[i];
         if(!r.length) continue;
+	        const parsed = sluglineToLocTOD(r[1]||"");
         state.scenes.push({
           id: uid("scene"),
           number: r[0]||"",
           slugline: r[1]||"",
+	          intExt: parsed.intExt || "",
           location: r[2]||"",
           timeOfDay: normalizeTOD(r[3]||""),
           pages: Number(r[4]||0),
@@ -5058,6 +5140,7 @@ if(!state.scenes.length){
         id: uid("scene"),
         number:"1",
         slugline:"INT. CASA - NOCHE",
+        intExt:"Int",
         location:"Casa",
         timeOfDay:"Noche",
         pages:1,
