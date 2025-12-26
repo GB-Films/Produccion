@@ -1406,12 +1406,30 @@ tr.groupRow td{
 }
 .dayplanPrintTable td{ word-break:break-word; }
 
-/* ===== Plan de Rodaje (impresión): columnas más angostas ===== */
-.dayplanPrintTable col.colHour{ width:46px; }
-.dayplanPrintTable col.colDur{ width:38px; }
-.dayplanPrintTable col.colNro{ width:34px; }
-.dayplanPrintTable col.colIE{ width:42px; }
-.dayplanPrintTable col.colPag{ width:44px; }
+/* ===== Plan de Rodaje (impresión): columnas angostas + Resumen grande ===== */
+.dayplanPrintTable col.colHour{ width:38px; }
+.dayplanPrintTable col.colDur{ width:28px; }
+.dayplanPrintTable col.colNro{ width:28px; }
+.dayplanPrintTable col.colIE{ width:34px; }
+.dayplanPrintTable col.colPag{ width:38px; }
+
+/* Momento: angosto, que entre el título */
+.dayplanPrintTable col.colTod{ width:56px; }
+
+/* Lugar: ~30% más angosto */
+.dayplanPrintTable col.colLoc{ width:64px; }
+
+/* Título: ancho razonable; el resto se lo lleva Resumen */
+.dayplanPrintTable col.colTitle{ width:160px; }
+
+
+.dayplanPrintTable td.cLoc, .dayplanPrintTable td.cTod{
+  white-space:normal;
+  word-break:break-word;
+}
+.dayplanPrintTable th{
+  white-space:normal;
+}
 
 .dayplanPrintTable td.cHour,
 .dayplanPrintTable td.cDur,
@@ -2230,7 +2248,15 @@ tr.groupRow td{
 /* ===== Print overrides: sin recuadro de tarjetas (Reportes / Plan de Rodaje) ===== */
 @media print{
   /* Imprimir solo el contenido útil */
+  /* En impresión: el layout de Plan de Rodaje debe ocupar todo el ancho (si el Banco está oculto, el grid auto-colapsa) */
+  #dayplanLayout{ grid-template-columns: 1fr !important; }
+  #dayplanLayout > .col{ grid-column: 1 / -1 !important; width:100% !important; }
+  #dayplanCard, #dayplanPrint{ width:100% !important; max-width:none !important; }
   #dpBankCol{ display:none !important; }
+
+  /* En Plan de Rodaje: esconder la UI de pantalla (encabezado/timeline) y dejar solo la tabla de impresión */
+  #dayplanHead, #dayplanCard .spacer, #dayplanCard .dayplanBody{ display:none !important; }
+  #dayplanPrint{ display:block !important; }
 
   /* Sacar el "recuadro" de las tarjetas contenedoras */
   #callDetailCard, #dayplanCard{

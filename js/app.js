@@ -3836,8 +3836,8 @@ return `
         <div class="items">
           <table class="dayplanPrintTable">
             <colgroup>
-              <col class="colHour"><col class="colDur"><col class="colNro"><col>
-              <col class="colIE"><col><col><col class="colPag"><col>
+              <col class="colHour"><col class="colDur"><col class="colNro"><col class="colTitle">
+              <col class="colIE"><col class="colLoc"><col class="colTod"><col class="colPag"><col class="colSum">
             </colgroup>
             <thead>
               <tr><th>Hora</th><th>Dur</th><th>Nro</th><th>Título</th><th>Int/Ext</th><th>Lugar</th><th>Momento</th><th>Largo (Pág)</th><th>Resumen</th></tr>
@@ -4764,8 +4764,8 @@ const col = safeHexColor(it.color || (it.kind==="scene" ? "#BFDBFE" : "#E5E7EB")
     table.innerHTML = `
       <table class="dayplanPrintTable">
         <colgroup>
-          <col class="colHour"><col class="colDur"><col class="colNro"><col>
-          <col class="colIE"><col><col><col class="colPag"><col>
+          <col class="colHour"><col class="colDur"><col class="colNro"><col class="colTitle">
+          <col class="colIE"><col class="colLoc"><col class="colTod"><col class="colPag"><col class="colSum">
         </colgroup>
         <thead><tr><th>Hora</th><th>Dur</th><th>Nro</th><th>Título</th><th>Int/Ext</th><th>Lugar</th><th>Momento</th><th>Largo (Pág)</th><th>Resumen</th></tr></thead>
         <tbody>${rows || `<tr><td colspan="9" class="muted">—</td></tr>`}</tbody>
