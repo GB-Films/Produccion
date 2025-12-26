@@ -3813,25 +3813,32 @@ const pagesTxt = isNote ? "" : ((Number(it.pages)||0) > 0 ? fmtPages(it.pages) :
 const sumTxt = isNote ? (it.detail||"") : (it.summary||"");
 return `
   <tr class="${isNote ? "dpPrintNote" : ""}" style="background:${eattr(bg)};border-left:8px solid ${eattr(col)};">
-    <td style="width:64px">${clockHTML}</td>
-    <td style="width:50px">${esc(formatDurHHMMCompact(dur))}</td>
-    <td style="width:46px">${esc(num)}</td>
-    <td>${esc(title)}</td>
-    <td style="width:52px">${esc(ie)}</td>
-    <td>${esc(locTxt)}</td>
-    <td style="width:86px">${esc(todTxt)}</td>
-    <td style="width:52px">${esc(pagesTxt)}</td>
-    <td>${esc(sumTxt)}</td>
+    <td class="cHour">${clockHTML}</td>
+    <td class="cDur">${esc(formatDurHHMMCompact(dur))}</td>
+    <td class="cNro">${esc(num)}</td>
+    <td class="cTitle">${esc(title)}</td>
+    <td class="cIE">${esc(ie)}</td>
+    <td class="cLoc">${esc(locTxt)}</td>
+    <td class="cTod">${esc(todTxt)}</td>
+    <td class="cPag">${esc(pagesTxt)}</td>
+    <td class="cSum">${esc(sumTxt)}</td>
   </tr>
 `;
 }).join("");
 
     printWrap.innerHTML = `
-      <div class="spacer"></div>
-      <div class="card" style="border:1px solid #ddd; box-shadow:none;">
-        <div class="cardHeader"><h3 class="cardTitle">Itinerario</h3></div>
-        <div class="cardContent">
+      <div class="catBlock dpPrintBlock">
+        <div class="hdr"><span class="dot" style="background:var(--cat-vehicles)"></span>Plan de Rodaje</div>
+        <div class="items">
+          <div><b>${proj}</b> · ${dayTxt}</div>
+          <div><b>Call:</b> ${call||"—"} &nbsp; <b>Locación:</b> ${loc||"—"}</div>
+        </div>
+        <div class="items">
           <table class="dayplanPrintTable">
+            <colgroup>
+              <col class="colHour"><col class="colDur"><col class="colNro"><col>
+              <col class="colIE"><col><col><col class="colPag"><col>
+            </colgroup>
             <thead>
               <tr><th>Hora</th><th>Dur</th><th>Nro</th><th>Título</th><th>Int/Ext</th><th>Lugar</th><th>Momento</th><th>Largo (Pág)</th><th>Resumen</th></tr>
             </thead>
@@ -4739,15 +4746,15 @@ const col = safeHexColor(it.color || (it.kind==="scene" ? "#BFDBFE" : "#E5E7EB")
       const clockHTML = `<div class="dpClock2"><div>${esc(tA)}</div><div>${esc(tB)}</div></div>`;
       return `
         <tr class="${isNote ? "dpPrintNote" : ""}" style="background:${eattr(bg)};border-left:8px solid ${eattr(col)};">
-    <td style="width:64px">${clockHTML}</td>
-    <td style="width:50px">${esc(formatDurHHMMCompact(dur))}</td>
-    <td style="width:46px">${esc(num)}</td>
-    <td>${esc(title)}</td>
-    <td style="width:52px">${esc(ie)}</td>
-    <td>${esc(locTxt)}</td>
-    <td style="width:86px">${esc(todTxt)}</td>
-    <td style="width:52px">${esc(pagesTxt)}</td>
-    <td>${esc(sumTxt)}</td>
+    <td class="cHour">${clockHTML}</td>
+    <td class="cDur">${esc(formatDurHHMMCompact(dur))}</td>
+    <td class="cNro">${esc(num)}</td>
+    <td class="cTitle">${esc(title)}</td>
+    <td class="cIE">${esc(ie)}</td>
+    <td class="cLoc">${esc(locTxt)}</td>
+    <td class="cTod">${esc(todTxt)}</td>
+    <td class="cPag">${esc(pagesTxt)}</td>
+    <td class="cSum">${esc(sumTxt)}</td>
   </tr>
 `;
 }).join("");
@@ -4756,6 +4763,10 @@ const col = safeHexColor(it.color || (it.kind==="scene" ? "#BFDBFE" : "#E5E7EB")
     table.className = "items";
     table.innerHTML = `
       <table class="dayplanPrintTable">
+        <colgroup>
+          <col class="colHour"><col class="colDur"><col class="colNro"><col>
+          <col class="colIE"><col><col><col class="colPag"><col>
+        </colgroup>
         <thead><tr><th>Hora</th><th>Dur</th><th>Nro</th><th>Título</th><th>Int/Ext</th><th>Lugar</th><th>Momento</th><th>Largo (Pág)</th><th>Resumen</th></tr></thead>
         <tbody>${rows || `<tr><td colspan="9" class="muted">—</td></tr>`}</tbody>
       </table>

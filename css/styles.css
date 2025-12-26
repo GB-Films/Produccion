@@ -1405,6 +1405,23 @@ tr.groupRow td{
   white-space:normal;
 }
 .dayplanPrintTable td{ word-break:break-word; }
+
+/* ===== Plan de Rodaje (impresión): columnas más angostas ===== */
+.dayplanPrintTable col.colHour{ width:46px; }
+.dayplanPrintTable col.colDur{ width:38px; }
+.dayplanPrintTable col.colNro{ width:34px; }
+.dayplanPrintTable col.colIE{ width:42px; }
+.dayplanPrintTable col.colPag{ width:44px; }
+
+.dayplanPrintTable td.cHour,
+.dayplanPrintTable td.cDur,
+.dayplanPrintTable td.cNro,
+.dayplanPrintTable td.cIE,
+.dayplanPrintTable td.cPag{
+  padding-left:4px;
+  padding-right:4px;
+}
+
 .dpClock2{
   display:flex;
   flex-direction:column;
@@ -2207,4 +2224,26 @@ tr.groupRow td{
   #dpBankCol{ position: relative; }
   #dpBankDock{ display:none !important; }
   #dayplanLayout.bankCollapsed{ grid-template-columns: 1fr; }
+}
+
+
+/* ===== Print overrides: sin recuadro de tarjetas (Reportes / Plan de Rodaje) ===== */
+@media print{
+  /* Imprimir solo el contenido útil */
+  #dpBankCol{ display:none !important; }
+
+  /* Sacar el "recuadro" de las tarjetas contenedoras */
+  #callDetailCard, #dayplanCard{
+    border:none !important;
+    box-shadow:none !important;
+    background:transparent !important;
+  }
+  #callDetailCard .cardHeader,
+  #dayplanCard .cardHeader{
+    display:none !important;
+  }
+  #callDetailCard .cardContent,
+  #dayplanCard .cardContent{
+    padding:0 !important;
+  }
 }
