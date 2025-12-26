@@ -916,7 +916,7 @@ tr.groupRow td{
   bottom:6px;
   height:10px;
   border-radius:10px;
-  background: rgba(var(--accent-rgb),.18);
+  background: transparent;
   cursor:ns-resize;
   touch-action:none;
 }
@@ -1262,7 +1262,7 @@ tr.groupRow td{
   gap:10px;
 }
 .dpBlockTime{
-  font-size:12px;
+  font-size:13px;
   opacity:.85;
   white-space:nowrap;
 }
@@ -1282,13 +1282,44 @@ tr.groupRow td{
 }
 .dpMiniBtn:hover{ background:rgba(0,0,0,.28); }
 .dpBlockTitle{
-  margin-top:4px;
-  font-weight:800;
+  margin-top:6px;
+  font-weight:900;
+  font-size:14px;
   line-height:1.15;
 }
+
+.dpSceneMetaGrid{
+  margin-top:6px;
+  display:grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap:6px;
+}
+.dpMetaCell{
+  padding:5px 7px;
+  border-radius:12px;
+  border:1px solid rgba(255,255,255,.12);
+  background:rgba(0,0,0,.16);
+  overflow:hidden;
+}
+.dpMetaCell .k{
+  font-size:10px;
+  letter-spacing:.04em;
+  text-transform:uppercase;
+  opacity:.78;
+  line-height:1.1;
+}
+.dpMetaCell .v{
+  margin-top:2px;
+  font-weight:900;
+  font-size:13px;
+  line-height:1.1;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+}
 .dpBlockDetail{
-  margin-top:3px;
-  font-size:12px;
+  margin-top:5px;
+  font-size:13px;
   opacity:.86;
   line-height:1.25;
 }
@@ -1350,14 +1381,27 @@ tr.groupRow td{
 .dayplanPrintTable{
   width:100%;
   border-collapse:collapse;
-  font-size:10.5pt;
+  table-layout:fixed;
+  font-size:9.5pt;
 }
 .dayplanPrintTable th, .dayplanPrintTable td{
+  word-wrap:break-word;
+  overflow-wrap:anywhere;
   border:1px solid #ddd;
   padding:6px 8px;
   vertical-align:top;
 }
 .dayplanPrintTable .muted{ color:#000; opacity:.75; }
+.dayplanPrintTable tr.dpTaskRow td{
+  font-weight:800;
+}
+.dayplanPrintTable tr.dpTaskRow td:nth-child(4){
+  text-transform:uppercase;
+  letter-spacing:.02em;
+}
+.dayplanPrintTable tr.dpTaskRow td:nth-child(9){
+  font-weight:600;
+}
 .dayplanTable .dpHandle{
   cursor:grab;
   user-select:none;

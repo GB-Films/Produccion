@@ -346,23 +346,42 @@
 
 
   function ensureSceneExtras(s){
-    if(!s) return;
-    if(!("intExt" in s)) s.intExt = "";
+    if(!s) return false;
+
+    let changed = false;
+
+    // Core fields (back-compat)
+    if(!("number" in s)){ s.number = ""; changed = true; }
+    if(!("slugline" in s)){ s.slugline = ""; changed = true; }
+    if(!("intExt" in s)){ s.intExt = ""; changed = true; }
+    if(!("location" in s)){ s.location = ""; changed = true; }
+    if(!("timeOfDay" in s)){ s.timeOfDay = ""; changed = true; }
+    if(!("pages" in s)){ s.pages = 0; changed = true; }
+    if(!("summary" in s)){ s.summary = ""; changed = true; }
+    if(!("notes" in s)){ s.notes = ""; changed = true; }
+
     // ensure elements structure
     if(!s.elements){
       s.elements = Object.fromEntries(cats.map(c=>[c,[]]));
+      changed = true;
     }else{
       for(const c of cats){
-        if(!Array.isArray(s.elements[c])) s.elements[c] = [];
+        if(!Array.isArray(s.elements[c])){ s.elements[c] = []; changed = true; }
       }
     }
+
     // ensure shots
-    if(!Array.isArray(s.shots)) s.shots = [];
+    if(!Array.isArray(s.shots)){ s.shots = []; changed = true; }
     for(const sh of s.shots){
       if(!sh) continue;
       const n = Number(sh.durMin);
-      if(!(Number.isFinite(n) && n>0)) sh.durMin = DEFAULT_SHOT_MIN;
+      if(!(Number.isFinite(n) && n>0)){ sh.durMin = DEFAULT_SHOT_MIN; changed = true; }
     }
+
+    // Auto-completar metadata desde el título (sin pisar lo que ya cargaste)
+    if(autofillSceneMetaFromSlugline(s, false)) changed = true;
+
+    return changed;
   }
 
   function ensureScriptState(){
@@ -500,6 +519,22 @@ function enforceScriptVersionsLimit(notify=false){
     }
     return { location, timeOfDay: tod };
   }
+
+  function autofillSceneMetaFromSlugline(s, force=false){
+    if(!s) return false;
+    const slug = String(s.slugline||"").trim();
+    if(!slug) return false;
+    const ie = sluglineToIntExt(slug);
+    const locTod = sluglineToLocTOD(slug);
+    let changed = false;
+
+    if((force || !s.intExt) && ie){ s.intExt = ie; changed = true; }
+    if((force || !s.location) && locTod.location){ s.location = locTod.location; changed = true; }
+    if((force || !s.timeOfDay) && locTod.timeOfDay){ s.timeOfDay = locTod.timeOfDay; changed = true; }
+
+    return changed;
+  }
+
 
   function sluglineToIntExt(slugline){
     const s = String(slugline||"").trim();
@@ -3418,13 +3453,29 @@ function updateScheduleDayDOM(dayId){
     for(const sid of (d.sceneIds||[])){
       const sc = getScene(sid);
       if(!sc) continue;
+
+      const num = String(sc.number||"").trim();
+      const ttl = String(sc.slugline||"").trim();
+
       items.push({
         key:`scene:${sid}`,
         kind:"scene",
         id:sid,
         start: Number(d.times?.[sid] ?? 0) || 0,
         dur: Number(d.durations?.[sid] ?? 60) || 0,
-        title: `#${sc.number||""} ${sc.slugline||""}`.trim(),
+
+        sceneMeta: {
+          number: num,
+          title: ttl,
+          intExt: sc.intExt||"",
+          location: sc.location||"",
+          timeOfDay: sc.timeOfDay||"",
+          pages: Number(sc.pages)||0,
+          summary: sc.summary||"",
+          notes: sc.notes||""
+        },
+
+        title: `${num? "#"+num:""}${(num && ttl) ? " — " : ""}${ttl}`.trim(),
         detail: [
           sc.intExt||"",
           sc.location||"",
@@ -3442,7 +3493,7 @@ function updateScheduleDayDOM(dayId){
         id:b.id,
         start: Number(b.startMin ?? 0) || 0,
         dur: Number(b.durMin ?? 0) || 0,
-        title: b.title || "Nota",
+        title: b.title || "Nota / tarea",
         detail: b.detail || "",
         color: b.color || ""
       });
@@ -3606,7 +3657,7 @@ for(let m=dpStartAbs; m<=dpEndAbs; m+=30){
     const eattr = (s)=>esc(String(s||"")).replace(/"/g,"&quot;");
     const blocks = items.map((it)=>{
       const col = safeHexColor(it.color || (it.kind==="scene" ? "#BFDBFE" : "#E5E7EB"));
-      const bg = hexToRgba(col, 0.22);
+      const bg = hexToRgba(col, it.kind==="scene" ? 0.42 : 0.34);
 const absStart = clamp(base + (it.start||0), base, dpEndAbs - snapMin);
 const dur = clamp(Math.max(snapMin, it.dur||snapMin), snapMin, dpEndAbs - absStart);
 const absEnd = clamp(absStart + dur, absStart + snapMin, dpEndAbs);
@@ -3635,7 +3686,14 @@ const height = Math.max(Math.round((absEnd - absStart) * ppm), Math.round(snapMi
             </div>
           </div>
           <div class="dpBlockTitle">${esc(it.title||"")}</div>
-          ${it.detail ? `<div class="dpBlockDetail">${esc(it.detail)}</div>` : ``}
+          ${it.kind==="scene" ? `
+            <div class="dpSceneMetaGrid">
+              <div class="dpMetaCell"><div class="k">I/E</div><div class="v">${esc(it.sceneMeta?.intExt||"—")}</div></div>
+              <div class="dpMetaCell"><div class="k">Lugar</div><div class="v">${esc(it.sceneMeta?.location||"—")}</div></div>
+              <div class="dpMetaCell"><div class="k">Momento</div><div class="v">${esc(it.sceneMeta?.timeOfDay||"—")}</div></div>
+              <div class="dpMetaCell"><div class="k">Pág</div><div class="v">${(Number(it.sceneMeta?.pages)||0)>0 ? esc(fmtPages(it.sceneMeta.pages)) : "—"}</div></div>
+            </div>
+          ` : (it.detail ? `<div class="dpBlockDetail">${esc(it.detail)}</div>` : ``)}
 
           <div class="dpPalettePop noPrint" data-role="palette">
             <div class="dpSwatches">
@@ -3659,11 +3717,16 @@ const height = Math.max(Math.round((absEnd - absStart) * ppm), Math.round(snapMi
       const absEnd = clamp(absStart + dur, 0, DAY_SPAN_MIN);
       const clock = `${hhmmFromMinutes(absStart)} – ${hhmmFromMinutes(absEnd)}`;
       return `
-        <tr style="background:${eattr(bg)};border-left:8px solid ${eattr(col)};">
-          <td style="width:120px">${esc(clock)}</td>
-          <td style="width:70px">${esc(formatDuration(dur))}</td>
-          <td>${esc(it.title||"")}</td>
-          <td>${esc(it.detail||"")}</td>
+        <tr class="${it.kind==="block" ? "dpTaskRow" : ""}" style="background:${eattr(bg)};border-left:8px solid ${eattr(col)};">
+          <td style="width:115px">${esc(clock)}</td>
+          <td style="width:55px">${esc(formatDuration(dur))}</td>
+          <td style="width:55px">${it.kind==="scene" ? esc(it.sceneMeta?.number||"") : "—"}</td>
+          <td>${it.kind==="scene" ? esc(it.sceneMeta?.title||"") : `<b>${esc(it.title||"Nota / tarea")}</b>`}</td>
+          <td style="width:55px">${it.kind==="scene" ? esc(it.sceneMeta?.intExt||"") : ""}</td>
+          <td>${it.kind==="scene" ? esc(it.sceneMeta?.location||"") : ""}</td>
+          <td style="width:90px">${it.kind==="scene" ? esc(it.sceneMeta?.timeOfDay||"") : ""}</td>
+          <td style="width:55px">${it.kind==="scene" && (Number(it.sceneMeta?.pages)||0)>0 ? esc(fmtPages(it.sceneMeta.pages)) : ""}</td>
+          <td>${it.kind==="scene" ? esc((it.sceneMeta?.notes||"").trim() || (it.sceneMeta?.summary||"").trim() || "") : esc(it.detail||"")}</td>
         </tr>
       `;
     }).join("");
@@ -3675,7 +3738,7 @@ const height = Math.max(Math.round((absEnd - absStart) * ppm), Math.round(snapMi
         <div class="cardContent">
           <table class="dayplanPrintTable">
             <thead>
-              <tr><th>Hora</th><th>Dur</th><th>Item</th><th>Detalle</th></tr>
+              <tr><th style="width:115px">Hora</th><th style="width:55px">Dur</th><th style="width:55px">#</th><th>Título</th><th style="width:55px">I/E</th><th>Lugar</th><th style="width:90px">Momento</th><th style="width:55px">Pág</th><th>Notas / tareas</th></tr>
             </thead>
             <tbody>${rows || `<tr><td colspan="4" class="muted">—</td></tr>`}</tbody>
           </table>
@@ -4544,10 +4607,15 @@ function renderShotList(){
       const clock = `${hhmmFromMinutes(absStart)} – ${hhmmFromMinutes(absEnd)}`;
       return `
         <tr>
-          <td style="width:120px">${esc(clock)}</td>
-          <td style="width:70px">${esc(formatDuration(dur))}</td>
-          <td>${esc(it.title||"")}</td>
-          <td>${esc(it.detail||"")}</td>
+          <td style="width:115px">${esc(clock)}</td>
+          <td style="width:55px">${esc(formatDuration(dur))}</td>
+          <td style="width:55px">${it.kind==="scene" ? esc(it.sceneMeta?.number||"") : "—"}</td>
+          <td>${it.kind==="scene" ? esc(it.sceneMeta?.title||"") : `<b>${esc(it.title||"Nota / tarea")}</b>`}</td>
+          <td style="width:55px">${it.kind==="scene" ? esc(it.sceneMeta?.intExt||"") : ""}</td>
+          <td>${it.kind==="scene" ? esc(it.sceneMeta?.location||"") : ""}</td>
+          <td style="width:90px">${it.kind==="scene" ? esc(it.sceneMeta?.timeOfDay||"") : ""}</td>
+          <td style="width:55px">${it.kind==="scene" && (Number(it.sceneMeta?.pages)||0)>0 ? esc(fmtPages(it.sceneMeta.pages)) : ""}</td>
+          <td>${it.kind==="scene" ? esc((it.sceneMeta?.notes||"").trim() || (it.sceneMeta?.summary||"").trim() || "") : esc(it.detail||"")}</td>
         </tr>
       `;
     }).join("");
@@ -4556,7 +4624,7 @@ function renderShotList(){
     table.className = "items";
     table.innerHTML = `
       <table class="dayplanPrintTable">
-        <thead><tr><th>Hora</th><th>Dur</th><th>Item</th><th>Detalle</th></tr></thead>
+        <thead><tr><th style="width:115px">Hora</th><th style="width:55px">Dur</th><th style="width:55px">#</th><th>Título</th><th style="width:55px">I/E</th><th>Lugar</th><th style="width:90px">Momento</th><th style="width:55px">Pág</th><th>Notas / tareas</th></tr></thead>
         <tbody>${rows || `<tr><td colspan="4" class="muted">—</td></tr>`}</tbody>
       </table>
     `;
@@ -4787,7 +4855,7 @@ function renderShotList(){
       renderReportsDetail();
       renderReports();
     });
-    el("btnDayplanPrint")?.addEventListener("click", ()=> window.print());
+    el("btnDayplanPrint")?.addEventListener("click", ()=>{ setPrintOrientation("landscape"); window.print(); });
     el("dayplanSnap")?.addEventListener("change", ()=> renderDayPlan());
 
     // Número de escena: no permitimos duplicados (si chocan, auto 6A/6B…)
@@ -5311,7 +5379,10 @@ el("scriptVerSelect")?.addEventListener("change", ()=>{
 
   function hydrateAll(){
     ensureScriptState();
-    state.scenes.forEach(ensureSceneExtras);
+    let migrated = false;
+    for(const sc of state.scenes){
+      if(ensureSceneExtras(sc)) migrated = true;
+    }
 
     renderCatSelect();
     refreshElementSuggestions();
@@ -5319,7 +5390,7 @@ el("scriptVerSelect")?.addEventListener("change", ()=>{
     el("projectTitle").value = state.meta.title || "Proyecto";
     const _savedAt = el("savedAtText");
     if(_savedAt) _savedAt.textContent = new Date(state.meta.updatedAt).toLocaleString("es-AR");
-if(!state.scenes.length){
+    if(!state.scenes.length){
       state.scenes.push({
         id: uid("scene"),
         number:"1",
@@ -5333,6 +5404,7 @@ if(!state.scenes.length){
         elements: Object.fromEntries(cats.map(c=>[c,[]])),
         shots: []
       });
+      migrated = true;
     }
     if(!state.shootDays.length){
       state.shootDays.push({
@@ -5349,7 +5421,10 @@ if(!state.scenes.length){
         times:{},
         durations:{}
       });
+      migrated = true;
     }
+
+    if(migrated){ touch(); }
 
     state.crew = (state.crew||[]).map(c=>({ ...c, area: normalizeCrewArea(c.area) }));
 
