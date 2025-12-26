@@ -14,6 +14,6 @@ window.U = {
 
   isHeaderRow(row){
     const h = (row||[]).join(" ").toLowerCase();
-    return h.includes("slug") || h.includes("loc") || h.includes("tod") || h.includes("pág") || h.includes("pag");
+    return h.includes("slug") || h.includes("título") || h.includes("titulo") || h.includes("loc") || h.includes("lugar") || h.includes("tod") || h.includes("momento") || h.includes("pág") || h.includes("pag") || h.includes("i/e") || h.includes("int/ext");
   }
 };

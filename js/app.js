@@ -80,6 +80,7 @@
   let callSheetDayId = null;
   let selectedShotlistDayId = null;
   let selectedDayplanDayId = null;
+  let reportsTab = (localStorage.getItem("gb_reports_tab") || "callsheet");
 
   const DEFAULT_SHOT_MIN = 15;
 
@@ -346,12 +347,7 @@
 
   function ensureSceneExtras(s){
     if(!s) return;
-
-    // core fields (compat hacia atrás)
-    if(s.intExt==null) s.intExt = "";
-    s.intExt = normalizeIntExt(s.intExt);
-    if(s.timeOfDay!=null) s.timeOfDay = normalizeTOD(s.timeOfDay);
-
+    if(!("intExt" in s)) s.intExt = "";
     // ensure elements structure
     if(!s.elements){
       s.elements = Object.fromEntries(cats.map(c=>[c,[]]));
@@ -478,51 +474,45 @@ function enforceScriptVersionsLimit(notify=false){
 
   function sluglineToLocTOD(slugline){
     const s = String(slugline||"").trim();
-
-    // INT / EXT (si es ambiguo tipo INT/EXT lo dejamos vacío)
-    let intExt = "";
-    const pref = s.match(/^\s*(INT\/EXT\.?|INT\.?\/EXT\.?|I\/E\.?|INT\.?|EXT\.?|INTERIOR|EXTERIOR)\b/i);
-    if(pref){
-      const p = String(pref[0]||"").toUpperCase();
-      if(p.startsWith("INT") && !p.includes("/")) intExt = "Int";
-      if(p.startsWith("EXT") && !p.includes("/")) intExt = "Ext";
-      if(p.startsWith("INTERIOR")) intExt = "Int";
-      if(p.startsWith("EXTERIOR")) intExt = "Ext";
-    }
-
-    const parts = s.split(/\s[-–—]\s/g).map(p=>p.trim()).filter(Boolean);
+    // separa por guiones con o sin espacios (INT. CASA - DÍA / INT-CASA-DÍA)
+    const parts = s.split(/\s*[-–—]\s*/g).map(p=>p.trim()).filter(Boolean);
     let location = "";
     let tod = "";
-    if(parts.length >= 2){
-      tod = normalizeTOD(parts[parts.length-1]);
-      const mid = parts.slice(0, parts.length-1).join(" - ");
-      location = mid
-        .replace(/^(INT\/EXT\.?|INT\.?\/EXT\.?|I\/E\.?|INT\.?|EXT\.?)\s*/i,"")
-        .replace(/^(INTERIOR|EXTERIOR)\s*/i,"")
-        .trim();
-    }else{
-      location = s
-        .replace(/^(INT\/EXT\.?|INT\.?\/EXT\.?|I\/E\.?|INT\.?|EXT\.?)\s*/i,"")
-        .replace(/^(INTERIOR|EXTERIOR)\s*/i,"")
-        .trim();
-    }
-    return { location, timeOfDay: tod, intExt };
-  }
+    const todSet = new Set(["Día","Noche","Amanecer","Atardecer"]);
 
-  function normalizeIntExt(raw){
-    const t = (raw||"").trim().toLowerCase();
-    const map = {
-      "int":"Int", "interior":"Int", "i":"Int",
-      "ext":"Ext", "exterior":"Ext", "e":"Ext",
+    const stripPrefix = (txt)=>{
+      return String(txt||"")
+        .replace(/^\s*(INT\/EXT|INT\.?\/EXT\.?|I\/E\.?|INT|EXT)\s*[.\-–—:]?\s*/i,"")
+        .replace(/^\s*(INTERIOR|EXTERIOR)\s*[.\-–—:]?\s*/i,"")
+        .trim();
     };
-    return map[t] || (raw||"").trim();
+    if(parts.length >= 2){
+      const maybeTOD = normalizeTOD(parts[parts.length-1]);
+      if(todSet.has(maybeTOD)) tod = maybeTOD;
+      const mid = parts.slice(0, parts.length-1).join(" - ");
+      location = stripPrefix(mid);
+      if(!tod){
+        // si el último no era TOD real, entonces todo es lugar
+        location = stripPrefix(parts.join(" - "));
+      }
+    }else{
+      location = stripPrefix(s);
+    }
+    return { location, timeOfDay: tod };
   }
 
-  function formatPages(p){
-    const n = Number(p);
-    if(!Number.isFinite(n) || n<=0) return "";
-    const s = String(Math.round(n*10)/10);
-    return s.replace(".",",");
+  function sluglineToIntExt(slugline){
+    const s = String(slugline||"").trim();
+    if(!s) return "";
+    const up = s.toUpperCase();
+
+    // INT./EXT. y variantes
+    if(/^\s*(INT\/EXT|INT\.?\/EXT\.?|I\/E)\s*[.\-–—:]?\s*/i.test(up)) return "Int";
+    if(/^\s*(EXT\/INT|EXT\.?\/INT\.?|E\/I)\s*[.\-–—:]?\s*/i.test(up)) return "Ext";
+
+    if(/^\s*(INT|INTERIOR)\s*[.\-–—:]?\s*/i.test(up)) return "Int";
+    if(/^\s*(EXT|EXTERIOR)\s*[.\-–—:]?\s*/i.test(up)) return "Ext";
+    return "";
   }
 
 
@@ -1147,7 +1137,7 @@ function setupScheduleWheelScroll(){
     if(name==="elements"){ renderElementsExplorer(); }
     if(name==="crew"){ renderCrew(); }
     if(name==="reports"){ renderReportsFilters(); renderReports(); }
-    if(name==="callsheet"){ renderCallSheetCalendar(); renderCallSheetDetail(); }
+    if(name==="callsheet"){ renderCallSheetCalendar(); applyReportsTabUI(); renderReportsDetail(); }
 }
 
   // ======= Script parser (INT/EXT) =======
@@ -1169,7 +1159,9 @@ function setupScheduleWheelScroll(){
       for(const k of extra){ if(up.startsWith(k)) return true; }
       const starters = [
         "INT/EXT.", "INT/EXT ", "INT./EXT.", "INT./EXT ", "I/E.", "I/E ",
-        "INT.", "INT ", "EXT.", "EXT ", "INTERIOR", "EXTERIOR"
+        "INT.", "INT ", "INT-", "INT:",
+        "EXT.", "EXT ", "EXT-", "EXT:",
+        "INTERIOR", "EXTERIOR"
       ];
       return starters.some(s=>up.startsWith(s));
     }
@@ -1193,7 +1185,6 @@ function setupScheduleWheelScroll(){
       id: uid("scene"),
       number: String(s.number),
       slugline: s.slugline,
-      intExt: s.intExt || "",
       location: s.location,
       timeOfDay: s.timeOfDay,
       pages: 0,
@@ -1211,11 +1202,27 @@ function setupScheduleWheelScroll(){
 
       const slugline = stripSceneNumber(heading).trim();
 
-      const { location, timeOfDay: tod, intExt } = sluglineToLocTOD(slugline);
+      const parts = slugline.split(/\s[-–—]\s/g).map(p=>p.trim()).filter(Boolean);
+      let location = "";
+      let tod = "";
+
+      if(parts.length >= 2){
+        tod = normalizeTOD(parts[parts.length-1]);
+        const mid = parts.slice(0, parts.length-1).join(" - ");
+        location = mid
+          .replace(/^(INT\/EXT\.?|INT\.\/EXT\.?|I\/E\.?|INT\.?|EXT\.?)\s*/i,"")
+          .replace(/^(INTERIOR|EXTERIOR)\s*/i,"")
+          .trim();
+      }else{
+        location = slugline
+          .replace(/^(INT\/EXT\.?|INT\.\/EXT\.?|I\/E\.?|INT\.?|EXT\.?)\s*/i,"")
+          .replace(/^(INTERIOR|EXTERIOR)\s*/i,"")
+          .trim();
+      }
 
       const bodyText = (s.body||[]).join(" ");
       const summary = bodyText.slice(0, 220);
-      return { number:num, slugline, intExt, location, timeOfDay:tod, summary };
+      return { number:num, slugline, location, timeOfDay:tod, summary };
     }
   }
 
@@ -1238,7 +1245,9 @@ function setupScheduleWheelScroll(){
       for(const k of extra){ if(up.startsWith(k)) return true; }
       const starters = [
         "INT/EXT.", "INT/EXT ", "INT./EXT.", "INT./EXT ", "I/E.", "I/E ",
-        "INT.", "INT ", "EXT.", "EXT ", "INTERIOR", "EXTERIOR"
+        "INT.", "INT ", "INT-", "INT:",
+        "EXT.", "EXT ", "EXT-", "EXT:",
+        "INTERIOR", "EXTERIOR"
       ];
       return starters.some(s=>up.startsWith(s));
     }
@@ -1268,7 +1277,6 @@ function setupScheduleWheelScroll(){
       id: uid("scrScene"),
       number: canonSceneNumber(String(s.number)),
       slugline: s.slugline,
-      intExt: s.intExt || "",
       location: s.location,
       timeOfDay: s.timeOfDay,
       body: s.body.join("\n").trim(),
@@ -1283,11 +1291,11 @@ function setupScheduleWheelScroll(){
       if(mNum) num = canonSceneNumber(mNum[1] + (mNum[2]||""));
 
       const slugline = stripSceneNumber(heading).trim();
-      const { location, timeOfDay, intExt } = sluglineToLocTOD(slugline);
+      const { location, timeOfDay } = sluglineToLocTOD(slugline);
 
       const bodyText = (s.body||[]).join(" ").trim();
       const summary = bodyText.slice(0, 220);
-      return { number:num, slugline, intExt, location, timeOfDay, body: s.body||[], summary };
+      return { number:num, slugline, location, timeOfDay, body: s.body||[], summary };
     }
   }
 
@@ -1308,7 +1316,6 @@ function setupScheduleWheelScroll(){
       id: uid("scrScene"),
       number: canonSceneNumber(sc.number||""),
       slugline: sc.slugline||"",
-      intExt: sc.intExt||"",
       location: sc.location||"",
       timeOfDay: sc.timeOfDay||"",
       body: sc.body||"",
@@ -1401,7 +1408,7 @@ function setupScheduleWheelScroll(){
     tbody.innerHTML = "";
 
     const list = state.scenes.filter(s=>{
-      const hay = `${s.number} ${s.intExt||""} ${s.slugline} ${s.location} ${s.timeOfDay||""} ${s.summary}`.toLowerCase();
+      const hay = `${s.number} ${s.slugline} ${s.intExt||""} ${s.location} ${s.timeOfDay||""} ${s.summary}`.toLowerCase();
       if(q && !hay.includes(q)) return false;
       if(tod && (s.timeOfDay||"")!==tod) return false;
       return true;
@@ -1412,11 +1419,11 @@ function setupScheduleWheelScroll(){
       tr.className = (s.id===selectedSceneId) ? "selected" : "";
       tr.innerHTML = `
         <td>${esc(s.number||"")}</td>
-        <td>${esc(s.intExt||"")}</td>
         <td>${esc(s.slugline||"")}</td>
+        <td>${esc(s.intExt||"")}</td>
         <td>${esc(s.location||"")}</td>
         <td>${esc(s.timeOfDay||"")}</td>
-        <td>${s.pages? esc(formatPages(s.pages)) : ""}</td>
+        <td>${(Number(s.pages)||0) > 0 ? esc(fmtPages(s.pages)) : ""}</td>
       `;
       tr.addEventListener("click", ()=>{
         selectedSceneId = s.id;
@@ -1467,7 +1474,7 @@ function setupScheduleWheelScroll(){
     const hint = el("selectedSceneHint");
     if(hint) hint.textContent = s ? `Editando escena #${s.number}` : "Seleccioná una escena";
 
-    const fields = ["number","intExt","timeOfDay","pages","slugline","location","summary","notes"];
+    const fields = ["number","intExt","slugline","location","timeOfDay","pages","summary","notes"];
     for(const f of fields){
       const node = el(`scene_${f}`);
       if(!node) continue;
@@ -1522,7 +1529,7 @@ function setupScheduleWheelScroll(){
           renderElementsExplorer();
           renderReports();
           renderScheduleBoard();
-          renderCallSheetDetail();
+          renderReportsDetail();
         });
         chips.appendChild(chip);
       }
@@ -1660,14 +1667,13 @@ function setupScheduleWheelScroll(){
     if(!list) return;
     list.innerHTML = "";
     for(const sc of (version.scenes||[])){
-      const meta = [sc.intExt, sc.location, sc.timeOfDay].filter(Boolean).join(" · ");
       const item = document.createElement("div");
       item.className = "scriptSceneItem" + (sc.id===selectedScriptSceneId ? " selected" : "");
       item.innerHTML = `
         <div class="n">${esc(canonSceneNumber(sc.number||""))}</div>
         <div class="grow">
           <div class="h">${esc(sc.slugline||"")}</div>
-          <div class="m">${esc(meta||"")}</div>
+          <div class="m">${esc(sc.location||"")}${sc.timeOfDay? " · "+esc(sc.timeOfDay):""}</div>
         </div>
       `;
       item.addEventListener("click", ()=>{
@@ -1735,10 +1741,9 @@ function setupScheduleWheelScroll(){
         const scc = (v.scenes||[]).find(s=>s.id===selectedScriptSceneId);
         if(!scc) return;
         scc.slugline = inSlug.value;
-        const { location, timeOfDay, intExt } = sluglineToLocTOD(scc.slugline);
+        const { location, timeOfDay } = sluglineToLocTOD(scc.slugline);
         scc.location = location;
         scc.timeOfDay = timeOfDay;
-        scc.intExt = intExt;
         v.updatedAt = new Date().toISOString();
         touch();
         renderScriptSceneList(v);
@@ -1807,7 +1812,7 @@ function setupScheduleWheelScroll(){
     renderDayDetail();
     renderReports();
     renderScheduleBoard();
-    renderCallSheetDetail();
+    renderReportsDetail();
   }
 
   function duplicateScene(){
@@ -1864,7 +1869,7 @@ function setupScheduleWheelScroll(){
     renderElementsExplorer();
     renderReports();
     renderScheduleBoard();
-    renderCallSheetDetail();
+    renderReportsDetail();
   }
 
   // ===================== Shooting plan =====================
@@ -1888,20 +1893,13 @@ function setupScheduleWheelScroll(){
     node.draggable = true;
     node.dataset.sceneId = scene.id;
 
-    const meta = [
-      scene.intExt,
-      scene.location,
-      scene.timeOfDay,
-      scene.pages ? `${formatPages(scene.pages)} pág` : ""
-    ].filter(Boolean).join(" · ");
-
     if(mode==="bank"){
       const assigned = !!sceneAssignedDayId(scene.id);
       node.classList.add(assigned ? "assigned" : "unassigned");
       node.innerHTML = `
         <div class="left">
           <div class="title">#${esc(scene.number||"")} — ${esc(scene.slugline||"")}</div>
-          <div class="meta">${esc(meta||"")}</div>
+          <div class="meta">${esc(scene.location||"")} · ${esc(scene.timeOfDay||"")}</div>
         </div>
         <div class="right"><span class="dragHandle">⠿</span></div>
       `;
@@ -1910,7 +1908,6 @@ function setupScheduleWheelScroll(){
       node.innerHTML = `
         <div class="left">
           <div class="title">#${esc(scene.number||"")} — ${esc(scene.slugline||"")}</div>
-          <div class="meta">${esc(meta||"")}</div>
         </div>
         <div class="right">
           <button class="btn icon sceneRemoveBtn" title="Quitar del día">×</button>
@@ -1937,7 +1934,7 @@ function setupScheduleWheelScroll(){
         renderScheduleBoard();
         saveCallSheetCursor();
       renderCallSheetCalendar();
-        renderCallSheetDetail();
+        renderReportsDetail();
       });
     }
 
@@ -2002,7 +1999,7 @@ function setupScheduleWheelScroll(){
     renderReports();
     renderScheduleBoard();
     renderCallSheetCalendar();
-    renderCallSheetDetail();
+    renderReportsDetail();
   }
 
   function deleteShootDay(){
@@ -2020,7 +2017,7 @@ function setupScheduleWheelScroll(){
     renderReports();
     renderScheduleBoard();
     renderCallSheetCalendar();
-    renderCallSheetDetail();
+    renderReportsDetail();
   }
 
   function renderDaysBoard(){
@@ -2089,7 +2086,7 @@ function setupScheduleWheelScroll(){
         renderScheduleBoard();
         saveCallSheetCursor();
       renderCallSheetCalendar();
-        renderCallSheetDetail();
+        renderReportsDetail();
       });
 
       if(!(d.sceneIds||[]).length){
@@ -2217,7 +2214,7 @@ function setupScheduleWheelScroll(){
       cleanupDayCallTimes(d);
       touch();
       renderDayCast();
-      renderCallSheetDetail();
+      renderReportsDetail();
     });
 
     resetBtn.addEventListener("click", ()=>{
@@ -2226,7 +2223,7 @@ function setupScheduleWheelScroll(){
       cleanupDayCallTimes(d);
       touch();
       renderDayCast();
-      renderCallSheetDetail();
+      renderReportsDetail();
     });
 
     const list = document.createElement("div");
@@ -2265,7 +2262,7 @@ function setupScheduleWheelScroll(){
         cleanupDayCallTimes(d);
         touch();
         renderDayCast();
-        renderCallSheetDetail();
+        renderReportsDetail();
       });
 
       list.appendChild(row);
@@ -2357,7 +2354,7 @@ function setupScheduleWheelScroll(){
         touch();
         renderDayCrewPicker();
         renderReports();
-        renderCallSheetDetail();
+        renderReportsDetail();
       };
 
       btnApply.addEventListener("click", ()=>applyArea(areaInput.value));
@@ -2409,7 +2406,7 @@ function setupScheduleWheelScroll(){
           touch();
           renderDayCrewPicker();
           renderReports();
-          renderCallSheetDetail();
+          renderReportsDetail();
         });
 
         item.addEventListener("click", ()=>{
@@ -2421,7 +2418,7 @@ function setupScheduleWheelScroll(){
           touch();
           renderDayCrewPicker();
           renderReports();
-          renderCallSheetDetail();
+          renderReportsDetail();
         });
 
         wrap.appendChild(item);
@@ -2578,7 +2575,7 @@ function setupScheduleWheelScroll(){
     refreshElementSuggestions();
     renderDayDetail();
     renderReports();
-    renderCallSheetDetail();
+    renderReportsDetail();
   }
 
   function renderCrew(){
@@ -2657,9 +2654,9 @@ function setupScheduleWheelScroll(){
       }
 
       const [areaSel, role, name, phone, email, notes] = tr.querySelectorAll("select,input");
-      areaSel.addEventListener("change", ()=>{ real.area = normalizeCrewArea(areaSel.value); touch(); renderCrew(); refreshElementSuggestions(); renderReports(); renderCallSheetDetail(); });
-      role.addEventListener("input", ()=>{ real.role = role.value; touch(); renderReports(); renderCallSheetDetail(); });
-      name.addEventListener("input", ()=>{ real.name = name.value; touch(); refreshElementSuggestions(); renderReports(); renderCallSheetDetail(); });
+      areaSel.addEventListener("change", ()=>{ real.area = normalizeCrewArea(areaSel.value); touch(); renderCrew(); refreshElementSuggestions(); renderReports(); renderReportsDetail(); });
+      role.addEventListener("input", ()=>{ real.role = role.value; touch(); renderReports(); renderReportsDetail(); });
+      name.addEventListener("input", ()=>{ real.name = name.value; touch(); refreshElementSuggestions(); renderReports(); renderReportsDetail(); });
       phone.addEventListener("input", ()=>{ real.phone = phone.value; touch(); });
       email.addEventListener("input", ()=>{ real.email = email.value; touch(); });
       notes.addEventListener("input", ()=>{ real.notes = notes.value; touch(); });
@@ -2676,7 +2673,7 @@ function setupScheduleWheelScroll(){
         refreshElementSuggestions();
         renderDayDetail();
         renderReports();
-        renderCallSheetDetail();
+        renderReportsDetail();
       });
 
       tbody.appendChild(tr);
@@ -3216,7 +3213,7 @@ function bindScheduleDnD(){
       renderScheduleBoard();
       renderDayPlan();
       renderDayDetail();
-      renderCallSheetDetail();
+      renderReportsDetail();
       renderReports();
       return;
     }
@@ -3266,7 +3263,7 @@ function bindScheduleDnD(){
     renderScheduleBoard();
     renderDayPlan();
     renderDayDetail();
-    renderCallSheetDetail();
+    renderReportsDetail();
     renderReports();
   }
 
@@ -3427,12 +3424,12 @@ function updateScheduleDayDOM(dayId){
         id:sid,
         start: Number(d.times?.[sid] ?? 0) || 0,
         dur: Number(d.durations?.[sid] ?? 60) || 0,
-        title: `#${sc.number||""} — ${sc.slugline||""}`.trim(),
+        title: `#${sc.number||""} ${sc.slugline||""}`.trim(),
         detail: [
           sc.intExt||"",
           sc.location||"",
           sc.timeOfDay||"",
-          sc.pages ? `${formatPages(sc.pages)} pág` : ""
+          (Number(sc.pages)||0) > 0 ? `${fmtPages(sc.pages)} pág` : ""
         ].filter(Boolean).join(" · "),
         color: d.sceneColors?.[sid] || ""
       });
@@ -3497,7 +3494,7 @@ function updateScheduleDayDOM(dayId){
     touch();
     renderDayPlan();
     renderScheduleBoard();
-    renderCallSheetDetail();
+    renderReportsDetail();
     renderReports();
     toast("Agregada ✅");
   }
@@ -3510,7 +3507,7 @@ function updateScheduleDayDOM(dayId){
     touch();
     renderDayPlan();
     renderScheduleBoard();
-    renderCallSheetDetail();
+    renderReportsDetail();
     renderReports();
   }
 
@@ -3661,28 +3658,12 @@ const height = Math.max(Math.round((absEnd - absStart) * ppm), Math.round(snapMi
       const dur = clamp(Math.max(snapMin, it.dur||snapMin), snapMin, DAY_SPAN_MIN);
       const absEnd = clamp(absStart + dur, 0, DAY_SPAN_MIN);
       const clock = `${hhmmFromMinutes(absStart)} – ${hhmmFromMinutes(absEnd)}`;
-
-      const isScene = (it.kind === "scene");
-      const sc = isScene ? getScene(it.id) : null;
-      const num = isScene ? (sc?.number||"") : "";
-      const title = isScene ? (sc?.slugline||it.title||"") : (it.title||"");
-      const ie = isScene ? (sc?.intExt||"") : "";
-      const loc = isScene ? (sc?.location||"") : "";
-      const tod = isScene ? (sc?.timeOfDay||"") : "";
-      const pages = isScene && sc?.pages ? formatPages(sc.pages) : "";
-      const notes = isScene ? (sc?.summary||"") : (it.detail||"");
-
       return `
         <tr style="background:${eattr(bg)};border-left:8px solid ${eattr(col)};">
           <td style="width:120px">${esc(clock)}</td>
-          <td style="width:60px">${esc(formatDuration(dur))}</td>
-          <td style="width:60px">${esc(num)}</td>
-          <td>${esc(title)}</td>
-          <td style="width:70px">${esc(ie)}</td>
-          <td>${esc(loc)}</td>
-          <td style="width:110px">${esc(tod)}</td>
-          <td style="width:70px">${esc(pages)}</td>
-          <td>${esc(notes)}</td>
+          <td style="width:70px">${esc(formatDuration(dur))}</td>
+          <td>${esc(it.title||"")}</td>
+          <td>${esc(it.detail||"")}</td>
         </tr>
       `;
     }).join("");
@@ -3694,19 +3675,9 @@ const height = Math.max(Math.round((absEnd - absStart) * ppm), Math.round(snapMi
         <div class="cardContent">
           <table class="dayplanPrintTable">
             <thead>
-              <tr>
-                <th>Hora</th>
-                <th>Dur</th>
-                <th>#</th>
-                <th>Título / Item</th>
-                <th>Int/Ext</th>
-                <th>Lugar</th>
-                <th>Momento</th>
-                <th>Pág</th>
-                <th>Notas</th>
-              </tr>
+              <tr><th>Hora</th><th>Dur</th><th>Item</th><th>Detalle</th></tr>
             </thead>
-            <tbody>${rows || `<tr><td colspan="9" class="muted">—</td></tr>`}</tbody>
+            <tbody>${rows || `<tr><td colspan="4" class="muted">—</td></tr>`}</tbody>
           </table>
         </div>
       </div>
@@ -3753,7 +3724,7 @@ const height = Math.max(Math.round((absEnd - absStart) * ppm), Math.round(snapMi
           touch();
           renderDayPlan();
           renderScheduleBoard();
-          renderCallSheetDetail();
+          renderReportsDetail();
           renderReports();
           return;
         }
@@ -3892,7 +3863,7 @@ dayplanPointer = {
         dayplanPointer = null;
         renderDayPlan();
         renderScheduleBoard();
-        renderCallSheetDetail();
+        renderReportsDetail();
         renderReports();
       }
 
@@ -3989,7 +3960,7 @@ dayplanPointer = {
           touch();
           renderDayPlan();
           renderScheduleBoard();
-          renderCallSheetDetail();
+          renderReportsDetail();
           renderReports();
           return;
         }
@@ -4015,7 +3986,7 @@ dayplanPointer = {
           touch();
           renderDayPlan();
           renderScheduleBoard();
-          renderCallSheetDetail();
+          renderReportsDetail();
           renderReports();
           return;
         }
@@ -4030,7 +4001,7 @@ dayplanPointer = {
           touch();
           renderDayPlan();
           renderScheduleBoard();
-          renderCallSheetDetail();
+          renderReportsDetail();
           renderReports();
           return;
         }
@@ -4044,7 +4015,7 @@ if(e.target.id === "dpi_title" || e.target.id === "dpi_detail"){
   touch();
   renderDayPlan();
   renderScheduleBoard();
-  renderCallSheetDetail();
+  renderReportsDetail();
   renderReports();
   return;
 }
@@ -4190,7 +4161,7 @@ function renderShotList(){
       renderDayDetail();
       renderReports();
       renderCallSheetCalendar();
-      renderCallSheetDetail();
+      renderReportsDetail();
       toast("Ajusté duraciones del cronograma según los planos");
     }
 
@@ -4316,7 +4287,7 @@ function renderShotList(){
               renderScheduleBoard();
               renderDayDetail();
               renderReports();
-              renderCallSheetDetail();
+              renderReportsDetail();
             }
             renderShotList();
           });
@@ -4373,7 +4344,7 @@ function renderShotList(){
         if(!hasShoot) return;
         callSheetDayId = shootByDate.get(ds);
         renderCallSheetCalendar();
-        renderCallSheetDetail();
+        renderReportsDetail();
       });
       grid.appendChild(cell);
     }
@@ -4440,7 +4411,12 @@ function renderShotList(){
         start: Number(d.times?.[sid] ?? 0) || 0,
         dur:   Number(d.durations?.[sid] ?? 60) || 0,
         title: `#${s.number||""} ${s.slugline||""}`.trim(),
-        detail: [s.location||"", s.timeOfDay||""].filter(Boolean).join(" · "),
+        detail: [
+          s.intExt||"",
+          s.location||"",
+          s.timeOfDay||"",
+          (Number(s.pages)||0) > 0 ? `${fmtPages(s.pages)} pág` : ""
+        ].filter(Boolean).join(" · "),
         color: d.sceneColors?.[sid] || ""
       });
     }
@@ -4502,6 +4478,176 @@ function renderShotList(){
     }
     crewBox.appendChild(crewItems);
     wrap.appendChild(crewBox);
+  }
+
+  // ===================== REPORTES (Plan de Rodaje / Call Sheet / Shotlist) =====================
+  function applyReportsTabUI(){
+    const tab = (reportsTab || "callsheet");
+    const tabs = document.querySelectorAll("#reportTabs .reportTabBtn");
+    tabs.forEach(btn=> btn.classList.toggle("active", btn.dataset.tab===tab));
+    ["dayplan","callsheet","shotlist"].forEach(t=>{
+      el(`reportPane-${t}`)?.classList.toggle("hidden", t!==tab);
+    });
+  }
+
+  function setReportsTab(tab){
+    const t = (["dayplan","callsheet","shotlist"].includes(tab)) ? tab : "callsheet";
+    reportsTab = t;
+    localStorage.setItem("gb_reports_tab", t);
+    applyReportsTabUI();
+    renderReportsDetail();
+  }
+
+  function renderReportsDetail(){
+    const d = callSheetDayId ? getDay(callSheetDayId) : (selectedDayId ? getDay(selectedDayId) : null);
+    if(reportsTab==="dayplan"){
+      renderReportDayplanDetail(d);
+    }else if(reportsTab==="shotlist"){
+      renderReportShotlistDetail(d);
+    }else{
+      renderCallSheetDetail();
+    }
+  }
+
+  function renderReportDayplanDetail(d){
+    const wrap = el("reportDayplanDetail");
+    if(!wrap) return;
+    wrap.innerHTML = "";
+    if(!d){
+      wrap.innerHTML = `<div class="catBlock"><div class="items">Elegí un día con rodaje.</div></div>`;
+      return;
+    }
+    ensureDayTimingMaps(d);
+
+    const items = buildDayplanItems(d);
+    const proj = esc(state.meta?.title || "Proyecto");
+    const dayTxt = `${formatDayTitle(d.date)}${d.label ? " · "+esc(d.label) : ""}`;
+
+    const box = document.createElement("div");
+    box.className = "catBlock";
+    box.innerHTML = `
+      <div class="hdr"><span class="dot" style="background:var(--cat-vehicles)"></span>Plan de Rodaje</div>
+      <div class="items">
+        <div><b>${proj}</b> · ${dayTxt}</div>
+        <div><b>Call:</b> ${esc(d.callTime||"")} &nbsp; <b>Locación:</b> ${esc(d.location||"")}</div>
+      </div>
+    `;
+
+    const base = minutesFromHHMM(d.callTime || "08:00");
+    const snapMin = Number(el("schedSnap")?.value || 15);
+    resolveOverlapsPushDown(d, snapMin);
+
+    const rows = items.map((it)=>{
+      const absStart = clamp(base + (it.start||0), 0, DAY_SPAN_MIN - snapMin);
+      const dur = clamp(Math.max(snapMin, it.dur||snapMin), snapMin, DAY_SPAN_MIN);
+      const absEnd = clamp(absStart + dur, 0, DAY_SPAN_MIN);
+      const clock = `${hhmmFromMinutes(absStart)} – ${hhmmFromMinutes(absEnd)}`;
+      return `
+        <tr>
+          <td style="width:120px">${esc(clock)}</td>
+          <td style="width:70px">${esc(formatDuration(dur))}</td>
+          <td>${esc(it.title||"")}</td>
+          <td>${esc(it.detail||"")}</td>
+        </tr>
+      `;
+    }).join("");
+
+    const table = document.createElement("div");
+    table.className = "items";
+    table.innerHTML = `
+      <table class="dayplanPrintTable">
+        <thead><tr><th>Hora</th><th>Dur</th><th>Item</th><th>Detalle</th></tr></thead>
+        <tbody>${rows || `<tr><td colspan="4" class="muted">—</td></tr>`}</tbody>
+      </table>
+    `;
+
+    box.appendChild(table);
+    wrap.appendChild(box);
+  }
+
+  function renderReportShotlistDetail(d){
+    const wrap = el("reportShotlistDetail");
+    if(!wrap) return;
+    wrap.innerHTML = "";
+    if(!d){
+      wrap.innerHTML = `<div class="catBlock"><div class="items">Elegí un día con rodaje.</div></div>`;
+      return;
+    }
+
+    const scenes = (d.sceneIds||[]).map(getScene).filter(Boolean);
+    const pages = scenes.reduce((acc, s)=> acc + (Number(s.pages)||0), 0);
+    const totalShots = scenes.reduce((acc, s)=> acc + ((s.shots||[]).length), 0);
+
+    const header = document.createElement("div");
+    header.className = "catBlock";
+    header.innerHTML = `
+      <div class="hdr"><span class="dot" style="background:var(--cat-camera)"></span>Shotlist</div>
+      <div class="items">
+        <div><b>${esc(state.meta.title||"Proyecto")}</b> · ${esc(formatDayTitle(d.date))}${d.label? " · "+esc(d.label):""}</div>
+        <div><b>Call:</b> ${esc(d.callTime||"")} &nbsp; <b>Locación:</b> ${esc(d.location||"")}</div>
+        <div class="kpiRow" style="margin-top:10px;">
+          <span class="kpi"><b>${scenes.length}</b> escenas</span>
+          <span class="kpi"><b>${totalShots}</b> planos</span>
+          <span class="kpi"><b>${fmtPages(pages)}</b> pág</span>
+        </div>
+      </div>
+    `;
+    wrap.appendChild(header);
+
+    const list = document.createElement("div");
+    list.className = "catBlock";
+    list.innerHTML = `<div class="hdr"><span class="dot" style="background:var(--cat-props)"></span>Listado</div>`;
+
+    const items = document.createElement("div");
+    items.className = "items";
+    if(!scenes.length){
+      items.innerHTML = `<div>—</div>`;
+    }else{
+      items.innerHTML = scenes.map(s=>{
+        const meta = [
+          s.intExt||"",
+          s.location||"",
+          s.timeOfDay||"",
+          (Number(s.pages)||0)>0 ? `${fmtPages(s.pages)} pág` : ""
+        ].filter(Boolean).join(" · ");
+        const shots = (s.shots||[]);
+        const shotsHtml = shots.length
+          ? `<div style="margin-top:8px; display:flex; flex-direction:column; gap:6px;">
+               ${shots.map((sh,i)=>{
+                 const t = (sh.type||"").trim();
+                 const desc = (sh.desc||"").trim();
+                 return `<div><span class="muted">${i+1}.</span> <b>${esc(t||"Plano")}</b>${desc? ` · ${esc(desc)}`:""}</div>`;
+               }).join("")}
+             </div>`
+          : `<div class="muted">Sin planos cargados</div>`;
+        return `
+          <div style="margin-top:12px;">
+            <div><b>#${esc(s.number||"")}</b> ${esc(s.slugline||"")}</div>
+            ${meta ? `<div class="muted small">${esc(meta)}</div>` : ``}
+            ${shotsHtml}
+          </div>
+        `;
+      }).join("");
+    }
+    list.appendChild(items);
+    wrap.appendChild(list);
+  }
+
+  // Print orientation helper (para REPORTES)
+  let _printOrientEl = null;
+  function setPrintOrientation(orientation){
+    try{
+      if(_printOrientEl) _printOrientEl.remove();
+      _printOrientEl = document.createElement("style");
+      _printOrientEl.id = "gb-print-orient";
+      _printOrientEl.media = "print";
+      const o = orientation === "landscape" ? "A4 landscape" : "A4 portrait";
+      _printOrientEl.textContent = `@page{ size:${o}; margin:10mm; }`;
+      document.head.appendChild(_printOrientEl);
+    }catch(_e){}
+  }
+  function clearPrintOrientation(){
+    try{ if(_printOrientEl){ _printOrientEl.remove(); _printOrientEl = null; } }catch(_e){}
   }
 
   // Bank collapse
@@ -4638,7 +4784,7 @@ function renderShotList(){
       touch();
       renderDayPlan();
       renderScheduleBoard();
-      renderCallSheetDetail();
+      renderReportsDetail();
       renderReports();
     });
     el("btnDayplanPrint")?.addEventListener("click", ()=> window.print());
@@ -4656,7 +4802,7 @@ function renderShotList(){
       renderDayDetail();
       renderReports();
       renderScheduleBoard();
-      renderCallSheetDetail();
+      renderReportsDetail();
     });
     numNode?.addEventListener("blur", ()=>{
       const s = selectedSceneId ? getScene(selectedSceneId) : null;
@@ -4686,27 +4832,42 @@ function renderShotList(){
       renderElementsExplorer();
       renderReports();
       renderScheduleBoard();
-      renderCallSheetDetail();
+      renderReportsDetail();
     });
 
     ["slugline","intExt","location","timeOfDay","pages","summary","notes"].forEach(k=>{
       const node = el(`scene_${k}`);
       if(!node) return;
-      const evt = (k==="timeOfDay" || k==="intExt") ? "change" : "input";
-      node.addEventListener(evt, ()=>{
+
+      const handler = ()=>{
         const s = selectedSceneId ? getScene(selectedSceneId) : null;
         if(!s) return;
-        if(k==="pages") s[k] = Number(node.value||0);
-        else if(k==="timeOfDay") s[k] = normalizeTOD(node.value);
-        else if(k==="intExt") s[k] = normalizeIntExt(node.value);
-        else s[k] = node.value;
 
-        // Autocompleta si pegás una slugline clásica (INT./EXT. ... - TOD)
+        if(k==="pages"){
+          s[k] = Number(node.value||0);
+        }else if(k==="timeOfDay"){
+          s[k] = normalizeTOD(node.value);
+        }else if(k==="intExt"){
+          const v = String(node.value||"").trim();
+          s[k] = (v==="Int" || v==="Ext") ? v : "";
+        }else{
+          s[k] = node.value;
+        }
+
+        // Extra útil: si el título tiene formato de slugline, autocompletamos I/E, Lugar, Momento (sin pisar lo que ya llenaste)
         if(k==="slugline"){
-          const parsed = sluglineToLocTOD(s.slugline);
-          if(!s.intExt && parsed.intExt){ s.intExt = parsed.intExt; el("scene_intExt").value = parsed.intExt; }
-          if(!s.location && parsed.location){ s.location = parsed.location; el("scene_location").value = parsed.location; }
-          if(!s.timeOfDay && parsed.timeOfDay){ s.timeOfDay = parsed.timeOfDay; el("scene_timeOfDay").value = parsed.timeOfDay; }
+          const up = String(s.slugline||"").toUpperCase();
+          if(/[-–—]/.test(up) || /\b(DIA|DÍA|NOCHE|AMANECER|ATARDECER)\b/.test(up) || /^\s*(INT|EXT|INTERIOR|EXTERIOR)\b/i.test(up)){
+            const ie = sluglineToIntExt(s.slugline);
+            const { location, timeOfDay } = sluglineToLocTOD(s.slugline);
+            let changed = false;
+            if(!s.intExt && ie){ s.intExt = ie; el("scene_intExt").value = ie; changed = true; }
+            if(!s.location && location){ s.location = location; el("scene_location").value = location; changed = true; }
+            if(!s.timeOfDay && timeOfDay){ s.timeOfDay = timeOfDay; el("scene_timeOfDay").value = timeOfDay; changed = true; }
+            if(changed){
+              // no spamear: sin toast en cada tecla
+            }
+          }
         }
 
         touch();
@@ -4717,8 +4878,11 @@ function renderShotList(){
         renderElementsExplorer();
         renderReports();
         renderScheduleBoard();
-        renderCallSheetDetail();
-      });
+        renderReportsDetail();
+      };
+
+      node.addEventListener("input", handler);
+      node.addEventListener("change", handler);
     });
 
     el("elCategory")?.addEventListener("change", refreshElementSuggestions);
@@ -4892,7 +5056,6 @@ el("scriptVerSelect")?.addEventListener("change", ()=>{
           id: uid("scrScene"),
           number: "1",
           slugline: "INT. (NUEVA ESCENA) - DÍA",
-	          intExt: "Int",
           location: "(NUEVA ESCENA)",
           timeOfDay: "Día",
           body: "",
@@ -4917,7 +5080,6 @@ el("scriptVerSelect")?.addEventListener("change", ()=>{
         id: uid("scrScene"),
         number: nextNum,
         slugline: "INT. (NUEVA ESCENA) - DÍA",
-	        intExt: "Int",
         location: "(NUEVA ESCENA)",
         timeOfDay: "Día",
         body: "",
@@ -4948,7 +5110,6 @@ el("scriptVerSelect")?.addEventListener("change", ()=>{
           ensureSceneExtras(existing);
           existing.number = num;
           existing.slugline = sc.slugline || existing.slugline;
-          existing.intExt = sc.intExt || existing.intExt || "";
           existing.location = sc.location || existing.location;
           existing.timeOfDay = sc.timeOfDay || existing.timeOfDay;
           existing.summary = sc.summary || String(sc.body||"").replace(/\s+/g," ").trim().slice(0,220) || existing.summary;
@@ -4958,7 +5119,6 @@ el("scriptVerSelect")?.addEventListener("change", ()=>{
             id: uid("scene"),
             number: num,
             slugline: sc.slugline || "",
-            intExt: sc.intExt || "",
             location: sc.location || "",
             timeOfDay: sc.timeOfDay || "",
             pages: 0,
@@ -4987,7 +5147,7 @@ el("scriptVerSelect")?.addEventListener("change", ()=>{
       renderElementsExplorer();
       renderReports();
       renderScheduleBoard();
-      renderCallSheetDetail();
+      renderReportsDetail();
     });
 
 
@@ -5002,16 +5162,29 @@ el("scriptVerSelect")?.addEventListener("change", ()=>{
       for(let i=start;i<rows.length;i++){
         const r = rows[i];
         if(!r.length) continue;
-	        const parsed = sluglineToLocTOD(r[1]||"");
+        const ieRaw = String(r[2]||"").trim();
+        const ieLike = /^(int|ext|i\/e|int\/ext|ext\/int)$/i.test(ieRaw);
+        const isNewLayout = (r.length >= 7) || ieLike;
+
+        const number = r[0]||"";
+        const slugline = r[1]||"";
+        const intExt = isNewLayout ? (ieRaw ? (/^ext/i.test(ieRaw) ? "Ext" : "Int") : "") : (sluglineToIntExt(slugline) || "");
+        const location = isNewLayout ? (r[3]||"") : (r[2]||"");
+        const timeOfDay = normalizeTOD(isNewLayout ? (r[4]||"") : (r[3]||""));
+        const pages = Number(isNewLayout ? (r[5]||0) : (r[4]||0));
+        const summary = isNewLayout ? (r[6]||"") : (r[5]||"");
+
+        const locTod = sluglineToLocTOD(slugline);
+
         state.scenes.push({
           id: uid("scene"),
-          number: r[0]||"",
-          slugline: r[1]||"",
-	          intExt: parsed.intExt || "",
-          location: r[2]||"",
-          timeOfDay: normalizeTOD(r[3]||""),
-          pages: Number(r[4]||0),
-          summary: r[5]||"",
+          number,
+          slugline,
+          intExt,
+          location: location || locTod.location || "",
+          timeOfDay: timeOfDay || locTod.timeOfDay || "",
+          pages,
+          summary,
           notes:"",
           elements: Object.fromEntries(cats.map(c=>[c,[]])),
           shots: []
@@ -5048,7 +5221,7 @@ el("scriptVerSelect")?.addEventListener("change", ()=>{
         renderReports();
         renderScheduleBoard();
         renderCallSheetCalendar();
-        renderCallSheetDetail();
+        renderReportsDetail();
       });
     }
 
@@ -5059,7 +5232,7 @@ el("scriptVerSelect")?.addEventListener("change", ()=>{
       el("day_call").value = d.callTime;
       cleanupDayCallTimes(d);
       touch();
-      renderDaysBoard(); renderDayDetail(); renderScheduleBoard(); renderReports(); renderCallSheetDetail();
+      renderDaysBoard(); renderDayDetail(); renderScheduleBoard(); renderReports(); renderReportsDetail();
     });
     el("day_call_plus")?.addEventListener("click", ()=>{
       const d = selectedDayId ? getDay(selectedDayId) : null;
@@ -5068,14 +5241,14 @@ el("scriptVerSelect")?.addEventListener("change", ()=>{
       el("day_call").value = d.callTime;
       cleanupDayCallTimes(d);
       touch();
-      renderDaysBoard(); renderDayDetail(); renderScheduleBoard(); renderReports(); renderCallSheetDetail();
+      renderDaysBoard(); renderDayDetail(); renderScheduleBoard(); renderReports(); renderReportsDetail();
     });
 
     el("btnOpenCallSheet")?.addEventListener("click", ()=>{
       callSheetDayId = selectedDayId;
       showView("callsheet");
       renderCallSheetCalendar();
-      renderCallSheetDetail();
+      renderReportsDetail();
     });
 
     el("btnToggleBank")?.addEventListener("click", ()=>{
@@ -5111,7 +5284,18 @@ el("scriptVerSelect")?.addEventListener("change", ()=>{
       renderCallSheetCalendar();
     });
 
-    el("btnPrintCallSheet")?.addEventListener("click", ()=>window.print());
+    el("reportTabs")?.addEventListener("click", (e)=>{
+      const btn = e.target?.closest?.(".reportTabBtn");
+      if(!btn) return;
+      setReportsTab(btn.dataset.tab);
+    });
+
+    el("btnPrintCallSheet")?.addEventListener("click", ()=>{
+      // Plan de Rodaje = landscape, el resto portrait
+      setPrintOrientation(reportsTab==="dayplan" ? "landscape" : "portrait");
+      window.print();
+    });
+    window.addEventListener("afterprint", clearPrintOrientation);
 
     el("btnSaveCfg")?.addEventListener("click", saveCfgFromUI);
     el("btnTestCfg")?.addEventListener("click", testCfg);
@@ -5121,7 +5305,7 @@ el("scriptVerSelect")?.addEventListener("change", ()=>{
     el("projectTitle")?.addEventListener("input", ()=>{
       state.meta.title = el("projectTitle").value || "Proyecto";
       touch();
-      renderCallSheetDetail();
+      renderReportsDetail();
     });
   }
 
@@ -5193,7 +5377,7 @@ if(!state.scenes.length){
     renderScheduleBoard();
     renderShotList();
     renderCallSheetCalendar();
-    renderCallSheetDetail();
+    renderReportsDetail();
     applyBankCollapsedUI();
     initCollapsibles();
   }

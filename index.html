@@ -23,7 +23,7 @@
         <button class="navBtn" data-view="elements">Elementos</button>
         <button class="navBtn" data-view="crew">Equipo técnico</button>
         <button class="navBtn" data-view="reports">Filtros</button>
-        <button class="navBtn" data-view="callsheet">Call Sheets</button>
+        <button class="navBtn" data-view="callsheet">REPORTES</button>
       </nav>
 
       
@@ -64,11 +64,11 @@
                   <thead>
                     <tr>
                       <th style="width:72px;">#</th>
-                      <th style="width:90px;">Int/Ext</th>
                       <th>Título</th>
+                      <th style="width:70px;">I/E</th>
                       <th>Lugar</th>
-                      <th style="width:130px;">Momento</th>
-                      <th style="width:110px;">Largo (pág)</th>
+                      <th style="width:120px;">Momento</th>
+                      <th style="width:90px;">Largo</th>
                     </tr>
                   </thead>
                   <tbody></tbody>
@@ -92,15 +92,23 @@
                 <div class="field">
                   <label>Int / Ext</label>
                   <select class="input" id="scene_intExt">
-                    <option value="">—</option>
+                    <option value=""></option>
                     <option value="Int">Int</option>
                     <option value="Ext">Ext</option>
                   </select>
                 </div>
                 <div class="field">
+                  <label>Título</label>
+                  <input class="input" id="scene_slugline"/>
+                </div>
+                <div class="field">
+                  <label>Lugar</label>
+                  <input class="input" id="scene_location"/>
+                </div>
+                <div class="field">
                   <label>Momento del día</label>
                   <select class="input" id="scene_timeOfDay">
-                    <option value="">—</option>
+                    <option value=""></option>
                     <option value="Día">Día</option>
                     <option value="Noche">Noche</option>
                     <option value="Amanecer">Amanecer</option>
@@ -108,17 +116,8 @@
                   </select>
                 </div>
                 <div class="field">
-                  <label>Largo páginas</label>
+                  <label>Largo Páginas</label>
                   <input class="input" id="scene_pages" min="0" step="0.5" type="number"/>
-                </div>
-
-                <div class="field" style="grid-column:1/-1">
-                  <label>Título</label>
-                  <input class="input" id="scene_slugline"/>
-                </div>
-                <div class="field" style="grid-column:1/-1">
-                  <label>Lugar</label>
-                  <input class="input" id="scene_location"/>
                 </div>
               </div>
 
@@ -199,7 +198,7 @@
                     <div class="muted small">Editor de escena (versión)</div>
                     <div class="row gap">
                       <div class="grow">
-                        <label class="small">Slugline</label>
+                        <label class="small">Título</label>
                         <input class="input" id="scriptSceneSlugline" placeholder="INT. CASA - DÍA"/>
                       </div>
                       <div style="max-width:120px">
@@ -556,11 +555,25 @@
 
           <div class="card" id="callDetailCard">
             <div class="cardHeader">
-              <h2 class="cardTitle">Call Sheet</h2>
+              <h2 class="cardTitle">REPORTES</h2>
               <button class="btn primary" id="btnPrintCallSheet">Imprimir</button>
             </div>
             <div class="cardContent">
-              <div id="callSheetDetail"></div>
+              <div class="reportTabs screenOnly" id="reportTabs">
+                <button class="btn reportTabBtn" data-tab="dayplan">Plan de Rodaje</button>
+                <button class="btn reportTabBtn active" data-tab="callsheet">Call Sheet</button>
+                <button class="btn reportTabBtn" data-tab="shotlist">Shotlist</button>
+              </div>
+
+              <div id="reportPane-dayplan" class="reportPane hidden">
+                <div id="reportDayplanDetail"></div>
+              </div>
+              <div id="reportPane-callsheet" class="reportPane">
+                <div id="callSheetDetail"></div>
+              </div>
+              <div id="reportPane-shotlist" class="reportPane hidden">
+                <div id="reportShotlistDetail"></div>
+              </div>
             </div>
         </div>
       </div></section>
