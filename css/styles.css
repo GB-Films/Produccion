@@ -1407,17 +1407,19 @@ tr.groupRow td{
 .dayplanPrintTable td{ word-break:break-word; }
 
 /* ===== Plan de Rodaje (impresión): columnas angostas + Resumen grande ===== */
-.dayplanPrintTable col.colHour{ width:38px; }
-.dayplanPrintTable col.colDur{ width:28px; }
-.dayplanPrintTable col.colNro{ width:28px; }
-.dayplanPrintTable col.colIE{ width:34px; }
-.dayplanPrintTable col.colPag{ width:38px; }
+/* Ajuste fino de anchos (Tomi): un poco más de aire en Hora/Dur/Nro/I-E/Pág, y más en Momento/Lugar.
+   Resumen sigue absorbiendo el ancho restante. */
+.dayplanPrintTable col.colHour{ width:46px; } /* +20% */
+.dayplanPrintTable col.colDur{ width:34px; }  /* +20% */
+.dayplanPrintTable col.colNro{ width:34px; }  /* +20% */
+.dayplanPrintTable col.colIE{ width:41px; }   /* +20% */
+.dayplanPrintTable col.colPag{ width:46px; }  /* +20% */
 
-/* Momento: angosto, que entre el título */
-.dayplanPrintTable col.colTod{ width:56px; }
+/* Momento: +25% */
+.dayplanPrintTable col.colTod{ width:70px; }
 
-/* Lugar: ~30% más angosto */
-.dayplanPrintTable col.colLoc{ width:64px; }
+/* Lugar: +30% */
+.dayplanPrintTable col.colLoc{ width:84px; }
 
 /* Título: ancho razonable; el resto se lo lleva Resumen */
 .dayplanPrintTable col.colTitle{ width:160px; }
