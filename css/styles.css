@@ -988,6 +988,48 @@ tr.groupRow td{
   body.gbPrintingShotlist #gbPrintRoot *{ visibility:visible !important; }
   body.gbPrintingShotlist #gbPrintRoot{ display:block !important; position:absolute; left:0; top:0; width:100%; }
 
+  /* Call Sheet print (unificado) */
+  body.gbPrintingCallsheet *{ visibility:hidden !important; }
+  body.gbPrintingCallsheet #gbPrintRoot,
+  body.gbPrintingCallsheet #gbPrintRoot *{ visibility:visible !important; }
+  body.gbPrintingCallsheet #gbPrintRoot{ display:block !important; position:absolute; left:0; top:0; width:100%; padding:0 !important; margin:0 !important; }
+
+  body.gbPrintingCallsheet{ background:#fff !important; color:#000 !important; }
+  body.gbPrintingCallsheet .muted{ color:#333 !important; }
+
+  body.gbPrintingCallsheet .catBlock{ background:#fff !important; border:1px solid #ddd !important; }
+  body.gbPrintingCallsheet .catBlock .hdr{ background:#f6f6f6 !important; border-bottom:1px solid #ddd !important; color:#111 !important; }
+  body.gbPrintingCallsheet .kpi{ background:#f6f6f6 !important; border:1px solid #ddd !important; color:#111 !important; }
+
+  /* Arrancar pegado arriba */
+  body.gbPrintingCallsheet #gbPrintRoot .catBlock:first-child{ margin-top:0 !important; }
+
+  /* Título (día / call / locación) con más presencia */
+  body.gbPrintingCallsheet #gbPrintRoot .callHeader .items > div:nth-child(1),
+  body.gbPrintingCallsheet #gbPrintRoot .callHeader .items > div:nth-child(2){
+    font-size:13pt !important;
+    font-weight:900 !important;
+    color:#111 !important;
+  }
+
+  /* Crew: sin espacio antes del primer área */
+  body.gbPrintingCallsheet #gbPrintRoot .callCrew .items > div:first-child{ margin-top:0 !important; }
+
+  /* Semáforo de call times (crew / cast) */
+  body.gbPrintingCallsheet #gbPrintRoot .callTimeDot{
+    display:inline-block;
+    width:10px; height:10px;
+    border-radius:999px;
+    margin-right:6px;
+    border:1px solid rgba(0,0,0,.25);
+    vertical-align:middle;
+  }
+  body.gbPrintingCallsheet #gbPrintRoot .callTimeDot.green{ background:#2ecc71; }
+  body.gbPrintingCallsheet #gbPrintRoot .callTimeDot.yellow{ background:#f1c40f; }
+  body.gbPrintingCallsheet #gbPrintRoot .callTimeDot.red{ background:#e74c3c; }
+
+
+
   /* Fondo + contraste */
   body.gbPrintingShotlist{ background:#fff !important; color:#000 !important; }
   body.gbPrintingShotlist .muted{ color:#333 !important; }

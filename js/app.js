@@ -4538,17 +4538,19 @@ function renderShotList(){
     }
   }
 
-  function renderCallSheetDetail(){ /* ... sin cambios ... */ 
-    const wrap = el("callSheetDetail");
+  function renderCallSheetDetail(targetWrap=null, dayIdOverride=null){ /* ... sin cambios ... */ 
+    const wrap = targetWrap || el("callSheetDetail");
     if(!wrap) return;
     wrap.innerHTML = "";
 
-    const d = callSheetDayId ? getDay(callSheetDayId) : (selectedDayId ? getDay(selectedDayId) : null);
+    const d = dayIdOverride ? getDay(dayIdOverride) : (callSheetDayId ? getDay(callSheetDayId) : (selectedDayId ? getDay(selectedDayId) : null));
     if(!d){
       wrap.innerHTML = `<div class="catBlock"><div class="items">Elegí un día con rodaje.</div></div>`;
       return;
     }
     ensureDayTimingMaps(d);
+    const dayBase = baseDayCall(d);
+    const castBase = baseCastCall(d);
 
     const scenes = (d.sceneIds||[]).map(getScene).filter(Boolean);
     const cast = union(scenes.flatMap(s=>s.elements?.cast||[]));
@@ -4645,7 +4647,7 @@ function renderShotList(){
     castBox.className = "catBlock callCast";
     castBox.innerHTML = `
       <div class="hdr"><span class="dot" style="background:${catColors.cast}"></span>Cast</div>
-      <div class="items">${cast.length ? cast.map(n=>{ const t = effectiveCastCall(d,n); return `<div><b>${esc(t)}</b> · ${esc(n)}</div>`; }).join("") : "<div>—</div>"}</div>
+      <div class="items">${cast.length ? cast.map(n=>{ const eff = effectiveCastCall(d,n); const ov = normalizeHHMM(d?.castCallTimes?.[n]); const diffBase = !!ov && (eff !== castBase); const diffDay = !diffBase && (eff !== dayBase); const dot = diffBase ? "red" : (diffDay ? "yellow" : "green"); return `<div class="callPersonLine"><span class="callTimeDot ${dot}"></span><b class="callTime">${esc(eff)}</b> · ${esc(n)}</div>`; }).join("") : "<div>—</div>"}</div>
     `;
     wrap.appendChild(castBox);
 
@@ -4660,7 +4662,7 @@ function renderShotList(){
       crewItems.innerHTML = crewGrouped.map(([area, arr])=>`
         <div style="margin-top:10px;">
           <div style="font-weight:900; margin-bottom:6px;">${esc(area)}</div>
-          ${arr.map(c=>{ const t = effectiveCrewCall(d, c); return `<div><b>${esc(t)}</b> · ${esc(c.name)}${c.role? ` (${esc(c.role)})`:''}${c.phone? ` · ${esc(c.phone)}`:''}</div>`; }).join("")}
+          ${arr.map(c=>{ const t = effectiveCrewCall(d, c); const areaBase = baseCrewAreaCall(d, area); const diffArea = (t !== areaBase); const diffDay = !diffArea && (t !== dayBase); const dot = diffArea ? "red" : (diffDay ? "yellow" : "green"); return `<div class="callPersonLine"><span class="callTimeDot ${dot}"></span><b class="callTime">${esc(t)}</b> · ${esc(c.name)}${c.role? ` (${esc(c.role)})`:''}${c.phone? ` · ${esc(c.phone)}`:''}</div>`; }).join("")}
         </div>
       `).join("");
     }
@@ -4687,7 +4689,7 @@ function renderShotList(){
   }
 
   function renderReportsDetail(){
-    const d = callSheetDayId ? getDay(callSheetDayId) : (selectedDayId ? getDay(selectedDayId) : null);
+    const d = dayIdOverride ? getDay(dayIdOverride) : (callSheetDayId ? getDay(callSheetDayId) : (selectedDayId ? getDay(selectedDayId) : null));
     if(reportsTab==="dayplan"){
       renderReportDayplanDetail(d);
     }else if(reportsTab==="shotlist"){
@@ -4846,17 +4848,19 @@ const col = safeHexColor(it.color || (it.kind==="scene" ? "#BFDBFE" : "#E5E7EB")
 
   // Print orientation helper (para REPORTES)
   let _printOrientEl = null;
-  function setPrintOrientation(orientation){
+  function setPrintOrientation(orientation, marginMm=10){
     try{
       if(_printOrientEl) _printOrientEl.remove();
       _printOrientEl = document.createElement("style");
       _printOrientEl.id = "gb-print-orient";
       _printOrientEl.media = "print";
       const o = orientation === "landscape" ? "A4 landscape" : "A4 portrait";
-      _printOrientEl.textContent = `@page{ size:${o}; margin:10mm; }`;
+      const m = (Number(marginMm)||0);
+      _printOrientEl.textContent = `@page{ size:${o}; margin:${m}mm; }`;
       document.head.appendChild(_printOrientEl);
     }catch(_e){}
   }
+
   function clearPrintOrientation(){
     try{ if(_printOrientEl){ _printOrientEl.remove(); _printOrientEl = null; } }catch(_e){}
   }
@@ -4872,7 +4876,7 @@ const col = safeHexColor(it.color || (it.kind==="scene" ? "#BFDBFE" : "#E5E7EB")
     return _gbPrintRoot;
   }
   function cleanupGbPrintRoot(){
-    try{ document.body.classList.remove("gbPrintingShotlist"); }catch(_e){}
+    try{ document.body.classList.remove("gbPrintingShotlist","gbPrintingCallsheet"); }catch(_e){}
     try{ if(_gbPrintRoot) _gbPrintRoot.innerHTML = ""; }catch(_e){}
   }
 
@@ -4981,7 +4985,23 @@ const col = safeHexColor(it.color || (it.kind==="scene" ? "#BFDBFE" : "#E5E7EB")
     return callSheetDayId || selectedDayId || selectedShotlistDayId || (state.shootDays?.[0]?.id || null);
   }
 
-  function printShotlistByDayId(dayId){
+  
+  function printCallSheetByDayId(dayId){
+    const d = dayId ? getDay(dayId) : null;
+    if(!d){ toast("Elegí un día con rodaje"); return; }
+    ensureDayTimingMaps(d);
+    const root = ensureGbPrintRoot();
+    root.innerHTML = `<div id="callSheetPrintRoot"></div>`;
+    const target = root.querySelector("#callSheetPrintRoot");
+    renderCallSheetDetail(target, dayId);
+
+    document.body.classList.add("gbPrintingCallsheet");
+    // Menos margen para que arranque más arriba
+    setPrintOrientation("portrait", 6);
+    window.print();
+  }
+
+function printShotlistByDayId(dayId){
     const d = dayId ? getDay(dayId) : null;
     if(!d){ toast("Elegí un día con rodaje"); return; }
     ensureDayTimingMaps(d);
@@ -5607,10 +5627,8 @@ el("scriptVerSelect")?.addEventListener("change", ()=>{
     });
 
     el("btnOpenCallSheet")?.addEventListener("click", ()=>{
-      callSheetDayId = selectedDayId;
-      showView("callsheet");
-      renderCallSheetCalendar();
-      renderReportsDetail();
+      // Desde Call Diario: imprimir el Call Sheet del día seleccionado
+      printCallSheetByDayId(selectedDayId);
     });
 
     el("btnToggleBank")?.addEventListener("click", ()=>{
@@ -5659,13 +5677,17 @@ el("scriptVerSelect")?.addEventListener("change", ()=>{
     });
 
     el("btnPrintCallSheet")?.addEventListener("click", ()=>{
-      // Plan de Rodaje = landscape, el resto portrait.
-      // Shotlist: usamos impresión unificada (mismo diseño que pestaña Shotlist).
+      // Plan de Rodaje = landscape.
+      // Call Sheet + Shotlist: impresión unificada (mismo diseño desde cualquier pestaña).
       if(reportsTab === "shotlist"){
         printShotlistByDayId(getReportsSelectedDayId());
         return;
       }
-      setPrintOrientation(reportsTab==="dayplan" ? "landscape" : "portrait");
+      if(reportsTab === "callsheet"){
+        printCallSheetByDayId(getReportsSelectedDayId());
+        return;
+      }
+      setPrintOrientation("landscape");
       window.print();
     });
     window.addEventListener("afterprint", ()=>{ clearPrintOrientation(); cleanupGbPrintRoot(); });
