@@ -1296,6 +1296,29 @@ tr.groupRow td{
   background:rgba(255,255,255,.03);
 }
 
+
+.dayMetaEditor{
+  margin-top:10px;
+  padding:10px 12px;
+  border:1px solid var(--border);
+  border-radius:12px;
+  background:rgba(255,255,255,.03);
+}
+.dayMetaGrid{
+  display:grid;
+  grid-template-columns: 1fr 1fr;
+  gap:10px;
+  align-items:start;
+}
+.dayMetaGrid .field{ margin:0; }
+.dayMetaNotes{ grid-column: 1 / -1; }
+
+@media (max-width: 720px){
+  .dayMetaGrid{ grid-template-columns: 1fr; }
+  .dayMetaNotes{ grid-column:auto; }
+}
+
+
 /* Timeline */
 .dpScroller{
   display:grid;

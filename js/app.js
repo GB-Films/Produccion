@@ -2180,39 +2180,76 @@ function setupScheduleWheelScroll(){
   }
 
   function renderDayDetail(){
+    // Asegurar que haya un día seleccionado válido
+    if(!selectedDayId || !getDay(selectedDayId)){
+      selectedDayId = state.shootDays?.[0]?.id || null;
+    }
     const d = selectedDayId ? getDay(selectedDayId) : null;
     if(d) ensureDayTimingMaps(d);
 
-    const title = el("dayDetailTitle");
-    if(title){
-      if(d){
-        const t = `${formatDayTitle(d.date)}${d.label? " · "+d.label:""}`;
-        title.textContent = `Detalle del Día — ${t}`;
-      }else{
-        title.textContent = "Detalle del Día";
-      }
+    // Selector compacto (Call Diario) para elegir día sin Tablero
+    const sel = el("shootDaySelect");
+    if(sel){
+      sortShootDaysInPlace();
+      sel.innerHTML = "";
+      (state.shootDays||[]).forEach(d0=>{
+        const opt = document.createElement("option");
+        opt.value = d0.id;
+        opt.textContent = `${formatDayTitle(d0.date)}${d0.label ? " · "+d0.label : ""}`;
+        sel.appendChild(opt);
+      });
+      sel.disabled = !(state.shootDays||[]).length;
+      if(selectedDayId) sel.value = selectedDayId;
     }
 
-    const map = { day_date:"date", day_call:"callTime", day_location:"location", day_label:"label", day_notes:"notes" };
-    for(const id in map){
-      const node = el(id);
-      if(!node) continue;
-      node.disabled = !d;
-      node.value = d ? (d[map[id]] || "") : "";
+    const title = el("dayDetailTitle");
+    if(!d){
+      if(title) title.textContent = "Detalle del Día";
+      el("dayCast").innerHTML = '<div class="muted">Agregá un día desde <b>Plan de Rodaje</b>.</div>';
+      el("dayCrewPicker").innerHTML = '<div class="muted">Agregá un día desde <b>Plan de Rodaje</b>.</div>';
+      // limpiar campos
+      ["day_date_display","day_call","day_location","day_label","day_notes"].forEach(id=>{
+        const n = el(id);
+        if(n){ n.value = ""; n.disabled = true; }
+      });
+      const hid = el("day_date"); if(hid){ hid.value=""; hid.disabled=true; }
+      const pick = el("day_date_pick"); if(pick) pick.disabled = true;
+      const m = el("day_call_minus"); if(m) m.disabled = true;
+      const p = el("day_call_plus"); if(p) p.disabled = true;
+      return;
     }
+
+    if(title) title.textContent = `Detalle del Día · ${formatDayTitle(d.date)}${d.label ? " · "+d.label : ""}`;
+
+    // Datos del día (solo lectura en Call Diario)
+    const map = { day_call:"callTime", day_location:"location", day_label:"label", day_notes:"notes" };
+    Object.keys(map).forEach(id=>{
+      const node = el(id);
+      const k = map[id];
+      if(!node) return;
+      node.disabled = false;
+      node.value = d[k] || "";
+      node.readOnly = true;
+    });
 
     const dateDisp = el("day_date_display");
     if(dateDisp){
-      dateDisp.disabled = !d;
-      dateDisp.value = d ? formatDDMMYYYY(d.date) : "";
+      dateDisp.disabled = false;
+      dateDisp.value = formatDDMMYYYY(d.date);
+      dateDisp.readOnly = true;
     }
+    const hid = el("day_date");
+    if(hid){ hid.value = d.date||""; hid.disabled = true; }
 
-    const datePickBtn = el("day_date_pick");
-    if(datePickBtn) datePickBtn.disabled = !d;
+    // Bloquear UI de edición (se edita en Plan de Rodaje)
+    const pick = el("day_date_pick"); if(pick) pick.disabled = true;
+    const m = el("day_call_minus"); if(m) m.disabled = true;
+    const p = el("day_call_plus"); if(p) p.disabled = true;
 
     renderDayCast();
     renderDayCrewPicker();
   }
+
 
   function dayScenes(d){ return (d.sceneIds||[]).map(getScene).filter(Boolean); }
 
@@ -3625,6 +3662,7 @@ items.push({
     }
 
     selectedDayplanDayId = selectedDayplanDayId || selectedDayId || state.shootDays?.[0]?.id || null;
+    selectedDayId = selectedDayplanDayId; // mantener sync con Call Diario
     if(!selectedDayplanDayId || !state.shootDays.some(x=>x.id===selectedDayplanDayId)){
       selectedDayplanDayId = state.shootDays?.[0]?.id || null;
     }
@@ -3651,22 +3689,206 @@ items.push({
     // Header (día seleccionado)
     const proj = esc(state.meta?.title || "Proyecto");
     const dayTxt = `${formatDayTitle(d.date)}${d.label ? " · "+esc(d.label) : ""}`;
-    const call = esc(d.callTime || "");
-    const loc = esc(d.location || "");
+    const eattr = (s)=>esc(String(s||"")).replace(/"/g,"&quot;");
 
     head.innerHTML = `
       <div class="dayplanHeader">
         <div class="dpTitle">
           <div class="dpProj">${proj}</div>
-          <div class="dpDay">${dayTxt}</div>
+          <div class="dpDay" id="dpDayTitleText">${dayTxt}</div>
         </div>
         <div class="dpMeta">
-          <div><b>Call:</b> ${call||"—"}</div>
-          <div><b>Locación:</b> ${loc||"—"}</div>
+          <div class="muted small">Acá editás la fecha, call time, locación, nombre y notas. En Call Diario es solo lectura.</div>
         </div>
       </div>
-      ${d.notes ? `<div class="dayplanNotes"><b>Notas:</b> ${esc(d.notes)}</div>` : ``}
+
+      <div class="dayMetaEditor noPrint">
+        <div class="dayMetaGrid">
+          <div class="field">
+            <label>Fecha</label>
+            <div class="dateDual">
+              <input class="input" id="dp_day_date_display" type="text" inputmode="numeric" placeholder="dd/mm/aaaa" value="${eattr(formatDDMMYYYY(d.date))}"/>
+              <button class="btn icon datePickBtn" id="dp_day_date_pick" type="button" title="Elegir fecha">📅</button>
+              <input class="input hiddenDate" id="dp_day_date" type="date" value="${eattr(d.date||"")}"/>
+            </div>
+          </div>
+
+          <div class="field">
+            <label>Call Time</label>
+            <div class="row gap">
+              <button class="btn icon" id="dp_day_call_minus" title="-15">−</button>
+              <input class="input grow" id="dp_day_call" placeholder="08:00" value="${eattr(d.callTime||"")}"/>
+              <button class="btn icon" id="dp_day_call_plus" title="+15">+</button>
+            </div>
+          </div>
+
+          <div class="field">
+            <label>Locación</label>
+            <input class="input" id="dp_day_location" value="${eattr(d.location||"")}"/>
+          </div>
+
+          <div class="field">
+            <label>Nombre</label>
+            <input class="input" id="dp_day_label" value="${eattr(d.label||"")}"/>
+          </div>
+
+          <div class="field dayMetaNotes">
+            <label>Notas</label>
+            <textarea class="textarea smallArea" id="dp_day_notes">${esc(d.notes||"")}</textarea>
+          </div>
+        </div>
+      </div>
     `;
+
+    // Bind del editor de Detalle del Día (delegado en el header para sobrevivir re-render)
+    if(head.dataset.metaBound !== "1"){
+      head.dataset.metaBound = "1";
+
+      const liteSave = window.U.debounce(()=>{ touch(); }, 450);
+
+      const fullRefresh = ()=>{
+        sortShootDaysInPlace();
+        touch();
+        renderDayPlan();
+        renderDayDetail();
+        renderReports();
+        renderScheduleBoard();
+        renderCallSheetCalendar();
+        renderReportsDetail();
+      };
+
+      head.addEventListener("click", (e)=>{
+        const d0 = selectedDayplanDayId ? getDay(selectedDayplanDayId) : null;
+        if(!d0) return;
+
+        if(e.target && e.target.id === "dp_day_call_minus"){
+          d0.callTime = hhmmFromMinutes(minutesFromHHMM(d0.callTime||"08:00") - 15);
+          const inp = head.querySelector("#dp_day_call");
+          if(inp) inp.value = d0.callTime;
+          cleanupDayCallTimes(d0);
+          fullRefresh();
+          return;
+        }
+        if(e.target && e.target.id === "dp_day_call_plus"){
+          d0.callTime = hhmmFromMinutes(minutesFromHHMM(d0.callTime||"08:00") + 15);
+          const inp = head.querySelector("#dp_day_call");
+          if(inp) inp.value = d0.callTime;
+          cleanupDayCallTimes(d0);
+          fullRefresh();
+          return;
+        }
+
+        const pickBtn = e.target.closest && e.target.closest("#dp_day_date_pick");
+        if(pickBtn){
+          const hid = head.querySelector("#dp_day_date");
+          if(!hid) return;
+
+          if(typeof hid.showPicker === "function"){
+            try{ hid.showPicker(); return; }catch(err){}
+          }
+
+          const r = pickBtn.getBoundingClientRect();
+          const prev = {
+            position: hid.style.position || "",
+            left: hid.style.left || "",
+            top: hid.style.top || "",
+            width: hid.style.width || "",
+            height: hid.style.height || "",
+            opacity: hid.style.opacity || "",
+            pointerEvents: hid.style.pointerEvents || "",
+            zIndex: hid.style.zIndex || ""
+          };
+
+          hid.style.position = "fixed";
+          hid.style.left = `${Math.round(r.left)}px`;
+          hid.style.top = `${Math.round(r.top)}px`;
+          hid.style.width = `${Math.max(1, Math.round(r.width))}px`;
+          hid.style.height = `${Math.max(1, Math.round(r.height))}px`;
+          hid.style.opacity = "0";
+          hid.style.pointerEvents = "auto";
+          hid.style.zIndex = "9999";
+
+          hid.focus({ preventScroll:true });
+          hid.click();
+
+          setTimeout(()=>{ Object.assign(hid.style, prev); }, 700);
+        }
+      });
+
+      head.addEventListener("input", (e)=>{
+        const d0 = selectedDayplanDayId ? getDay(selectedDayplanDayId) : null;
+        if(!d0) return;
+
+        const id = e.target?.id;
+        if(id === "dp_day_location"){ d0.location = e.target.value; liteSave(); }
+        if(id === "dp_day_label"){
+          d0.label = e.target.value;
+          const t = head.querySelector("#dpDayTitleText");
+          if(t) t.textContent = `${formatDayTitle(d0.date)}${d0.label ? " · "+d0.label : ""}`;
+          liteSave();
+        }
+        if(id === "dp_day_notes"){ d0.notes = e.target.value; liteSave(); }
+      });
+
+      head.addEventListener("change", (e)=>{
+        const d0 = selectedDayplanDayId ? getDay(selectedDayplanDayId) : null;
+        if(!d0) return;
+
+        const id = e.target?.id;
+        if(id === "dp_day_call"){
+          d0.callTime = (e.target.value||"").trim();
+          e.target.value = d0.callTime;
+          cleanupDayCallTimes(d0);
+          fullRefresh();
+        }
+        if(id === "dp_day_date"){
+          const iso = (e.target.value||"").trim();
+          if(!iso) return;
+          d0.date = iso;
+          const disp = head.querySelector("#dp_day_date_display");
+          if(disp) disp.value = formatDDMMYYYY(iso);
+          fullRefresh();
+        }
+      });
+
+      head.addEventListener("keydown", (e)=>{
+        if(e.target?.id === "dp_day_date_display" && e.key === "Enter"){
+          e.preventDefault();
+          e.target.blur();
+        }
+        if(e.target?.id === "dp_day_call" && e.key === "Enter"){
+          e.preventDefault();
+          e.target.blur();
+        }
+      });
+
+      head.addEventListener("focusout", (e)=>{
+        const d0 = selectedDayplanDayId ? getDay(selectedDayplanDayId) : null;
+        if(!d0) return;
+
+        const id = e.target?.id;
+        if(id === "dp_day_date_display"){
+          const iso = parseDDMMYYYY(e.target.value||"");
+          if(iso){
+            d0.date = iso;
+            const hid = head.querySelector("#dp_day_date");
+            if(hid) hid.value = iso;
+            e.target.value = formatDDMMYYYY(iso);
+            fullRefresh();
+          }else{
+            e.target.value = formatDDMMYYYY(d0.date);
+          }
+          return;
+        }
+
+        if(id === "dp_day_location" || id === "dp_day_label" || id === "dp_day_notes"){
+          fullRefresh();
+        }
+      });
+    }
+
+    const call = esc(d.callTime || "");
+    const loc = esc(d.location || "");
 
     // Timeline sizing
     const ppm = DAYPLAN_PPM;
@@ -3694,7 +3916,6 @@ for(let m=dpStartAbs; m<=dpEndAbs; m+=30){
   grid.push(`<div class="${cls}" style="top:${top}px"></div>`);
 }
 
-    const eattr = (s)=>esc(String(s||"")).replace(/"/g,"&quot;");
     const blocks = items.map((it)=>{
       const col = safeHexColor(it.color || (it.kind==="scene" ? "#BFDBFE" : "#E5E7EB"));
       const bg = hexToRgba(col, 0.75);
@@ -5229,10 +5450,21 @@ function printShotlistByDayId(dayId){
     el("schedSearch")?.addEventListener("input", renderScheduleBoard);
     el("reportsSearch")?.addEventListener("input", renderReports);
 
+    // Call Diario: selector de día
+    el("shootDaySelect")?.addEventListener("change", ()=>{
+      selectedDayId = el("shootDaySelect").value;
+      selectedDayplanDayId = selectedDayId;
+      renderDayDetail();
+      renderDayPlan();
+    });
+
     // Plan del día
     el("dayplanSelect")?.addEventListener("change", ()=>{
       selectedDayplanDayId = el("dayplanSelect").value;
+      // sync con Call Diario / Call Sheet
+      selectedDayId = selectedDayplanDayId;
       renderDayPlan();
+      renderDayDetail();
     });
     el("btnDayplanAddNote")?.addEventListener("click", addDayplanNote);
     el("btnDayplanAuto")?.addEventListener("click", ()=>{
@@ -5667,129 +5899,7 @@ el("scriptVerSelect")?.addEventListener("change", ()=>{
     el("dpBankSearch")?.addEventListener("input", renderSceneBank);
     el("dpBankFilter")?.addEventListener("change", renderSceneBank);
 
-    const dayMap = { day_date:"date", day_call:"callTime", day_location:"location", day_label:"label", day_notes:"notes" };
-    for(const id in dayMap){
-      el(id)?.addEventListener("input", ()=>{
-        const d = selectedDayId ? getDay(selectedDayId) : null;
-        if(!d) return;
-        d[dayMap[id]] = el(id).value;
-        if(id==="day_date"){
-          const disp = el("day_date_display");
-          if(disp) disp.value = formatDDMMYYYY(d.date);
-        }
-        if(id==="day_call") cleanupDayCallTimes(d);
-        sortShootDaysInPlace();
-        touch();
-        renderDaysBoard();
-        renderDayDetail();
-        renderReports();
-        renderScheduleBoard();
-        renderCallSheetCalendar();
-        renderReportsDetail();
-      });
-    }
 
-    
-    // Fecha DD/MM/AAAA en Call Diario (mantiene el date picker real oculto)
-    const dayDateDisp = el("day_date_display");
-    const dayDatePickBtn = el("day_date_pick");
-    if(dayDatePickBtn){
-      dayDatePickBtn.addEventListener("click", ()=>{
-        const hid = el("day_date");
-        if(!hid) return;
-
-        // Prefer native picker when available
-        if(typeof hid.showPicker === "function"){
-          try{ hid.showPicker(); return; }catch(err){}
-        }
-
-        // Fallback: temporarily place the hidden input over the button and click it
-        const r = dayDatePickBtn.getBoundingClientRect();
-        const prev = {
-          position: hid.style.position || "",
-          left: hid.style.left || "",
-          top: hid.style.top || "",
-          width: hid.style.width || "",
-          height: hid.style.height || "",
-          opacity: hid.style.opacity || "",
-          pointerEvents: hid.style.pointerEvents || "",
-          zIndex: hid.style.zIndex || ""
-        };
-
-        hid.style.position = "fixed";
-        hid.style.left = `${Math.round(r.left)}px`;
-        hid.style.top = `${Math.round(r.top)}px`;
-        hid.style.width = `${Math.max(1, Math.round(r.width))}px`;
-        hid.style.height = `${Math.max(1, Math.round(r.height))}px`;
-        hid.style.opacity = "0";
-        hid.style.pointerEvents = "auto";
-        hid.style.zIndex = "9999";
-
-        // Some browsers only open the picker on click
-        hid.focus({ preventScroll:true });
-        hid.click();
-
-        setTimeout(()=>{ Object.assign(hid.style, prev); }, 700);
-      });
-    }
-    if(dayDateDisp){
-      dayDateDisp.addEventListener("input", ()=>{
-        const d = selectedDayId ? getDay(selectedDayId) : null;
-        if(!d) return;
-        const iso = parseDDMMYYYY(dayDateDisp.value);
-        if(!iso) return;
-        d.date = iso;
-        const hid = el("day_date");
-        if(hid) hid.value = iso;
-        sortShootDaysInPlace();
-        touch();
-        renderDaysBoard();
-        renderDayDetail();
-        renderReports();
-        renderScheduleBoard();
-        renderCallSheetCalendar();
-        renderReportsDetail();
-      });
-    }
-    const dayDateHid = el("day_date");
-    if(dayDateHid){
-      dayDateHid.addEventListener("change", ()=>{
-        const d = selectedDayId ? getDay(selectedDayId) : null;
-        if(!d) return;
-        const iso = dayDateHid.value;
-        if(!iso) return;
-        d.date = iso;
-        if(dayDateDisp) dayDateDisp.value = formatDDMMYYYY(iso);
-        sortShootDaysInPlace();
-        touch();
-        renderDaysBoard();
-        renderDayDetail();
-        renderReports();
-        renderScheduleBoard();
-        renderCallSheetCalendar();
-        renderReportsDetail();
-      });
-    }
-
-
-el("day_call_minus")?.addEventListener("click", ()=>{
-      const d = selectedDayId ? getDay(selectedDayId) : null;
-      if(!d) return;
-      d.callTime = hhmmFromMinutes(minutesFromHHMM(d.callTime||"08:00") - 15);
-      el("day_call").value = d.callTime;
-      cleanupDayCallTimes(d);
-      touch();
-      renderDaysBoard(); renderDayDetail(); renderScheduleBoard(); renderReports(); renderReportsDetail();
-    });
-    el("day_call_plus")?.addEventListener("click", ()=>{
-      const d = selectedDayId ? getDay(selectedDayId) : null;
-      if(!d) return;
-      d.callTime = hhmmFromMinutes(minutesFromHHMM(d.callTime||"08:00") + 15);
-      el("day_call").value = d.callTime;
-      cleanupDayCallTimes(d);
-      touch();
-      renderDaysBoard(); renderDayDetail(); renderScheduleBoard(); renderReports(); renderReportsDetail();
-    });
 
     el("btnOpenCallSheet")?.addEventListener("click", ()=>{
       // Desde Call Diario: imprimir el Call Sheet del día seleccionado

@@ -255,28 +255,18 @@
 
       </section>
 
-      <!-- ================= PLAN DE RODAJE ================= -->
+            <!-- ================= CALL DIARIO ================= -->
       <section class="view hidden" id="view-shooting">
         <div class="shootingLayout noBank" id="shootingLayout">
-          <!-- Tablero + Detalle -->
           <div class="col">
-            <div class="card" id="daysBoardCard">
-              <div class="cardHeader">
-                <h2 class="cardTitle">Tablero de Días</h2>
-                <div class="row gap">
-<button class="btn danger" id="btnDeleteShootDay">Borrar Día</button>
-                </div>
-              </div>
-              <div class="cardContent">
-                <div class="daysBoardWrap" id="daysBoardWrap">
-                  <div class="daysBoard" id="daysBoard"></div>
-              </div>
-            </div>
 
             <div class="card" id="dayDetailCard">
               <div class="cardHeader">
                 <h2 class="cardTitle" id="dayDetailTitle">Detalle del Día</h2>
-                <button class="btn" id="btnOpenCallSheet">Imprimir</button>
+                <div class="row gap">
+                  <select class="input compact" id="shootDaySelect"></select>
+                  <button class="btn" id="btnOpenCallSheet">Imprimir</button>
+                </div>
               </div>
 
               <div class="cardContent">
@@ -284,6 +274,7 @@
   <!-- Col 1 -->
   <div class="col">
     <div class="heroBlock">
+      <div class="muted small" style="margin-bottom:8px;">Estos datos se editan en <b>Plan de Rodaje</b>.</div>
     <div class="field">
       <label>Fecha</label>
       <div class="dateDual">
@@ -331,7 +322,6 @@
     <div id="dayCrewPicker"></div>
   </div>
 </div>
-                </div>
               </div>
             </div>
 
@@ -340,7 +330,7 @@
       </section>
 
 
-      <!-- ================= PLAN DE RODAJE (Vista diaria) ================= -->
+<!-- ================= PLAN DE RODAJE (Vista diaria) ================= -->
       <section class="view hidden" id="view-dayplan">
         <div class="shootingLayout dayplanLayout" id="dayplanLayout">
           <!-- Banco -->
@@ -377,6 +367,7 @@
             <div class="row gap noPrint" style="flex-wrap:wrap">
               <select class="input compact" id="dayplanSelect"></select>
               <button class="btn" id="btnAddShootDay">+ Día</button>
+              <button class="btn danger" id="btnDeleteShootDay">Borrar Día</button>
 
               <div class="row gap" style="align-items:center">
                 <span class="muted">Snap</span>
