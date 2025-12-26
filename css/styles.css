@@ -1283,8 +1283,46 @@ tr.groupRow td{
 .dpMiniBtn:hover{ background:rgba(0,0,0,.28); }
 .dpBlockTitle{
   margin-top:4px;
-  font-weight:800;
-  line-height:1.15;
+  font-weight:900;
+  line-height:1.12;
+  display:flex;
+  gap:8px;
+  align-items:baseline;
+  font-size:14px;
+}
+.dpBlockTitle .dpNum{ font-weight:950; opacity:.92; white-space:nowrap; }
+.dpBlockTitle .dpSlug{ font-weight:900; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.dpBlockMeta{
+  margin-top:6px;
+  display:grid;
+  grid-template-columns: repeat(4, minmax(0,1fr));
+  gap:6px 10px;
+}
+@media (max-width:900px){
+  .dpBlockMeta{ grid-template-columns: repeat(2, minmax(0,1fr)); }
+}
+.dpMetaItem .k{
+  font-size:10px;
+  text-transform:uppercase;
+  letter-spacing:.08em;
+  opacity:.78;
+  line-height:1.1;
+}
+.dpMetaItem .v{
+  font-size:13px;
+  font-weight:850;
+  line-height:1.1;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+}
+.dpBlockSummary{
+  margin-top:6px;
+  font-size:12px;
+  opacity:.86;
+  line-height:1.25;
+  max-height:3.2em;
+  overflow:hidden;
 }
 .dpBlockDetail{
   margin-top:3px;
@@ -1350,7 +1388,7 @@ tr.groupRow td{
 .dayplanPrintTable{
   width:100%;
   border-collapse:collapse;
-  font-size:10.5pt;
+  font-size:9.5pt;
 }
 .dayplanPrintTable th, .dayplanPrintTable td{
   border:1px solid #ddd;
@@ -1358,6 +1396,17 @@ tr.groupRow td{
   vertical-align:top;
 }
 .dayplanPrintTable .muted{ color:#000; opacity:.75; }
+.dayplanPrintTable th{
+  background:#f3f4f6;
+  white-space:nowrap;
+}
+.dayplanPrintTable td{ word-break:break-word; }
+.dayplanPrintTable tr.dpPrintNote{
+  background:#fff7ed !important;
+}
+.dayplanPrintTable tr.dpPrintNote td{
+  font-weight:650;
+}
 .dayplanTable .dpHandle{
   cursor:grab;
   user-select:none;

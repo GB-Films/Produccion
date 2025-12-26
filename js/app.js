@@ -2120,7 +2120,7 @@ function setupScheduleWheelScroll(){
     const title = el("dayDetailTitle");
     if(title){
       if(d){
-        const t = `${formatDayTitleCompact(d.date)}${d.label? " · "+d.label:""}`;
+        const t = `${formatDayTitle(d.date)}${d.label? " · "+d.label:""}`;
         title.textContent = `Detalle del Día — ${t}`;
       }else{
         title.textContent = "Detalle del Día";
@@ -3424,22 +3424,32 @@ function updateScheduleDayDOM(dayId){
     for(const sid of (d.sceneIds||[])){
       const sc = getScene(sid);
       if(!sc) continue;
-      items.push({
-        key:`scene:${sid}`,
-        kind:"scene",
-        id:sid,
-        start: Number(d.times?.[sid] ?? 0) || 0,
-        dur: Number(d.durations?.[sid] ?? 60) || 0,
-        title: `#${sc.number||""} ${sc.slugline||""}`.trim(),
-        detail: [
-          sc.intExt||"",
-          sc.location||"",
-          sc.timeOfDay||"",
-          (Number(sc.pages)||0) > 0 ? `${fmtPages(sc.pages)} pág` : ""
-        ].filter(Boolean).join(" · "),
-        color: d.sceneColors?.[sid] || ""
-      });
-    }
+      const pagesNum = Number(sc.pages) || 0;
+items.push({
+  key:`scene:${sid}`,
+  kind:"scene",
+  id:sid,
+  start: Number(d.times?.[sid] ?? 0) || 0,
+  dur: Number(d.durations?.[sid] ?? 60) || 0,
+
+  number: sc.number || "",
+  slugline: sc.slugline || "",
+  intExt: sc.intExt || "",
+  location: sc.location || "",
+  timeOfDay: sc.timeOfDay || "",
+  pages: pagesNum,
+  summary: sc.summary || "",
+
+  title: `#${sc.number||""} ${sc.slugline||""}`.trim(),
+  detail: [
+    sc.intExt||"",
+    sc.location||"",
+    sc.timeOfDay||"",
+    pagesNum > 0 ? `${fmtPages(pagesNum)} pág` : ""
+  ].filter(Boolean).join(" · "),
+  color: d.sceneColors?.[sid] || ""
+});
+}
 
     for(const b of (d.blocks||[])){
       items.push({
@@ -3534,7 +3544,7 @@ function updateScheduleDayDOM(dayId){
     for(const d0 of state.shootDays){
       const opt = document.createElement("option");
       opt.value = d0.id;
-      const main = formatDayTitleCompact(d0.date);
+      const main = formatDayTitle(d0.date);
       opt.textContent = `${main}${d0.label ? " · "+d0.label : ""}`;
       sel.appendChild(opt);
     }
@@ -3565,7 +3575,7 @@ function updateScheduleDayDOM(dayId){
 
     // Header (día seleccionado)
     const proj = esc(state.meta?.title || "Proyecto");
-    const dayTxt = `${formatDayTitleCompact(d.date)}${d.label ? " · "+esc(d.label) : ""}`;
+    const dayTxt = `${formatDayTitle(d.date)}${d.label ? " · "+esc(d.label) : ""}`;
     const call = esc(d.callTime || "");
     const loc = esc(d.location || "");
 
@@ -3612,7 +3622,7 @@ for(let m=dpStartAbs; m<=dpEndAbs; m+=30){
     const eattr = (s)=>esc(String(s||"")).replace(/"/g,"&quot;");
     const blocks = items.map((it)=>{
       const col = safeHexColor(it.color || (it.kind==="scene" ? "#BFDBFE" : "#E5E7EB"));
-      const bg = hexToRgba(col, 0.55);
+      const bg = hexToRgba(col, 0.75);
 const absStart = clamp(base + (it.start||0), base, dpEndAbs - snapMin);
 const dur = clamp(Math.max(snapMin, it.dur||snapMin), snapMin, dpEndAbs - absStart);
 const absEnd = clamp(absStart + dur, absStart + snapMin, dpEndAbs);
@@ -3640,8 +3650,25 @@ const height = Math.max(Math.round((absEnd - absStart) * ppm), Math.round(snapMi
               ${delBtn}
             </div>
           </div>
-          <div class="dpBlockTitle">${esc(it.title||"")}</div>
-          ${it.detail ? `<div class="dpBlockDetail">${esc(it.detail)}</div>` : ``}
+<div class="dpBlockTitle">${
+  it.kind==="scene"
+    ? `<span class="dpNum">#${esc(it.number||"")}</span><span class="dpSlug">${esc(it.slugline||"")}</span>`
+    : `${esc(it.title||"")}`
+}</div>
+
+${
+  it.kind==="scene"
+    ? `
+      <div class="dpBlockMeta">
+        <div class="dpMetaItem"><div class="k">I/E</div><div class="v">${esc(it.intExt||"—")}</div></div>
+        <div class="dpMetaItem"><div class="k">Lugar</div><div class="v">${esc(it.location||"—")}</div></div>
+        <div class="dpMetaItem"><div class="k">Momento</div><div class="v">${esc(it.timeOfDay||"—")}</div></div>
+        <div class="dpMetaItem"><div class="k">Pág</div><div class="v">${esc((Number(it.pages)||0) > 0 ? fmtPages(it.pages) : "—")}</div></div>
+      </div>
+      ${it.summary ? `<div class="dpBlockSummary">${esc(it.summary)}</div>` : ``}
+    `
+    : (it.detail ? `<div class="dpBlockDetail">${esc(it.detail)}</div>` : ``)
+}
 
           <div class="dpPalettePop noPrint" data-role="palette">
             <div class="dpSwatches">
@@ -3748,15 +3775,28 @@ const height = Math.max(Math.round((absEnd - absStart) * ppm), Math.round(snapMi
       const dur = clamp(Math.max(snapMin, it.dur||snapMin), snapMin, DAY_SPAN_MIN);
       const absEnd = clamp(absStart + dur, 0, DAY_SPAN_MIN);
       const clock = `${hhmmFromMinutes(absStart)} – ${hhmmFromMinutes(absEnd)}`;
-      return `
-        <tr style="background:${eattr(bg)};border-left:8px solid ${eattr(col)};">
-          <td style="width:120px">${esc(clock)}</td>
-          <td style="width:70px">${esc(formatDuration(dur))}</td>
-          <td>${esc(it.title||"")}</td>
-          <td>${esc(it.detail||"")}</td>
-        </tr>
-      `;
-    }).join("");
+      const isNote = it.kind==="block";
+const num = isNote ? "NOTA" : (it.number||"");
+const title = isNote ? (it.title||"") : (it.slugline||it.title||"");
+const ie = isNote ? "" : (it.intExt||"");
+const locTxt = isNote ? "" : (it.location||"");
+const todTxt = isNote ? "" : (it.timeOfDay||"");
+const pagesTxt = isNote ? "" : ((Number(it.pages)||0) > 0 ? fmtPages(it.pages) : "");
+const sumTxt = isNote ? (it.detail||"") : (it.summary||"");
+return `
+  <tr class="${isNote ? "dpPrintNote" : ""}" style="background:${eattr(bg)};border-left:8px solid ${eattr(col)};">
+    <td style="width:118px">${esc(clock)}</td>
+    <td style="width:62px">${esc(formatDuration(dur))}</td>
+    <td style="width:62px">${esc(num)}</td>
+    <td>${esc(title)}</td>
+    <td style="width:70px">${esc(ie)}</td>
+    <td>${esc(locTxt)}</td>
+    <td style="width:92px">${esc(todTxt)}</td>
+    <td style="width:78px">${esc(pagesTxt)}</td>
+    <td>${esc(sumTxt)}</td>
+  </tr>
+`;
+}).join("");
 
     printWrap.innerHTML = `
       <div class="spacer"></div>
@@ -3765,9 +3805,9 @@ const height = Math.max(Math.round((absEnd - absStart) * ppm), Math.round(snapMi
         <div class="cardContent">
           <table class="dayplanPrintTable">
             <thead>
-              <tr><th>Hora</th><th>Dur</th><th>Item</th><th>Detalle</th></tr>
+              <tr><th>Hora</th><th>Dur</th><th>Nro</th><th>Título</th><th>Int/Ext</th><th>Lugar</th><th>Momento</th><th>Largo (Pág)</th><th>Resumen</th></tr>
             </thead>
-            <tbody>${rows || `<tr><td colspan="4" class="muted">—</td></tr>`}</tbody>
+            <tbody>${rows || `<tr><td colspan="9" class="muted">—</td></tr>`}</tbody>
           </table>
         </div>
       </div>
@@ -4609,6 +4649,8 @@ function renderShotList(){
     }
     ensureDayTimingMaps(d);
 
+    const eattr = (s)=> esc(String(s||"")) .replace(/"/g,"&quot;");
+
     const items = buildDayplanItems(d);
     const proj = esc(state.meta?.title || "Proyecto");
     const dayTxt = `${formatDayTitle(d.date)}${d.label ? " · "+esc(d.label) : ""}`;
@@ -4632,22 +4674,37 @@ function renderShotList(){
       const dur = clamp(Math.max(snapMin, it.dur||snapMin), snapMin, DAY_SPAN_MIN);
       const absEnd = clamp(absStart + dur, 0, DAY_SPAN_MIN);
       const clock = `${hhmmFromMinutes(absStart)} – ${hhmmFromMinutes(absEnd)}`;
+      const isNote = it.kind==="block";
+const num = isNote ? "NOTA" : (it.number||"");
+const title = isNote ? (it.title||"") : (it.slugline||it.title||"");
+const ie = isNote ? "" : (it.intExt||"");
+const locTxt = isNote ? "" : (it.location||"");
+const todTxt = isNote ? "" : (it.timeOfDay||"");
+const pagesTxt = isNote ? "" : ((Number(it.pages)||0) > 0 ? fmtPages(it.pages) : "");
+const sumTxt = isNote ? (it.detail||"") : (it.summary||"");
+const col = safeHexColor(it.color || (it.kind==="scene" ? "#BFDBFE" : "#E5E7EB"));
+      const bg = hexToRgba(col, 0.14);
       return `
-        <tr>
-          <td style="width:120px">${esc(clock)}</td>
-          <td style="width:70px">${esc(formatDuration(dur))}</td>
-          <td>${esc(it.title||"")}</td>
-          <td>${esc(it.detail||"")}</td>
-        </tr>
-      `;
-    }).join("");
+        <tr class="${isNote ? "dpPrintNote" : ""}" style="background:${eattr(bg)};border-left:8px solid ${eattr(col)};">
+    <td style="width:118px">${esc(clock)}</td>
+    <td style="width:62px">${esc(formatDuration(dur))}</td>
+    <td style="width:62px">${esc(num)}</td>
+    <td>${esc(title)}</td>
+    <td style="width:70px">${esc(ie)}</td>
+    <td>${esc(locTxt)}</td>
+    <td style="width:92px">${esc(todTxt)}</td>
+    <td style="width:78px">${esc(pagesTxt)}</td>
+    <td>${esc(sumTxt)}</td>
+  </tr>
+`;
+}).join("");
 
     const table = document.createElement("div");
     table.className = "items";
     table.innerHTML = `
       <table class="dayplanPrintTable">
-        <thead><tr><th>Hora</th><th>Dur</th><th>Item</th><th>Detalle</th></tr></thead>
-        <tbody>${rows || `<tr><td colspan="4" class="muted">—</td></tr>`}</tbody>
+        <thead><tr><th>Hora</th><th>Dur</th><th>Nro</th><th>Título</th><th>Int/Ext</th><th>Lugar</th><th>Momento</th><th>Largo (Pág)</th><th>Resumen</th></tr></thead>
+        <tbody>${rows || `<tr><td colspan="9" class="muted">—</td></tr>`}</tbody>
       </table>
     `;
 
@@ -4894,7 +4951,7 @@ function renderShotList(){
       renderReportsDetail();
       renderReports();
     });
-    el("btnDayplanPrint")?.addEventListener("click", ()=> window.print());
+    el("btnDayplanPrint")?.addEventListener("click", ()=>{ setPrintOrientation("landscape"); window.print(); });
     el("dayplanSnap")?.addEventListener("change", ()=> renderDayPlan());
 
     // Número de escena: no permitimos duplicados (si chocan, auto 6A/6B…)
@@ -5427,6 +5484,19 @@ el("scriptVerSelect")?.addEventListener("change", ()=>{
   function hydrateAll(){
     ensureScriptState();
     state.scenes.forEach(ensureSceneExtras);
+// Backfill automático para escenas existentes (INT/EXT, Lugar, Momento) a partir del Título/slugline
+let _bf = false;
+for(const s of (state.scenes||[])){
+  if(!s || !s.slugline) continue;
+  const ie = sluglineToIntExt(s.slugline);
+  const { location, timeOfDay } = sluglineToLocTOD(s.slugline);
+  let changed = false;
+  if(!s.intExt && ie){ s.intExt = ie; changed = true; }
+  if(!s.location && location){ s.location = location; changed = true; }
+  if(!s.timeOfDay && timeOfDay){ s.timeOfDay = timeOfDay; changed = true; }
+  if(changed) _bf = true;
+}
+if(_bf) touch();
 
     renderCatSelect();
     refreshElementSuggestions();
