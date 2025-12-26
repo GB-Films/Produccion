@@ -80,6 +80,7 @@
   let callSheetDayId = null;
   let selectedShotlistDayId = null;
   let selectedDayplanDayId = null;
+  let dayDetailOpenSceneKeys = new Set();
   let reportsTab = (localStorage.getItem("gb_reports_tab") || "callsheet");
 
   const DEFAULT_SHOT_MIN = 15;
@@ -2179,79 +2180,159 @@ function setupScheduleWheelScroll(){
     }
   }
 
-  function renderDayDetail(){
-    // Asegurar que haya un día seleccionado válido
-    if(!selectedDayId || !getDay(selectedDayId)){
-      selectedDayId = state.shootDays?.[0]?.id || null;
-    }
-    const d = selectedDayId ? getDay(selectedDayId) : null;
-    if(d) ensureDayTimingMaps(d);
+  
+function renderDayDetail(){
+  // Asegurar que haya un día seleccionado válido
+  if(!selectedDayId || !getDay(selectedDayId)){
+    selectedDayId = state.shootDays?.[0]?.id || null;
+  }
+  const d = selectedDayId ? getDay(selectedDayId) : null;
+  if(d) ensureDayTimingMaps(d);
 
-    // Selector compacto (Call Diario) para elegir día sin Tablero
-    const sel = el("shootDaySelect");
-    if(sel){
-      sortShootDaysInPlace();
-      sel.innerHTML = "";
-      (state.shootDays||[]).forEach(d0=>{
-        const opt = document.createElement("option");
-        opt.value = d0.id;
-        opt.textContent = `${formatDayTitle(d0.date)}${d0.label ? " · "+d0.label : ""}`;
-        sel.appendChild(opt);
-      });
-      sel.disabled = !(state.shootDays||[]).length;
-      if(selectedDayId) sel.value = selectedDayId;
-    }
-
-    const title = el("dayDetailTitle");
-    if(!d){
-      if(title) title.textContent = "Detalle del Día";
-      el("dayCast").innerHTML = '<div class="muted">Agregá un día desde <b>Plan de Rodaje</b>.</div>';
-      el("dayCrewPicker").innerHTML = '<div class="muted">Agregá un día desde <b>Plan de Rodaje</b>.</div>';
-      // limpiar campos
-      ["day_date_display","day_call","day_location","day_label","day_notes"].forEach(id=>{
-        const n = el(id);
-        if(n){ n.value = ""; n.disabled = true; }
-      });
-      const hid = el("day_date"); if(hid){ hid.value=""; hid.disabled=true; }
-      const pick = el("day_date_pick"); if(pick) pick.disabled = true;
-      const m = el("day_call_minus"); if(m) m.disabled = true;
-      const p = el("day_call_plus"); if(p) p.disabled = true;
-      return;
-    }
-
-    if(title) title.textContent = `Detalle del Día · ${formatDayTitle(d.date)}${d.label ? " · "+d.label : ""}`;
-
-    // Datos del día (solo lectura en Call Diario)
-    const map = { day_call:"callTime", day_location:"location", day_label:"label", day_notes:"notes" };
-    Object.keys(map).forEach(id=>{
-      const node = el(id);
-      const k = map[id];
-      if(!node) return;
-      node.disabled = false;
-      node.value = d[k] || "";
-      node.readOnly = true;
+  // Selector compacto (Call Diario) para elegir día sin Tablero
+  const sel = el("shootDaySelect");
+  if(sel){
+    sortShootDaysInPlace();
+    sel.innerHTML = "";
+    (state.shootDays||[]).forEach(d0=>{
+      const opt = document.createElement("option");
+      opt.value = d0.id;
+      opt.textContent = `${formatDayTitle(d0.date)}${d0.label ? " · "+d0.label : ""}`;
+      sel.appendChild(opt);
     });
-
-    const dateDisp = el("day_date_display");
-    if(dateDisp){
-      dateDisp.disabled = false;
-      dateDisp.value = formatDDMMYYYY(d.date);
-      dateDisp.readOnly = true;
-    }
-    const hid = el("day_date");
-    if(hid){ hid.value = d.date||""; hid.disabled = true; }
-
-    // Bloquear UI de edición (se edita en Plan de Rodaje)
-    const pick = el("day_date_pick"); if(pick) pick.disabled = true;
-    const m = el("day_call_minus"); if(m) m.disabled = true;
-    const p = el("day_call_plus"); if(p) p.disabled = true;
-
-    renderDayCast();
-    renderDayCrewPicker();
+    sel.disabled = !(state.shootDays||[]).length;
+    if(selectedDayId) sel.value = selectedDayId;
   }
 
+  const title = el("dayDetailTitle");
+  const meta = el("dayDetailMeta");
+  const scenesWrap = el("dayScenesDetail");
 
-  function dayScenes(d){ return (d.sceneIds||[]).map(getScene).filter(Boolean); }
+  if(!d){
+    if(title) title.textContent = "Detalle del Día";
+    if(meta) meta.innerHTML = "";
+    if(scenesWrap) scenesWrap.innerHTML = '<div class="muted">Agregá un día desde <b>Plan de Rodaje</b>.</div>';
+    el("dayCast").innerHTML = '<div class="muted">Agregá un día desde <b>Plan de Rodaje</b>.</div>';
+    el("dayCrewPicker").innerHTML = '<div class="muted">Agregá un día desde <b>Plan de Rodaje</b>.</div>';
+    return;
+  }
+
+  if(title) title.textContent = `Detalle del Día · ${formatDayTitle(d.date)}${d.label ? " · "+d.label : ""}`;
+
+  if(meta){
+    const callTxt = esc(d.callTime || "—");
+    const locTxt = esc(d.location || "—");
+    meta.innerHTML = `
+      <span class="metaPill"><b>Call</b> ${callTxt}</span>
+      <span class="metaPill"><b>Locación</b> ${locTxt}</span>
+    `;
+  }
+
+  renderDayScenesDetail();
+  renderDayCast();
+  renderDayCrewPicker();
+}
+
+
+function dayScenes(d){ return (d.sceneIds||[]).map(getScene).filter(Boolean); }
+
+
+function renderDayScenesDetail(){
+  const wrap = el("dayScenesDetail");
+  if(!wrap) return;
+  wrap.innerHTML = "";
+
+  const d = selectedDayId ? getDay(selectedDayId) : null;
+  if(!d){ wrap.innerHTML = `<div class="muted">Seleccioná un día</div>`; return; }
+
+  const ids = (d.sceneIds||[]);
+  if(!ids.length){
+    wrap.innerHTML = `<div class="muted">No hay escenas asignadas a este día.</div>`;
+    return;
+  }
+
+  const list = document.createElement("div");
+  list.className = "daySceneDetailList";
+
+  for(const sid of ids){
+    const sc = getScene(sid);
+    if(!sc) continue;
+    ensureSceneExtras(sc);
+
+    const pagesNum = Number(sc.pages) || 0;
+    const title = `#${sc.number||""} ${sc.slugline||""}`.trim();
+    const metaLine = [
+      sc.intExt||"",
+      sc.location||"",
+      sc.timeOfDay||"",
+      pagesNum > 0 ? `${fmtPages(pagesNum)} pág` : ""
+    ].filter(Boolean).join(" · ");
+
+    const elementsByCat = {};
+    for(const cat of cats){
+      const arr = (sc.elements?.[cat] || []).map(x=>String(x||"").trim()).filter(Boolean);
+      const items = union(arr);
+      if(items.length) elementsByCat[cat] = items;
+    }
+
+    const catKeys = Object.keys(elementsByCat);
+    const chipsHtml = catKeys.map(cat=>{
+      const n = elementsByCat[cat].length;
+      const label = catNames[cat] || cat;
+      const dot = catColors[cat] || "var(--muted)";
+      return `<span class="needChip" style="--chip-dot:${dot}"><span class="dot"></span>${esc(label)}<span class="count">${n}</span></span>`;
+    }).join("");
+
+    const key = `${d.id}:${sid}`;
+    const isOpen = dayDetailOpenSceneKeys.has(key);
+
+    const detailsHtml = catKeys.map(cat=>{
+      const label = catNames[cat] || cat;
+      const dot = catColors[cat] || "var(--muted)";
+      const items = elementsByCat[cat].join(", ");
+      return `
+        <div class="needRow">
+          <span class="dot" style="background:${dot}"></span>
+          <div class="k">${esc(label)}</div>
+          <div class="v">${esc(items)}</div>
+        </div>
+      `;
+    }).join("");
+
+    const card = document.createElement("div");
+    card.className = "sceneNeedCard" + (isOpen ? " open" : "");
+    card.innerHTML = `
+      <div class="top">
+        <div class="left">
+          <div class="ttl">${esc(title)}</div>
+          <div class="meta">${esc(metaLine)}</div>
+        </div>
+        <button class="btn icon ghost small toggle" type="button" title="${isOpen ? "Ocultar" : "Ver"}">▾</button>
+      </div>
+      <div class="chips">
+        ${chipsHtml || `<span class="muted small">Sin elementos cargados en breakdown.</span>`}
+      </div>
+      <div class="details">${detailsHtml}</div>
+    `;
+
+    const toggle = ()=>{
+      if(dayDetailOpenSceneKeys.has(key)) dayDetailOpenSceneKeys.delete(key);
+      else dayDetailOpenSceneKeys.add(key);
+      renderDayScenesDetail();
+    };
+
+    card.querySelector("button.toggle")?.addEventListener("click", (e)=>{
+      e.stopPropagation();
+      toggle();
+    });
+    card.addEventListener("click", toggle);
+
+    list.appendChild(card);
+  }
+
+  wrap.appendChild(list);
+}
+
 
   function renderDayNeeds(){
     const wrap = el("dayNeeds");
@@ -3495,6 +3576,8 @@ function updateScheduleDayDOM(dayId){
   let dayplanPaletteKey = null;
   let dayplanPointer = null;
 
+  let dayplanMetaOpen = false;
+
   const DAYPLAN_PPM = 1.2; // px por minuto (altura total ~1728px)
   const DAYPLAN_COLORS = [
     "#9CA3AF", // gris (más fuerte)
@@ -3692,53 +3775,57 @@ items.push({
     const eattr = (s)=>esc(String(s||"")).replace(/"/g,"&quot;");
 
     head.innerHTML = `
-      <div class="dayplanHeader">
-        <div class="dpTitle">
-          <div class="dpProj">${proj}</div>
-          <div class="dpDay" id="dpDayTitleText">${dayTxt}</div>
-        </div>
-        <div class="dpMeta">
-          <div class="muted small">Acá editás la fecha, call time, locación, nombre y notas. En Call Diario es solo lectura.</div>
+  <div class="dayplanHeader">
+    <div class="dpTitle">
+      <div class="dpProj">${proj}</div>
+      <button class="dpDayBtn" id="dpDayTitleBtn" type="button" title="Editar detalle del día">${dayTxt}</button>
+      <div class="dpBadges" id="dpDayBadges">
+        <span class="metaPill"><b>Call</b> ${esc(d.callTime || "—")}</span>
+        <span class="metaPill"><b>Locación</b> ${esc(d.location || "—")}</span>
+      </div>
+    </div>
+    <div class="dpMeta">
+      <div class="muted small">${esc((d.notes||"").trim() ? (d.notes||"").trim() : "Click en el título para editar fecha, call time, locación, nombre y notas.")}</div>
+    </div>
+  </div>
+
+  <div class="dayMetaEditor noPrint" id="dpDayMetaEditor" style="display:${dayplanMetaOpen ? "block" : "none"};">
+    <div class="dayMetaGrid">
+      <div class="field">
+        <label>Fecha</label>
+        <div class="dateDual">
+          <input class="input" id="dp_day_date_display" type="text" inputmode="numeric" placeholder="dd/mm/aaaa" value="${eattr(formatDDMMYYYY(d.date))}"/>
+          <button class="btn icon datePickBtn" id="dp_day_date_pick" type="button" title="Elegir fecha">📅</button>
+          <input class="input hiddenDate" id="dp_day_date" type="date" value="${eattr(d.date||"")}"/>
         </div>
       </div>
 
-      <div class="dayMetaEditor noPrint">
-        <div class="dayMetaGrid">
-          <div class="field">
-            <label>Fecha</label>
-            <div class="dateDual">
-              <input class="input" id="dp_day_date_display" type="text" inputmode="numeric" placeholder="dd/mm/aaaa" value="${eattr(formatDDMMYYYY(d.date))}"/>
-              <button class="btn icon datePickBtn" id="dp_day_date_pick" type="button" title="Elegir fecha">📅</button>
-              <input class="input hiddenDate" id="dp_day_date" type="date" value="${eattr(d.date||"")}"/>
-            </div>
-          </div>
-
-          <div class="field">
-            <label>Call Time</label>
-            <div class="row gap">
-              <button class="btn icon" id="dp_day_call_minus" title="-15">−</button>
-              <input class="input grow" id="dp_day_call" placeholder="08:00" value="${eattr(d.callTime||"")}"/>
-              <button class="btn icon" id="dp_day_call_plus" title="+15">+</button>
-            </div>
-          </div>
-
-          <div class="field">
-            <label>Locación</label>
-            <input class="input" id="dp_day_location" value="${eattr(d.location||"")}"/>
-          </div>
-
-          <div class="field">
-            <label>Nombre</label>
-            <input class="input" id="dp_day_label" value="${eattr(d.label||"")}"/>
-          </div>
-
-          <div class="field dayMetaNotes">
-            <label>Notas</label>
-            <textarea class="textarea smallArea" id="dp_day_notes">${esc(d.notes||"")}</textarea>
-          </div>
+      <div class="field">
+        <label>Call Time</label>
+        <div class="row gap">
+          <button class="btn icon" id="dp_day_call_minus" title="-15">−</button>
+          <input class="input grow" id="dp_day_call" placeholder="08:00" value="${eattr(d.callTime||"")}"/>
+          <button class="btn icon" id="dp_day_call_plus" title="+15">+</button>
         </div>
       </div>
-    `;
+
+      <div class="field">
+        <label>Locación</label>
+        <input class="input" id="dp_day_location" value="${eattr(d.location||"")}"/>
+      </div>
+
+      <div class="field">
+        <label>Nombre</label>
+        <input class="input" id="dp_day_label" value="${eattr(d.label||"")}"/>
+      </div>
+
+      <div class="field dayMetaNotes">
+        <label>Notas</label>
+        <textarea class="textarea smallArea" id="dp_day_notes">${esc(d.notes||"")}</textarea>
+      </div>
+    </div>
+  </div>
+`;
 
     // Bind del editor de Detalle del Día (delegado en el header para sobrevivir re-render)
     if(head.dataset.metaBound !== "1"){
@@ -3760,6 +3847,15 @@ items.push({
       head.addEventListener("click", (e)=>{
         const d0 = selectedDayplanDayId ? getDay(selectedDayplanDayId) : null;
         if(!d0) return;
+
+        // Toggle editor (click en el título del día)
+        const titleBtn = e.target?.closest && e.target.closest("#dpDayTitleBtn");
+        if(titleBtn){
+          dayplanMetaOpen = !dayplanMetaOpen;
+          const box = head.querySelector("#dpDayMetaEditor");
+          if(box) box.style.display = dayplanMetaOpen ? "block" : "none";
+          return;
+        }
 
         if(e.target && e.target.id === "dp_day_call_minus"){
           d0.callTime = hhmmFromMinutes(minutesFromHHMM(d0.callTime||"08:00") - 15);
@@ -3820,10 +3916,18 @@ items.push({
         if(!d0) return;
 
         const id = e.target?.id;
-        if(id === "dp_day_location"){ d0.location = e.target.value; liteSave(); }
+        if(id === "dp_day_location"){
+          d0.location = e.target.value;
+          const badges = head.querySelector("#dpDayBadges");
+          if(badges){
+            const pills = badges.querySelectorAll(".metaPill");
+            if(pills[1]) pills[1].innerHTML = `<b>Locación</b> ${esc(d0.location || "—")}`;
+          }
+          liteSave();
+        }
         if(id === "dp_day_label"){
           d0.label = e.target.value;
-          const t = head.querySelector("#dpDayTitleText");
+          const t = head.querySelector("#dpDayTitleBtn");
           if(t) t.textContent = `${formatDayTitle(d0.date)}${d0.label ? " · "+d0.label : ""}`;
           liteSave();
         }

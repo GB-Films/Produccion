@@ -619,6 +619,99 @@ tr.groupRow td{
 }
 .colTitle{ font-weight:900; opacity:.92; margin-bottom:4px; }
 
+/* Call Diario: header meta + escenas del día */
+.titleBlock{
+  display:flex;
+  flex-direction:column;
+  gap:6px;
+  min-width:0;
+}
+.dayHeaderMeta{
+  display:flex;
+  gap:8px;
+  flex-wrap:wrap;
+}
+
+.metaPill{
+  font-size:12px;
+  padding:6px 10px;
+  border-radius:999px;
+  border:1px solid var(--border);
+  background: rgba(255,255,255,.03);
+  color: var(--text);
+  white-space:nowrap;
+}
+.metaPill b{ font-weight:900; }
+
+.daySceneDetailList{
+  display:flex;
+  flex-direction:column;
+  gap:10px;
+}
+
+.sceneNeedCard{
+  border:1px solid var(--border);
+  border-radius:18px;
+  padding:10px 12px;
+  background: rgba(255,255,255,.02);
+  cursor:pointer;
+}
+.sceneNeedCard:hover{ background: rgba(255,255,255,.03); }
+.sceneNeedCard .top{ display:flex; align-items:flex-start; justify-content:space-between; gap:10px; }
+.sceneNeedCard .ttl{ font-weight:900; line-height:1.1; }
+.sceneNeedCard .meta{ margin-top:4px; font-size:12px; color: var(--muted); }
+
+.sceneNeedCard .chips{ margin-top:10px; display:flex; flex-wrap:wrap; gap:8px; }
+.needChip{
+  display:inline-flex;
+  align-items:center;
+  gap:6px;
+  font-size:12px;
+  padding:6px 10px;
+  border-radius:999px;
+  border:1px solid var(--border);
+  background: rgba(0,0,0,.08);
+  color: var(--text);
+}
+.needChip .dot{ width:8px; height:8px; border-radius:999px; background: var(--chip-dot, var(--muted)); }
+.needChip .count{ opacity:.7; margin-left:2px; font-weight:800; }
+
+.sceneNeedCard .details{
+  margin-top:10px;
+  display:none;
+  border-top:1px dashed rgba(255,255,255,.12);
+  padding-top:10px;
+}
+.sceneNeedCard.open .details{ display:flex; flex-direction:column; gap:8px; }
+
+.needRow{
+  display:grid;
+  grid-template-columns: 10px 92px 1fr;
+  gap:8px;
+  align-items:start;
+}
+.needRow .dot{ width:8px; height:8px; border-radius:999px; margin-top:4px; }
+.needRow .k{ font-size:12px; font-weight:900; opacity:.9; }
+.needRow .v{ font-size:12px; color: var(--muted); }
+
+.sceneNeedCard .toggle{ transform: rotate(0deg); transition: transform .15s ease; }
+.sceneNeedCard.open .toggle{ transform: rotate(180deg); }
+
+/* Plan de Rodaje: editar detalle del día desde el título */
+.dpDayBtn{
+  background:none;
+  border:0;
+  padding:0;
+  text-align:left;
+  cursor:pointer;
+  color: var(--text);
+  font-size:1.1rem;
+  font-weight:900;
+  line-height:1.05;
+}
+.dpDayBtn:hover{ text-decoration:underline; }
+.dpBadges{ display:flex; gap:8px; flex-wrap:wrap; margin-top:8px; }
+
 .crewAreaHeader{
   margin-top:8px;
   margin-bottom:6px;

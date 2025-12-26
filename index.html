@@ -3,7 +3,7 @@
   <meta charset="utf-8"/>
   <meta content="width=device-width,initial-scale=1,viewport-fit=cover" name="viewport"/>
   <title>GB Production Board</title>
-  <link href="css/styles.css?v=20251226-17" rel="stylesheet"/>
+  <link href="css/styles.css?v=20251226-18" rel="stylesheet"/>
 </head>
 <body>
   <div class="shell">
@@ -262,7 +262,11 @@
 
             <div class="card" id="dayDetailCard">
               <div class="cardHeader">
-                <h2 class="cardTitle" id="dayDetailTitle">Detalle del Día</h2>
+
+                <div class="titleBlock">
+                  <h2 class="cardTitle" id="dayDetailTitle">Detalle del Día</h2>
+                  <div class="dayHeaderMeta" id="dayDetailMeta"></div>
+                </div>
                 <div class="row gap">
                   <select class="input compact" id="shootDaySelect"></select>
                   <button class="btn" id="btnOpenCallSheet">Imprimir</button>
@@ -273,41 +277,8 @@
                 <div class="dayDetail3col">
   <!-- Col 1 -->
   <div class="col">
-    <div class="heroBlock">
-      <div class="muted small" style="margin-bottom:8px;">Estos datos se editan en <b>Plan de Rodaje</b>.</div>
-    <div class="field">
-      <label>Fecha</label>
-      <div class="dateDual">
-        <input class="input" id="day_date_display" type="text" inputmode="numeric" placeholder="dd/mm/aaaa"/>
-        <button class="btn icon datePickBtn" id="day_date_pick" type="button" title="Elegir fecha">📅</button>
-        <input class="input hiddenDate" id="day_date" type="date"/>
-      </div>
-    </div>
-
-    <div class="field">
-      <label>Call Time</label>
-      <div class="row gap">
-        <button class="btn icon" id="day_call_minus" title="-15">−</button>
-        <input class="input grow" id="day_call" placeholder="08:00"/>
-        <button class="btn icon" id="day_call_plus" title="+15">+</button>
-      </div>
-    </div>
-    </div>
-
-    <div class="field">
-      <label>Locación</label>
-      <input class="input" id="day_location"/>
-    </div>
-
-    <div class="field">
-      <label>Nombre</label>
-      <input class="input" id="day_label"/>
-    </div>
-
-    <div class="field">
-      <label>Notas</label>
-      <textarea class="textarea smallArea" id="day_notes"></textarea>
-    </div>
+    <div class="colTitle">Escenas del día</div>
+    <div id="dayScenesDetail"></div>
   </div>
 
   <!-- Col 2 -->
@@ -586,7 +557,7 @@
 
   <script src="js/utils.js?v=20251226-16"></script>
   <script src="js/storage.js?v=20251226-16"></script>
-  <script src="js/app.js?v=20251226-16"></script>
+  <script src="js/app.js?v=20251226-18"></script>
 
 
 </body></html>
