@@ -365,7 +365,36 @@
 
       <!-- ================= PLAN DE RODAJE (Vista diaria) ================= -->
       <section class="view hidden" id="view-dayplan">
-        <div class="card" id="dayplanCard">
+        <div class="shootingLayout dayplanLayout" id="dayplanLayout">
+          <!-- Banco -->
+          <div class="col" id="dpBankCol">
+            <div class="card bankCard">
+              <div class="cardHeader bankHeader" id="dpSceneBankHeader">
+                <h2 class="cardTitle">Banco de Escenas</h2>
+                <button class="btn icon" id="dpBtnToggleBank" title="Colapsar/expandir">⟨</button>
+              </div>
+
+              <div class="cardContent" id="dpSceneBankBody">
+                <div class="row gap">
+                  <input class="input grow" id="dpBankSearch" placeholder="Buscar…"/>
+                  <select class="input compact" id="dpBankFilter">
+                    <option value="all">Todas</option>
+                    <option value="unassigned">No asignadas</option>
+                  </select>
+                </div>
+                <div class="bankList" id="dpSceneBankList"></div>
+              </div>
+            </div>
+
+            <!-- Dock visible cuando está colapsado -->
+            <div class="bankDock hidden" id="dpBankDock">
+              <button class="btn icon" id="dpBtnToggleBankDock" title="Expandir">⟩</button>
+            </div>
+          </div>
+
+          <!-- Plan -->
+          <div class="col">
+            <div class="card" id="dayplanCard">
           <div class="cardHeader">
             <h2 class="cardTitle">Plan de Rodaje</h2>
             <div class="row gap noPrint" style="flex-wrap:wrap">
@@ -404,6 +433,8 @@
 
             <div class="printOnly" id="dayplanPrint"></div>
 </div>
+        </div>
+          </div>
         </div>
       </section>
 

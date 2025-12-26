@@ -346,42 +346,23 @@
 
 
   function ensureSceneExtras(s){
-    if(!s) return false;
-
-    let changed = false;
-
-    // Core fields (back-compat)
-    if(!("number" in s)){ s.number = ""; changed = true; }
-    if(!("slugline" in s)){ s.slugline = ""; changed = true; }
-    if(!("intExt" in s)){ s.intExt = ""; changed = true; }
-    if(!("location" in s)){ s.location = ""; changed = true; }
-    if(!("timeOfDay" in s)){ s.timeOfDay = ""; changed = true; }
-    if(!("pages" in s)){ s.pages = 0; changed = true; }
-    if(!("summary" in s)){ s.summary = ""; changed = true; }
-    if(!("notes" in s)){ s.notes = ""; changed = true; }
-
+    if(!s) return;
+    if(!("intExt" in s)) s.intExt = "";
     // ensure elements structure
     if(!s.elements){
       s.elements = Object.fromEntries(cats.map(c=>[c,[]]));
-      changed = true;
     }else{
       for(const c of cats){
-        if(!Array.isArray(s.elements[c])){ s.elements[c] = []; changed = true; }
+        if(!Array.isArray(s.elements[c])) s.elements[c] = [];
       }
     }
-
     // ensure shots
-    if(!Array.isArray(s.shots)){ s.shots = []; changed = true; }
+    if(!Array.isArray(s.shots)) s.shots = [];
     for(const sh of s.shots){
       if(!sh) continue;
       const n = Number(sh.durMin);
-      if(!(Number.isFinite(n) && n>0)){ sh.durMin = DEFAULT_SHOT_MIN; changed = true; }
+      if(!(Number.isFinite(n) && n>0)) sh.durMin = DEFAULT_SHOT_MIN;
     }
-
-    // Auto-completar metadata desde el título (sin pisar lo que ya cargaste)
-    if(autofillSceneMetaFromSlugline(s, false)) changed = true;
-
-    return changed;
   }
 
   function ensureScriptState(){
@@ -519,22 +500,6 @@ function enforceScriptVersionsLimit(notify=false){
     }
     return { location, timeOfDay: tod };
   }
-
-  function autofillSceneMetaFromSlugline(s, force=false){
-    if(!s) return false;
-    const slug = String(s.slugline||"").trim();
-    if(!slug) return false;
-    const ie = sluglineToIntExt(slug);
-    const locTod = sluglineToLocTOD(slug);
-    let changed = false;
-
-    if((force || !s.intExt) && ie){ s.intExt = ie; changed = true; }
-    if((force || !s.location) && locTod.location){ s.location = locTod.location; changed = true; }
-    if((force || !s.timeOfDay) && locTod.timeOfDay){ s.timeOfDay = locTod.timeOfDay; changed = true; }
-
-    return changed;
-  }
-
 
   function sluglineToIntExt(slugline){
     const s = String(slugline||"").trim();
@@ -1166,7 +1131,7 @@ function setupScheduleWheelScroll(){
 
     if(name==="breakdown"){ initCollapsibles(); renderScriptUI(); renderShotsEditor(); }
     if(name==="shooting"){ renderSceneBank(); renderDaysBoard(); renderDayDetail(); applyBankCollapsedUI(); }
-    if(name==="dayplan"){ renderDayPlan(); }
+    if(name==="dayplan"){ renderSceneBank(); renderDayPlan(); applyBankCollapsedUI(); }
     if(name==="schedule"){ renderScheduleBoard(); }
     if(name==="shotlist"){ renderShotList(); }
     if(name==="elements"){ renderElementsExplorer(); }
@@ -1991,23 +1956,29 @@ function setupScheduleWheelScroll(){
   }
 
   function renderSceneBank(){
-    const wrap = el("sceneBankList");
-    if(!wrap) return;
-    wrap.innerHTML = "";
+    function renderInto(wrapId, searchId, filterId){
+      const wrap = el(wrapId);
+      if(!wrap) return;
+      wrap.innerHTML = "";
 
-    const q = (el("bankSearch")?.value||"").toLowerCase();
-    const filter = el("bankFilter")?.value || "all";
+      const q = (el(searchId)?.value||"").toLowerCase();
+      const filter = el(filterId)?.value || "all";
 
-    let list = state.scenes.slice();
-    if(filter==="unassigned") list = list.filter(s=>!sceneAssignedDayId(s.id));
-    if(q){
-      list = list.filter(s=>{
-        const hay = `${s.number} ${s.slugline} ${s.location} ${s.summary}`.toLowerCase();
-        return hay.includes(q);
-      });
+      let list = state.scenes.slice();
+      if(filter==="unassigned") list = list.filter(s=>!sceneAssignedDayId(s.id));
+      if(q){
+        list = list.filter(s=>{
+          const hay = `${s.number} ${s.slugline} ${s.location} ${s.summary}`.toLowerCase();
+          return hay.includes(q);
+        });
+      }
+      for(const s of list) wrap.appendChild(sceneCardNode(s, "bank"));
     }
 
-    for(const s of list) wrap.appendChild(sceneCardNode(s, "bank"));
+    // Call Diario
+    renderInto("sceneBankList", "bankSearch", "bankFilter");
+    // Plan de Rodaje (vista diaria)
+    renderInto("dpSceneBankList", "dpBankSearch", "dpBankFilter");
   }
 
   function addShootDay(){
@@ -3453,29 +3424,13 @@ function updateScheduleDayDOM(dayId){
     for(const sid of (d.sceneIds||[])){
       const sc = getScene(sid);
       if(!sc) continue;
-
-      const num = String(sc.number||"").trim();
-      const ttl = String(sc.slugline||"").trim();
-
       items.push({
         key:`scene:${sid}`,
         kind:"scene",
         id:sid,
         start: Number(d.times?.[sid] ?? 0) || 0,
         dur: Number(d.durations?.[sid] ?? 60) || 0,
-
-        sceneMeta: {
-          number: num,
-          title: ttl,
-          intExt: sc.intExt||"",
-          location: sc.location||"",
-          timeOfDay: sc.timeOfDay||"",
-          pages: Number(sc.pages)||0,
-          summary: sc.summary||"",
-          notes: sc.notes||""
-        },
-
-        title: `${num? "#"+num:""}${(num && ttl) ? " — " : ""}${ttl}`.trim(),
+        title: `#${sc.number||""} ${sc.slugline||""}`.trim(),
         detail: [
           sc.intExt||"",
           sc.location||"",
@@ -3493,7 +3448,7 @@ function updateScheduleDayDOM(dayId){
         id:b.id,
         start: Number(b.startMin ?? 0) || 0,
         dur: Number(b.durMin ?? 0) || 0,
-        title: b.title || "Nota / tarea",
+        title: b.title || "Nota",
         detail: b.detail || "",
         color: b.color || ""
       });
@@ -3657,7 +3612,7 @@ for(let m=dpStartAbs; m<=dpEndAbs; m+=30){
     const eattr = (s)=>esc(String(s||"")).replace(/"/g,"&quot;");
     const blocks = items.map((it)=>{
       const col = safeHexColor(it.color || (it.kind==="scene" ? "#BFDBFE" : "#E5E7EB"));
-      const bg = hexToRgba(col, it.kind==="scene" ? 0.42 : 0.34);
+      const bg = hexToRgba(col, 0.55);
 const absStart = clamp(base + (it.start||0), base, dpEndAbs - snapMin);
 const dur = clamp(Math.max(snapMin, it.dur||snapMin), snapMin, dpEndAbs - absStart);
 const absEnd = clamp(absStart + dur, absStart + snapMin, dpEndAbs);
@@ -3686,14 +3641,7 @@ const height = Math.max(Math.round((absEnd - absStart) * ppm), Math.round(snapMi
             </div>
           </div>
           <div class="dpBlockTitle">${esc(it.title||"")}</div>
-          ${it.kind==="scene" ? `
-            <div class="dpSceneMetaGrid">
-              <div class="dpMetaCell"><div class="k">I/E</div><div class="v">${esc(it.sceneMeta?.intExt||"—")}</div></div>
-              <div class="dpMetaCell"><div class="k">Lugar</div><div class="v">${esc(it.sceneMeta?.location||"—")}</div></div>
-              <div class="dpMetaCell"><div class="k">Momento</div><div class="v">${esc(it.sceneMeta?.timeOfDay||"—")}</div></div>
-              <div class="dpMetaCell"><div class="k">Pág</div><div class="v">${(Number(it.sceneMeta?.pages)||0)>0 ? esc(fmtPages(it.sceneMeta.pages)) : "—"}</div></div>
-            </div>
-          ` : (it.detail ? `<div class="dpBlockDetail">${esc(it.detail)}</div>` : ``)}
+          ${it.detail ? `<div class="dpBlockDetail">${esc(it.detail)}</div>` : ``}
 
           <div class="dpPalettePop noPrint" data-role="palette">
             <div class="dpSwatches">
@@ -3708,6 +3656,90 @@ const height = Math.max(Math.round((absEnd - absStart) * ppm), Math.round(snapMi
 
     lane.innerHTML = grid.join("") + blocks;
 
+    // Drop desde Banco de Escenas → agrega/mueve la escena en el horario donde la soltás
+    if(lane.dataset.sceneDropBound !== "1"){
+      lane.dataset.sceneDropBound = "1";
+
+      lane.addEventListener("dragover", (e)=>{
+        try{
+          const types = Array.from(e.dataTransfer?.types || []);
+          if(types.includes("application/json")){
+            e.preventDefault();
+            e.dataTransfer.dropEffect = "move";
+            lane.classList.add("dpDropOver");
+          }
+        }catch(_e){}
+      });
+
+      lane.addEventListener("dragleave", ()=> lane.classList.remove("dpDropOver"));
+
+      lane.addEventListener("drop", (e)=>{
+        e.preventDefault();
+        lane.classList.remove("dpDropOver");
+
+        let data = null;
+        try{
+          const raw = e.dataTransfer.getData("application/json");
+          if(raw) data = JSON.parse(raw);
+        }catch(_e){ data = null; }
+
+        if(!data || data.type!=="scene" || !data.sceneId) return;
+
+        const dayId = selectedDayplanDayId || selectedDayId || null;
+        const d0 = dayId ? getDay(dayId) : null;
+        if(!d0) return;
+
+        const sid = data.sceneId;
+        const alreadyInThisDay = (d0.sceneIds||[]).includes(sid);
+        const curDay = sceneAssignedDayId(sid);
+
+        if(curDay && curDay !== d0.id){
+          removeSceneFromAllDays(sid);
+        }
+
+        ensureDayTimingMaps(d0);
+        if(!alreadyInThisDay){
+          d0.sceneIds.push(sid);
+        }
+
+        // calcular hora según el punto de suelta
+        const snapMin0 = getDayplanSnap();
+        const ppm0 = DAYPLAN_PPM;
+
+        const base0 = minutesFromHHMM(d0.callTime || "08:00");
+        const dpStartAbs0 = Math.floor(base0/60)*60;
+
+        const rect = lane.getBoundingClientRect();
+        const y = (e.clientY - rect.top) + (scroller?.scrollTop || 0);
+        let abs = dpStartAbs0 + (y / ppm0);
+
+        abs = clamp(abs, base0, DAY_SPAN_MIN - snapMin0);
+        let offset = abs - base0;
+        offset = snap(offset, snapMin0);
+        offset = clamp(offset, 0, DAY_SPAN_MIN - snapMin0);
+
+        d0.times[sid] = offset;
+        d0.durations[sid] = d0.durations[sid] ?? 60;
+
+        resolveOverlapsPushDown(d0, snapMin0);
+
+        selectedDayId = d0.id; // sincroniza con Call Diario
+        selectedDayplanDayId = d0.id;
+
+        touch();
+        renderSceneBank();
+        renderDaysBoard();
+        renderDayDetail();
+        renderDayPlan();
+        renderScheduleBoard();
+        renderReportsDetail();
+        renderReports();
+        saveCallSheetCursor();
+        renderCallSheetCalendar();
+      });
+    }
+
+
     // Print table (se ve solo al imprimir)
     const rows = items.map((it)=>{
       const col = safeHexColor(it.color || (it.kind==="scene" ? "#BFDBFE" : "#E5E7EB"));
@@ -3717,16 +3749,11 @@ const height = Math.max(Math.round((absEnd - absStart) * ppm), Math.round(snapMi
       const absEnd = clamp(absStart + dur, 0, DAY_SPAN_MIN);
       const clock = `${hhmmFromMinutes(absStart)} – ${hhmmFromMinutes(absEnd)}`;
       return `
-        <tr class="${it.kind==="block" ? "dpTaskRow" : ""}" style="background:${eattr(bg)};border-left:8px solid ${eattr(col)};">
-          <td style="width:115px">${esc(clock)}</td>
-          <td style="width:55px">${esc(formatDuration(dur))}</td>
-          <td style="width:55px">${it.kind==="scene" ? esc(it.sceneMeta?.number||"") : "—"}</td>
-          <td>${it.kind==="scene" ? esc(it.sceneMeta?.title||"") : `<b>${esc(it.title||"Nota / tarea")}</b>`}</td>
-          <td style="width:55px">${it.kind==="scene" ? esc(it.sceneMeta?.intExt||"") : ""}</td>
-          <td>${it.kind==="scene" ? esc(it.sceneMeta?.location||"") : ""}</td>
-          <td style="width:90px">${it.kind==="scene" ? esc(it.sceneMeta?.timeOfDay||"") : ""}</td>
-          <td style="width:55px">${it.kind==="scene" && (Number(it.sceneMeta?.pages)||0)>0 ? esc(fmtPages(it.sceneMeta.pages)) : ""}</td>
-          <td>${it.kind==="scene" ? esc((it.sceneMeta?.notes||"").trim() || (it.sceneMeta?.summary||"").trim() || "") : esc(it.detail||"")}</td>
+        <tr style="background:${eattr(bg)};border-left:8px solid ${eattr(col)};">
+          <td style="width:120px">${esc(clock)}</td>
+          <td style="width:70px">${esc(formatDuration(dur))}</td>
+          <td>${esc(it.title||"")}</td>
+          <td>${esc(it.detail||"")}</td>
         </tr>
       `;
     }).join("");
@@ -3738,7 +3765,7 @@ const height = Math.max(Math.round((absEnd - absStart) * ppm), Math.round(snapMi
         <div class="cardContent">
           <table class="dayplanPrintTable">
             <thead>
-              <tr><th style="width:115px">Hora</th><th style="width:55px">Dur</th><th style="width:55px">#</th><th>Título</th><th style="width:55px">I/E</th><th>Lugar</th><th style="width:90px">Momento</th><th style="width:55px">Pág</th><th>Notas / tareas</th></tr>
+              <tr><th>Hora</th><th>Dur</th><th>Item</th><th>Detalle</th></tr>
             </thead>
             <tbody>${rows || `<tr><td colspan="4" class="muted">—</td></tr>`}</tbody>
           </table>
@@ -4607,15 +4634,10 @@ function renderShotList(){
       const clock = `${hhmmFromMinutes(absStart)} – ${hhmmFromMinutes(absEnd)}`;
       return `
         <tr>
-          <td style="width:115px">${esc(clock)}</td>
-          <td style="width:55px">${esc(formatDuration(dur))}</td>
-          <td style="width:55px">${it.kind==="scene" ? esc(it.sceneMeta?.number||"") : "—"}</td>
-          <td>${it.kind==="scene" ? esc(it.sceneMeta?.title||"") : `<b>${esc(it.title||"Nota / tarea")}</b>`}</td>
-          <td style="width:55px">${it.kind==="scene" ? esc(it.sceneMeta?.intExt||"") : ""}</td>
-          <td>${it.kind==="scene" ? esc(it.sceneMeta?.location||"") : ""}</td>
-          <td style="width:90px">${it.kind==="scene" ? esc(it.sceneMeta?.timeOfDay||"") : ""}</td>
-          <td style="width:55px">${it.kind==="scene" && (Number(it.sceneMeta?.pages)||0)>0 ? esc(fmtPages(it.sceneMeta.pages)) : ""}</td>
-          <td>${it.kind==="scene" ? esc((it.sceneMeta?.notes||"").trim() || (it.sceneMeta?.summary||"").trim() || "") : esc(it.detail||"")}</td>
+          <td style="width:120px">${esc(clock)}</td>
+          <td style="width:70px">${esc(formatDuration(dur))}</td>
+          <td>${esc(it.title||"")}</td>
+          <td>${esc(it.detail||"")}</td>
         </tr>
       `;
     }).join("");
@@ -4624,7 +4646,7 @@ function renderShotList(){
     table.className = "items";
     table.innerHTML = `
       <table class="dayplanPrintTable">
-        <thead><tr><th style="width:115px">Hora</th><th style="width:55px">Dur</th><th style="width:55px">#</th><th>Título</th><th style="width:55px">I/E</th><th>Lugar</th><th style="width:90px">Momento</th><th style="width:55px">Pág</th><th>Notas / tareas</th></tr></thead>
+        <thead><tr><th>Hora</th><th>Dur</th><th>Item</th><th>Detalle</th></tr></thead>
         <tbody>${rows || `<tr><td colspan="4" class="muted">—</td></tr>`}</tbody>
       </table>
     `;
@@ -4733,7 +4755,23 @@ function renderShotList(){
       else dock.classList.toggle("hidden", !collapsed);
     }
     syncBankDockPlacement(collapsed, isMobile);
+    applyDayplanBankCollapsedUI();
   }
+
+  function applyDayplanBankCollapsedUI(){
+    const layout = el("dayplanLayout");
+    if(!layout) return;
+    const collapsed = localStorage.getItem("gb_bank_collapsed")==="1";
+    layout.classList.toggle("bankCollapsed", collapsed);
+
+    const isMobile = window.matchMedia("(max-width: 820px)").matches;
+    const dock = el("dpBankDock");
+    if(dock){
+      if(isMobile) dock.classList.add("hidden");
+      else dock.classList.toggle("hidden", !collapsed);
+    }
+  }
+
 
   function syncBankDockPlacement(collapsed, isMobile){
     const btn = el("btnToggleBankDock");
@@ -4764,6 +4802,7 @@ function renderShotList(){
   function expandBank(){
     localStorage.setItem("gb_bank_collapsed","0");
     applyBankCollapsedUI();
+    applyDayplanBankCollapsedUI();
   }
 
   // Settings JSONBin
@@ -4855,7 +4894,7 @@ function renderShotList(){
       renderReportsDetail();
       renderReports();
     });
-    el("btnDayplanPrint")?.addEventListener("click", ()=>{ setPrintOrientation("landscape"); window.print(); });
+    el("btnDayplanPrint")?.addEventListener("click", ()=> window.print());
     el("dayplanSnap")?.addEventListener("change", ()=> renderDayPlan());
 
     // Número de escena: no permitimos duplicados (si chocan, auto 6A/6B…)
@@ -5274,6 +5313,8 @@ el("scriptVerSelect")?.addEventListener("change", ()=>{
     el("btnDeleteShootDay")?.addEventListener("click", deleteShootDay);
     el("bankSearch")?.addEventListener("input", renderSceneBank);
     el("bankFilter")?.addEventListener("change", renderSceneBank);
+    el("dpBankSearch")?.addEventListener("input", renderSceneBank);
+    el("dpBankFilter")?.addEventListener("change", renderSceneBank);
 
     const dayMap = { day_date:"date", day_call:"callTime", day_location:"location", day_label:"label", day_notes:"notes" };
     for(const id in dayMap){
@@ -5324,6 +5365,12 @@ el("scriptVerSelect")?.addEventListener("change", ()=>{
       applyBankCollapsedUI();
     });
     el("btnToggleBankDock")?.addEventListener("click", expandBank);
+
+    el("dpBtnToggleBank")?.addEventListener("click", ()=>{
+      localStorage.setItem("gb_bank_collapsed","1");
+      applyBankCollapsedUI();
+    });
+    el("dpBtnToggleBankDock")?.addEventListener("click", expandBank);
 
     el("schedZoom")?.addEventListener("change", ()=>{ renderScheduleBoard(); });
     el("schedSnap")?.addEventListener("change", ()=>{
@@ -5379,10 +5426,7 @@ el("scriptVerSelect")?.addEventListener("change", ()=>{
 
   function hydrateAll(){
     ensureScriptState();
-    let migrated = false;
-    for(const sc of state.scenes){
-      if(ensureSceneExtras(sc)) migrated = true;
-    }
+    state.scenes.forEach(ensureSceneExtras);
 
     renderCatSelect();
     refreshElementSuggestions();
@@ -5390,7 +5434,7 @@ el("scriptVerSelect")?.addEventListener("change", ()=>{
     el("projectTitle").value = state.meta.title || "Proyecto";
     const _savedAt = el("savedAtText");
     if(_savedAt) _savedAt.textContent = new Date(state.meta.updatedAt).toLocaleString("es-AR");
-    if(!state.scenes.length){
+if(!state.scenes.length){
       state.scenes.push({
         id: uid("scene"),
         number:"1",
@@ -5404,7 +5448,6 @@ el("scriptVerSelect")?.addEventListener("change", ()=>{
         elements: Object.fromEntries(cats.map(c=>[c,[]])),
         shots: []
       });
-      migrated = true;
     }
     if(!state.shootDays.length){
       state.shootDays.push({
@@ -5421,10 +5464,7 @@ el("scriptVerSelect")?.addEventListener("change", ()=>{
         times:{},
         durations:{}
       });
-      migrated = true;
     }
-
-    if(migrated){ touch(); }
 
     state.crew = (state.crew||[]).map(c=>({ ...c, area: normalizeCrewArea(c.area) }));
 
