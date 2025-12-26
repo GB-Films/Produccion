@@ -117,6 +117,7 @@
   }
   let schedDrag = null;
   let schedPress = null; // long-press (mobile) antes de iniciar drag en Cronograma
+  let schedTap = null; // fallback doble click (Plan General)
 
   function uid(p="id"){ return `${p}_${Math.random().toString(16).slice(2)}_${Date.now().toString(16)}`; }
   function esc(s){
@@ -3082,7 +3083,10 @@ function bindScheduleDnD(){
     if(!drag.moved){
       const dx = Math.abs(e.clientX - drag.startClientX);
       const dy = Math.abs(e.clientY - drag.startClientY);
-      if(dx > 4 || dy > 4) drag.moved = true;
+      if(dx > 4 || dy > 4){
+        drag.moved = true;
+        schedTap = null;
+      }
     }
 
     const pxPerMin = getPxPerMin();
@@ -3150,6 +3154,25 @@ function bindScheduleDnD(){
     if(!schedDrag || schedDrag.pointerId !== e.pointerId) return;
     const d0 = schedDrag;
     schedDrag = null;
+
+    // Si fue solo click (sin drag), no tocamos layout: permite doble click y evita re-render innecesario
+    if(d0.mode === "move" && !d0.moved){
+      const now = Date.now();
+      if(d0.kind === "scene" && d0.itemId){
+        if(schedTap && schedTap.sceneId === d0.itemId && (now - schedTap.t) < 380){
+          schedTap = null;
+          jumpToSceneInBreakdown(d0.itemId);
+        }else{
+          schedTap = { sceneId: d0.itemId, t: now };
+        }
+      }else{
+        schedTap = null;
+      }
+      return;
+    }
+    if(d0.mode === "resize" && !d0.moved){
+      return;
+    }
 
     const fromDay = getDay(d0.dayId);
     if(!fromDay) return;

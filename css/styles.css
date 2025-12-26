@@ -2030,9 +2030,9 @@ tr.groupRow td{
 #dayplanCard{ height:100%; display:flex; flex-direction:column; min-height:0; }
 #dayplanCard .cardContent{ flex:1 1 auto; min-height:0; display:flex; flex-direction:column; }
 #dayplanHead{ flex:0 0 auto; }
-.dayplanBody{ flex:1 1 auto; min-height:0; }
-.dpScroller{ height:auto !important; max-height:none !important; flex:1 1 auto; }
-.dayplanBody .dayplanInspector{ max-height:none !important; }
+.dayplanBody{ flex:1 1 auto; min-height:0; height:100%; align-items:stretch; }
+.dpScroller{ height:100% !important; min-height:0; max-height:none !important; overflow:auto; }
+.dayplanBody .dayplanInspector{ height:100%; min-height:0; max-height:none !important; overflow:auto; }
 
 /* ===== Plan General: notas/tareas ===== */
 .schedBlock.note{
