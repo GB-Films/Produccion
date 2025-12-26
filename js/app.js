@@ -3414,14 +3414,14 @@ function updateScheduleDayDOM(dayId){
 
   const DAYPLAN_PPM = 1.2; // px por minuto (altura total ~1728px)
   const DAYPLAN_COLORS = [
-    "#E5E7EB", // gris
-    "#FDE68A", // amarillo
-    "#FDBA74", // naranja
-    "#FCA5A5", // rojo suave
-    "#FBCFE8", // rosa
-    "#DDD6FE", // violeta
-    "#BFDBFE", // azul
-    "#BBF7D0"  // verde
+    "#9CA3AF", // gris (más fuerte)
+    "#F59E0B", // amarillo
+    "#F97316", // naranja
+    "#EF4444", // rojo
+    "#EC4899", // rosa
+    "#8B5CF6", // violeta
+    "#3B82F6", // azul
+    "#22C55E"  // verde
   ];
 
 
