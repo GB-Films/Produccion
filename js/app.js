@@ -1147,6 +1147,9 @@ function setupScheduleWheelScroll(){
 }
 
   function showView(name){
+    // Reset print-only mode if a browser skipped the afterprint event.
+    try{ clearPrintOrientation(); }catch(_e){}
+    try{ cleanupGbPrintRoot(); }catch(_e){}
     views.forEach(v=>{
       const node = el(`view-${v}`);
       if(node) node.classList.toggle("hidden", v!==name);
@@ -3661,9 +3664,10 @@ const height = Math.max(Math.round((absEnd - absStart) * ppm), Math.round(snapMi
       const isSel = (dayplanSelectedKey === it.key);
       const showPal = (dayplanPaletteKey === it.key);
 
-      const delBtn = it.kind==="block"
+      const actionBtns = it.kind==="block"
         ? `<button class="dpMiniBtn noPrint" data-action="delete" title="Eliminar">🗑</button>`
-        : `<button class="dpMiniBtn noPrint" data-action="openScene" title="Abrir escena">↗</button>`;
+        : `<button class="dpMiniBtn noPrint" data-action="removeScene" title="Quitar del Plan">🗑</button>
+           <button class="dpMiniBtn noPrint" data-action="openScene" title="Abrir escena">↗</button>`;
 
       return `
         <div class="dpBlock ${isSel?"sel":""} ${showPal?"showPalette":""}"
@@ -3673,7 +3677,7 @@ const height = Math.max(Math.round((absEnd - absStart) * ppm), Math.round(snapMi
             <div class="dpBlockTime">${esc(startTxt)} – ${esc(endTxt)} <span class="dpBlockDur">· ${esc(formatDurHHMM(dur))}</span></div>
             <div class="dpBlockBtns">
               <button class="dpMiniBtn noPrint" data-action="palette" title="Color">🎨</button>
-              ${delBtn}
+              ${actionBtns}
             </div>
           </div>
 <div class="dpBlockTitle">${
@@ -3897,6 +3901,28 @@ return `
           deleteDayplanBlock(selectedDayplanDayId, id);
           dayplanSelectedKey = null;
           dayplanPaletteKey = null;
+          return;
+        }
+        if(action === "removeScene" && kind === "scene"){
+          // Quita la escena de este día (no la borra del Breakdown)
+          d.sceneIds = (d.sceneIds||[]).filter(x=>x!==id);
+          if(d.times) delete d.times[id];
+          if(d.durations) delete d.durations[id];
+          if(d.sceneColors) delete d.sceneColors[id];
+
+          selectedDayId = d.id;
+          dayplanSelectedKey = null;
+          dayplanPaletteKey = null;
+          touch();
+          renderSceneBank();
+          renderDaysBoard();
+          renderDayDetail();
+          renderDayPlan();
+          renderScheduleBoard();
+          renderReports();
+          saveCallSheetCursor();
+          renderCallSheetCalendar();
+          renderReportsDetail();
           return;
         }
         if(action === "openScene" && kind === "scene"){
@@ -4998,7 +5024,7 @@ const col = safeHexColor(it.color || (it.kind==="scene" ? "#BFDBFE" : "#E5E7EB")
     document.body.classList.add("gbPrintingCallsheet");
     // Menos margen para que arranque más arriba
     setPrintOrientation("portrait", 6);
-    window.print();
+    try{ window.print(); } finally { clearPrintOrientation(); cleanupGbPrintRoot(); }
   }
 
 function printShotlistByDayId(dayId){
@@ -5010,7 +5036,7 @@ function printShotlistByDayId(dayId){
     root.innerHTML = buildShotlistPrintHTML(d);
     document.body.classList.add("gbPrintingShotlist");
     setPrintOrientation("portrait");
-    window.print();
+    try{ window.print(); } finally { clearPrintOrientation(); cleanupGbPrintRoot(); }
   }
 
   // Bank collapse
