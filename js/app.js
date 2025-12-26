@@ -4326,7 +4326,7 @@ function renderShotList(){
     }
     if(btnPrint && !btnPrint.dataset.bound){
       btnPrint.dataset.bound = "1";
-      btnPrint.addEventListener("click", ()=> window.print());
+      btnPrint.addEventListener("click", ()=> printShotlistByDayId(selectedShotlistDayId));
     }
 
     const d = getDay(selectedShotlistDayId);
@@ -4420,7 +4420,7 @@ function renderShotList(){
                   <th class="shotChk">✓</th>
                   <th class="shotNum">#</th>
                   <th class="shotTime">Hora</th>
-                  <th style="width:220px">Tipo</th>
+                  <th class="shotType">Tipo</th>
                   <th>Descripción</th>
                   <th class="shotDur">Min</th>
                 </tr>
@@ -4450,7 +4450,7 @@ function renderShotList(){
             <td class="shotChk"><input type="checkbox" ${done?"checked":""} /></td>
             <td class="shotNum">${idx+1}</td>
             <td class="shotTime">${esc(t||"")}</td>
-            <td>${esc(normalizeShotType(sh.type)||sh.type||"Plano")}</td>
+            <td class="shotType">${esc(normalizeShotType(sh.type)||sh.type||"Plano")}</td>
             <td>${esc(sh.desc||"")}</td>
             <td class="shotDur">
               <select class="input compact shotDurSel">
@@ -4859,6 +4859,138 @@ const col = safeHexColor(it.color || (it.kind==="scene" ? "#BFDBFE" : "#E5E7EB")
   }
   function clearPrintOrientation(){
     try{ if(_printOrientEl){ _printOrientEl.remove(); _printOrientEl = null; } }catch(_e){}
+  }
+
+  // ===================== PRINT: Shotlist (unificado para pestaña Shotlist y REPORTES) =====================
+  let _gbPrintRoot = null;
+  function ensureGbPrintRoot(){
+    if(_gbPrintRoot) return _gbPrintRoot;
+    _gbPrintRoot = document.createElement("div");
+    _gbPrintRoot.id = "gbPrintRoot";
+    _gbPrintRoot.className = "printOnly";
+    document.body.appendChild(_gbPrintRoot);
+    return _gbPrintRoot;
+  }
+  function cleanupGbPrintRoot(){
+    try{ document.body.classList.remove("gbPrintingShotlist"); }catch(_e){}
+    try{ if(_gbPrintRoot) _gbPrintRoot.innerHTML = ""; }catch(_e){}
+  }
+
+  function buildShotlistPrintHTML(d){
+    const project = state?.meta?.title || "Proyecto";
+    const dayLabel = `${formatDayTitle(d.date)}${d.label ? " · "+d.label : ""}`.trim();
+
+    // KPIs
+    const scenes = (d.sceneIds||[]).map(getScene).filter(Boolean);
+    const pages = scenes.reduce((acc, s)=> acc + (Number(s.pages)||0), 0);
+    const totalShots = scenes.reduce((acc, s)=> acc + ((s.shots||[]).length), 0);
+
+    let kpi = `
+      <div class="shotPrintKpis">
+        <span class="pill">Escenas: <b>${scenes.length}</b></span>
+        <span class="pill">Planos: <b>${totalShots}</b></span>
+        <span class="pill">Pág: <b>${fmtPages(pages)}</b></span>
+      </div>
+    `;
+
+    const header = `
+      <div class="shotPrintHeader">
+        <div class="shotPrintTitle">Shotlist</div>
+        <div class="shotPrintSub"><b>${esc(project)}</b> · ${esc(dayLabel||"Día")}</div>
+        <div class="shotPrintMeta"><b>Call:</b> ${esc(d.callTime||"")} &nbsp; <b>Locación:</b> ${esc(d.location||"")}</div>
+        ${kpi}
+      </div>
+    `;
+
+    if(!scenes.length){
+      return header + `<div class="muted">No hay escenas asignadas a este día.</div>`;
+    }
+
+    let out = header;
+    for(const sid of (d.sceneIds||[])){
+      const sc = getScene(sid);
+      if(!sc) continue;
+      ensureSceneExtras(sc);
+      const st = Number(d.times?.[sid] ?? 0) || 0;
+      const du = Number(d.durations?.[sid] ?? 60) || 60;
+      const scStart = d.callTime ? fmtClockFromCall(d.callTime, st) : "";
+      const scEnd = d.callTime ? fmtClockFromCall(d.callTime, st+du) : "";
+
+      const shotsMin = sceneShotsTotalMin(sc);
+      const warn = shotsMin > du ? "Planos > duración" : "";
+
+      let rows = "";
+      let offset = 0;
+      const shots = (sc.shots||[]);
+      if(!shots.length){
+        rows = `<tr><td colspan="6" class="muted">Sin planos cargados para esta escena.</td></tr>`;
+      }else{
+        rows = shots.map((sh, idx)=>{
+          const dur = shotDurMin(sh);
+          const key = `${sid}|${sh.id}`;
+          const done = !!d.shotsDone?.[key];
+          const t = d.callTime ? fmtClockFromCall(d.callTime, st + offset) : "";
+          offset += dur;
+          return `
+            <tr class="${done?"shotRowDone":""}">
+              <td class="shotChk"><input type="checkbox" ${done?"checked":""} /></td>
+              <td class="shotNum">${idx+1}</td>
+              <td class="shotTime">${esc(t||"")}</td>
+              <td class="shotType">${esc(normalizeShotType(sh.type)||sh.type||"Plano")}</td>
+              <td>${esc(sh.desc||"")}</td>
+              <td class="shotDur">${esc(String(dur||DEFAULT_SHOT_MIN))}</td>
+            </tr>
+          `;
+        }).join("");
+      }
+
+      out += `
+        <div class="shotSceneBox">
+          <div class="shotSceneHead">
+            <div>
+              <div class="t">#${esc(sc.number||"")} — ${esc(sc.slugline||"")}</div>
+              <div class="m">${esc(scStart||"")} → ${esc(scEnd||"")} · Escena: ${esc(formatDuration(du))} · Planos: ${esc(formatDuration(shotsMin))}</div>
+            </div>
+            ${warn ? `<div class="warn">${esc(warn)}</div>` : ""}
+          </div>
+
+          <div class="shotTableWrap">
+            <div class="tableWrap">
+              <table class="table shotTable">
+                <thead>
+                  <tr>
+                    <th class="shotChk">✓</th>
+                    <th class="shotNum">#</th>
+                    <th class="shotTime">Hora</th>
+                    <th class="shotType">Tipo</th>
+                    <th>Descripción</th>
+                    <th class="shotDur">Min</th>
+                  </tr>
+                </thead>
+                <tbody>${rows}</tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+    return out;
+  }
+
+  function getReportsSelectedDayId(){
+    return callSheetDayId || selectedDayId || selectedShotlistDayId || (state.shootDays?.[0]?.id || null);
+  }
+
+  function printShotlistByDayId(dayId){
+    const d = dayId ? getDay(dayId) : null;
+    if(!d){ toast("Elegí un día con rodaje"); return; }
+    ensureDayTimingMaps(d);
+    ensureDayShotsDone(d);
+    const root = ensureGbPrintRoot();
+    root.innerHTML = buildShotlistPrintHTML(d);
+    document.body.classList.add("gbPrintingShotlist");
+    setPrintOrientation("portrait");
+    window.print();
   }
 
   // Bank collapse
@@ -5527,11 +5659,16 @@ el("scriptVerSelect")?.addEventListener("change", ()=>{
     });
 
     el("btnPrintCallSheet")?.addEventListener("click", ()=>{
-      // Plan de Rodaje = landscape, el resto portrait
+      // Plan de Rodaje = landscape, el resto portrait.
+      // Shotlist: usamos impresión unificada (mismo diseño que pestaña Shotlist).
+      if(reportsTab === "shotlist"){
+        printShotlistByDayId(getReportsSelectedDayId());
+        return;
+      }
       setPrintOrientation(reportsTab==="dayplan" ? "landscape" : "portrait");
       window.print();
     });
-    window.addEventListener("afterprint", clearPrintOrientation);
+    window.addEventListener("afterprint", ()=>{ clearPrintOrientation(); cleanupGbPrintRoot(); });
 
     el("btnSaveCfg")?.addEventListener("click", saveCfgFromUI);
     el("btnTestCfg")?.addEventListener("click", testCfg);

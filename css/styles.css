@@ -954,7 +954,7 @@ tr.groupRow td{
   align-items:flex-end;
 }
 .shotSceneHead .t{ font-weight:950; }
-.shotSceneHead .m{ color:var(--muted); font-size:12px; margin-top:4px; }
+.shotSceneHead .m{ color: rgba(255,255,255,.72); font-size:12px; margin-top:4px; font-weight:700; }
 .shotSceneHead .warn{ color: rgba(255,92,92,.92); font-weight:900; font-size:12px; }
 
 .shotTableWrap{ padding:12px; }
@@ -964,9 +964,54 @@ tr.groupRow td{
 .shotTable .shotTime{ width:78px; font-weight:900; }
 .shotTable .shotDur{ width:120px; }
 .shotTable .shotChk{ width:44px; }
+.shotTable .shotType{ width:220px; }
+.shotTable .shotChk input[type=checkbox]{ width:18px; height:18px; }
+.shotTable .shotChk{ text-align:center; }
 .shotRowDone{ opacity:.65; }
 
 .shotDurSel{ width:100%; }
+
+/* ===== Shotlist print (unificado) ===== */
+#gbPrintRoot{ display:none; }
+
+.shotPrintHeader{ margin-bottom:12px; }
+.shotPrintTitle{ font-weight:950; font-size:18pt; }
+.shotPrintSub{ margin-top:2px; font-size:12pt; }
+.shotPrintMeta{ margin-top:6px; font-size:11pt; color:var(--muted); }
+.shotPrintKpis{ margin-top:10px; display:flex; flex-wrap:wrap; gap:8px; }
+.shotPrintKpis .pill{ background: rgba(0,0,0,.04); border:1px solid #ddd; color:#222; }
+
+@media print{
+  /* Cuando imprimimos shotlist, imprimimos solo el root (mismo diseño desde cualquier pestaña) */
+  body.gbPrintingShotlist *{ visibility:hidden !important; }
+  body.gbPrintingShotlist #gbPrintRoot,
+  body.gbPrintingShotlist #gbPrintRoot *{ visibility:visible !important; }
+  body.gbPrintingShotlist #gbPrintRoot{ display:block !important; position:absolute; left:0; top:0; width:100%; }
+
+  /* Fondo + contraste */
+  body.gbPrintingShotlist{ background:#fff !important; color:#000 !important; }
+  body.gbPrintingShotlist .muted{ color:#333 !important; }
+
+  body.gbPrintingShotlist .shotSceneBox{ background:#fff !important; border:1px solid #ddd !important; }
+  body.gbPrintingShotlist .shotSceneHead{ background:#f6f6f6 !important; border-bottom:1px solid #ddd !important; }
+  body.gbPrintingShotlist .shotSceneHead .m{ color:#111 !important; font-weight:800; }
+
+  /* Filas más petizas */
+  body.gbPrintingShotlist .shotTable th,
+  body.gbPrintingShotlist .shotTable td{ padding:4px 6px !important; font-size:10pt; line-height:1.2; }
+
+  /* Columnas */
+  body.gbPrintingShotlist .shotTable .shotChk{ width:32px !important; }
+  body.gbPrintingShotlist .shotTable .shotNum{ width:36px !important; }
+  body.gbPrintingShotlist .shotTable .shotTime{ width:70px !important; }
+  /* Tipo: -30% aprox vs 220px */
+  body.gbPrintingShotlist .shotTable .shotType{ width:150px !important; }
+  /* Min: mitad */
+  body.gbPrintingShotlist .shotTable .shotDur{ width:60px !important; }
+
+  /* Checkbox más grande en papel */
+  body.gbPrintingShotlist .shotTable .shotChk input[type=checkbox]{ width:20px !important; height:20px !important; }
+}
 
 
 /* Reports */
