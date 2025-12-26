@@ -5685,8 +5685,41 @@ el("scriptVerSelect")?.addEventListener("change", ()=>{
     if(dayDatePickBtn){
       dayDatePickBtn.addEventListener("click", ()=>{
         const hid = el("day_date");
-        if(hid && typeof hid.showPicker === "function") hid.showPicker();
-        else hid?.focus();
+        if(!hid) return;
+
+        // Prefer native picker when available
+        if(typeof hid.showPicker === "function"){
+          hid.showPicker();
+          return;
+        }
+
+        // Fallback: temporarily place the hidden input over the button and click it
+        const r = dayDatePickBtn.getBoundingClientRect();
+        const prev = {
+          position: hid.style.position || "",
+          left: hid.style.left || "",
+          top: hid.style.top || "",
+          width: hid.style.width || "",
+          height: hid.style.height || "",
+          opacity: hid.style.opacity || "",
+          pointerEvents: hid.style.pointerEvents || "",
+          zIndex: hid.style.zIndex || ""
+        };
+
+        hid.style.position = "fixed";
+        hid.style.left = `${Math.round(r.left)}px`;
+        hid.style.top = `${Math.round(r.top)}px`;
+        hid.style.width = `${Math.max(1, Math.round(r.width))}px`;
+        hid.style.height = `${Math.max(1, Math.round(r.height))}px`;
+        hid.style.opacity = "0";
+        hid.style.pointerEvents = "auto";
+        hid.style.zIndex = "9999";
+
+        // Some browsers only open the picker on click
+        hid.focus({ preventScroll:true });
+        hid.click();
+
+        setTimeout(()=>{ Object.assign(hid.style, prev); }, 700);
       });
     }
     if(dayDateDisp){
@@ -5708,6 +5741,26 @@ el("scriptVerSelect")?.addEventListener("change", ()=>{
         renderReportsDetail();
       });
     }
+    const dayDateHid = el("day_date");
+    if(dayDateHid){
+      dayDateHid.addEventListener("change", ()=>{
+        const d = selectedDayId ? getDay(selectedDayId) : null;
+        if(!d) return;
+        const iso = dayDateHid.value;
+        if(!iso) return;
+        d.date = iso;
+        if(dayDateDisp) dayDateDisp.value = formatDDMMYYYY(iso);
+        sortShootDaysInPlace();
+        touch();
+        renderDaysBoard();
+        renderDayDetail();
+        renderReports();
+        renderScheduleBoard();
+        renderCallSheetCalendar();
+        renderReportsDetail();
+      });
+    }
+
 
 el("day_call_minus")?.addEventListener("click", ()=>{
       const d = selectedDayId ? getDay(selectedDayId) : null;

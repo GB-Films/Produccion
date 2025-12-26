@@ -497,7 +497,7 @@ tr.groupRow td{
 
 /* Input fecha DD/MM/AAAA (mantiene date picker oculto) */
 .dateDual{ display:flex; align-items:center; gap:8px; }
-.dateDual #day_date_display{ flex:1 1 auto; }
+.dateDual #day_date_display{ flex:1 1 auto; font-size:18px; font-weight:900; }
 .dateDual .datePickBtn{ flex:0 0 auto; padding:6px 10px; }
 .dateDual .hiddenDate{
   position:absolute;
