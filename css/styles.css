@@ -1801,6 +1801,153 @@ tr.groupRow td{
 #daysBoardCard, #dayDetailCard{ width:100%; max-width:100%; min-width:0; }
 
 
+/* ===== Reportes: Plan de Rodaje (pantalla) ===== */
+.dpHdrMetaRow{ display:flex; justify-content:space-between; gap:10px; align-items:flex-start; flex-wrap:wrap; }
+.dpHdrChips{ display:flex; gap:8px; flex-wrap:wrap; }
+.dpChip{
+  display:inline-flex;
+  align-items:center;
+  gap:6px;
+  padding:4px 10px;
+  border:1px solid var(--border2);
+  border-radius:999px;
+  background: rgba(var(--panel-rgb), .35);
+  font-size:12px;
+  color:var(--text);
+}
+
+.dayplanPretty{ margin-top:10px; }
+.dpPrettyList{ display:flex; flex-direction:column; gap:10px; }
+
+.dpRowCard{
+  display:flex;
+  gap:12px;
+  padding:10px 12px;
+  border:1px solid var(--border);
+  border-radius:16px;
+  background: rgba(var(--panel-rgb), .35);
+  box-shadow: 0 8px 18px rgba(0,0,0,.18);
+}
+
+.dpRowTime{
+  width:64px;
+  flex:0 0 64px;
+  text-align:center;
+  padding:6px 6px;
+  border:1px solid var(--border);
+  border-radius:14px;
+  background: rgba(var(--panel-deep-rgb), .55);
+}
+.dpT1{ font-weight:900; font-size:14px; line-height:1.1; }
+.dpT2{ color:var(--muted); font-size:12px; margin-top:4px; }
+
+.dpRowBody{ flex:1; min-width:0; }
+.dpRowTop{ display:flex; align-items:flex-start; justify-content:space-between; gap:10px; }
+.dpRowTitle{ display:flex; align-items:center; gap:10px; min-width:0; }
+.dpRowTag{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  padding:3px 8px;
+  border:1px solid var(--border2);
+  border-radius:999px;
+  font-size:12px;
+  font-weight:900;
+  color:var(--text);
+  white-space:nowrap;
+}
+.dpRowTitleTxt{
+  font-weight:900;
+  font-size:14px;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+
+.dpRowBadges{ display:flex; gap:8px; flex-wrap:wrap; justify-content:flex-end; }
+.dpBadge{
+  display:inline-flex;
+  align-items:center;
+  padding:3px 8px;
+  border:1px solid var(--border2);
+  border-radius:999px;
+  font-size:12px;
+  color:var(--muted);
+  background: rgba(var(--panel-deep-rgb), .35);
+  white-space:nowrap;
+}
+
+.dpRowMeta{ margin-top:4px; color:var(--muted); font-size:12px; }
+.dpRowSum{ margin-top:6px; font-size:13px; color:rgba(255,255,255,.86); line-height:1.25; }
+
+
+/* ===== Impresión: hoja extra de elementos por escena ===== */
+.pageBreak{ display:none; }
+
+@media print{
+  .pageBreak{ display:block !important; page-break-before:always; break-before:page; }
+
+  .elementsPrintPage{
+    max-width:780px;
+    margin:0 auto;
+    background:#fff;
+    color:#111827;
+    border:1px solid #ddd;
+    border-radius:14px;
+    padding:14px 14px;
+  }
+  .elementsPrintPage .eleHeader{
+    border-bottom:1px solid #e5e7eb;
+    padding-bottom:10px;
+    margin-bottom:12px;
+  }
+  .elementsPrintPage .eleTitle{ font-size:14pt; font-weight:900; }
+  .elementsPrintPage .eleSub{ margin-top:2px; font-size:10.5pt; color:#374151; }
+  .elementsPrintPage .eleSub2{ margin-top:6px; font-size:10.5pt; color:#111827; }
+
+  .elementsPrintPage .eleList{ display:flex; flex-direction:column; gap:12px; }
+
+  .elementsPrintPage .eleScene{
+    border:1px solid #e5e7eb;
+    border-radius:12px;
+    padding:10px 10px;
+  }
+  .elementsPrintPage .eleSceneHdr{
+    display:flex;
+    align-items:baseline;
+    justify-content:space-between;
+    gap:10px;
+  }
+  .elementsPrintPage .eleSceneNum{ font-weight:900; font-size:11pt; }
+  .elementsPrintPage .eleSceneSlug{ font-weight:900; font-size:11pt; color:#111827; flex:1; text-align:right; }
+  .elementsPrintPage .eleSceneMeta{ margin-top:4px; color:#374151; font-size:10pt; }
+  .elementsPrintPage .eleEmpty{ margin-top:8px; color:#6b7280; font-style:italic; font-size:10pt; }
+
+  .elementsPrintPage .eleTable{
+    width:100%;
+    border-collapse:collapse;
+    margin-top:8px;
+  }
+  .elementsPrintPage .eleTable th{
+    width:120px;
+    text-align:left;
+    font-size:9.5pt;
+    padding:5px 6px;
+    color:#111827;
+    background:#f3f4f6;
+    border:1px solid #e5e7eb;
+    vertical-align:top;
+  }
+  .elementsPrintPage .eleTable td{
+    font-size:9.5pt;
+    padding:5px 6px;
+    border:1px solid #e5e7eb;
+    color:#111827;
+    vertical-align:top;
+  }
+  .elementsPrintPage .eleRowCast th{ background:#fff7ed; }
+}
+
 /* ===================== RESTORE REPORTES & CALLS (v1) ===================== */
 .reportHead{
   padding:10px 12px;

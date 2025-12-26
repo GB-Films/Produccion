@@ -5102,7 +5102,63 @@ function renderShotList(){
     renderCallSheetDetail(null, dayId);
   }
 
-  function renderReportDayplanDetail(d){
+  function buildElementsByScenePrintPage(d, opts={}){
+    if(!d) return "";
+    const title = opts.title || "Elementos por escena";
+    const proj = esc(state.meta?.title || "Proyecto");
+    const dayTxt = `${formatDayTitle(d.date)}${d.label ? " · "+esc(d.label) : ""}`;
+
+    const scenes = (d.sceneIds||[]).map(getScene).filter(Boolean);
+
+    const sceneBlocks = scenes.map((sc)=>{
+      const num = sc.number || "";
+      const slug = sc.slugline || "";
+      const metaBits = [];
+      if(sc.intExt) metaBits.push(sc.intExt);
+      if(sc.location) metaBits.push(sc.location);
+      if(sc.timeOfDay) metaBits.push(sc.timeOfDay);
+      if((Number(sc.pages)||0) > 0) metaBits.push(`${fmtPages(sc.pages)} pág`);
+
+      const rows = cats.map((cat)=>{
+        const arr = union(sc.elements?.[cat] || []);
+        if(!arr.length) return "";
+        const label = catNames?.[cat] || cat;
+        const items = arr.map(x=>esc(String(x))).join(", ");
+        return `<tr class="eleRow ${cat==="cast" ? "eleRowCast" : ""}"><th>${esc(label)}</th><td>${items}</td></tr>`;
+      }).filter(Boolean).join("");
+
+      const noEls = !rows;
+      return `
+        <div class="eleScene">
+          <div class="eleSceneHdr">
+            <div class="eleSceneNum">Escena ${esc(num)}</div>
+            <div class="eleSceneSlug">${esc(slug)}</div>
+          </div>
+          ${metaBits.length ? `<div class="eleSceneMeta">${esc(metaBits.join(" · "))}</div>` : ``}
+          ${noEls ? `<div class="eleEmpty">Sin elementos cargados.</div>` : `
+            <table class="eleTable">
+              <tbody>${rows}</tbody>
+            </table>
+          `}
+        </div>
+      `;
+    }).join("");
+
+    return `
+      <div class="elementsPrintPage printOnly">
+        <div class="eleHeader">
+          <div class="eleTitle">${esc(title)}</div>
+          <div class="eleSub">${proj} · ${dayTxt}</div>
+          <div class="eleSub2"><b>Call:</b> ${esc(d.callTime||"")} &nbsp; <b>Locación:</b> ${esc(d.location||"")}</div>
+        </div>
+        <div class="eleList">
+          ${sceneBlocks || `<div class="muted">No hay escenas asignadas.</div>`}
+        </div>
+      </div>
+    `;
+  }
+
+function renderReportDayplanDetail(d){
     const wrap = el("reportDayplanDetail");
     if(!wrap) return;
     wrap.innerHTML = "";
@@ -5118,6 +5174,9 @@ function renderShotList(){
     const proj = esc(state.meta?.title || "Proyecto");
     const dayTxt = `${formatDayTitle(d.date)}${d.label ? " · "+esc(d.label) : ""}`;
 
+    const scenes = (d.sceneIds||[]).map(getScene).filter(Boolean);
+    const pages = scenes.reduce((acc, s)=> acc + (Number(s.pages)||0), 0);
+
     const box = document.createElement("div");
     box.className = "catBlock";
     box.innerHTML = `
@@ -5125,32 +5184,101 @@ function renderShotList(){
       <div class="items">
         <div><b>${proj}</b> · ${dayTxt}</div>
         <div><b>Call:</b> ${esc(d.callTime||"")} &nbsp; <b>Locación:</b> ${esc(d.location||"")}</div>
+        <div class="dpHdrChips screenOnly">
+          <span class="dpChip">Escenas: <b>${scenes.length}</b></span>
+          <span class="dpChip">Pág: <b>${esc(fmtPages(pages))}</b></span>
+        </div>
       </div>
     `;
 
+    // ========= Vista "linda" (solo pantalla) =========
     const base = minutesFromHHMM(d.callTime || "08:00");
     const snapMin = Number(el("schedSnap")?.value || 15);
     resolveOverlapsPushDown(d, snapMin);
 
+    const pretty = document.createElement("div");
+    pretty.className = "dayplanPretty screenOnly";
+
+    const cards = items.map((it)=>{
+      const absStart = clamp(base + (it.start||0), 0, DAY_SPAN_MIN - snapMin);
+      const dur = clamp(Math.max(snapMin, it.dur||snapMin), snapMin, DAY_SPAN_MIN);
+      const absEnd = clamp(absStart + dur, 0, DAY_SPAN_MIN);
+
+      const isNote = it.kind==="block";
+      const num = isNote ? "NOTA" : (it.number||"");
+      const title = isNote ? (it.title||"Nota") : (it.slugline||it.title||"");
+      const ie = isNote ? "" : (it.intExt||"");
+      const locTxt = isNote ? "" : (it.location||"");
+      const todTxt = isNote ? "" : (it.timeOfDay||"");
+      const pagesTxt = isNote ? "" : ((Number(it.pages)||0) > 0 ? fmtPages(it.pages) : "");
+      const sumTxt = isNote ? (it.detail||"") : (it.summary||"");
+
+      const col = safeHexColor(it.color || (it.kind==="scene" ? "#BFDBFE" : "#E5E7EB"));
+      const bg = hexToRgba(col, isNote ? 0.10 : 0.12);
+
+      const tA = hhmmFromMinutes(absStart);
+      const tB = hhmmFromMinutes(absEnd);
+
+      const metaBits = [];
+      if(ie) metaBits.push(ie);
+      if(locTxt) metaBits.push(locTxt);
+      if(todTxt) metaBits.push(todTxt);
+
+      const tag = isNote ? "NOTA" : `#${num}`;
+
+      return `
+        <div class="dpRowCard" style="border-left:8px solid ${eattr(col)}">
+          <div class="dpRowTime">
+            <div class="dpT1">${esc(tA)}</div>
+            <div class="dpT2">${esc(tB)}</div>
+          </div>
+
+          <div class="dpRowBody">
+            <div class="dpRowTop">
+              <div class="dpRowTitle">
+                <span class="dpRowTag" style="background:${eattr(bg)};border-color:${eattr(col)}">${esc(tag)}</span>
+                <span class="dpRowTitleTxt">${esc(title)}</span>
+              </div>
+              <div class="dpRowBadges">
+                <span class="dpBadge">${esc(formatDurHHMMCompact(dur))}</span>
+                ${pagesTxt ? `<span class="dpBadge">${esc(pagesTxt)} pág</span>` : ``}
+              </div>
+            </div>
+
+            ${metaBits.length ? `<div class="dpRowMeta">${esc(metaBits.join(" · "))}</div>` : ``}
+            ${sumTxt ? `<div class="dpRowSum">${esc(sumTxt)}</div>` : ``}
+          </div>
+        </div>
+      `;
+    }).join("");
+
+    pretty.innerHTML = `
+      <div class="dpPrettyList">
+        ${cards || `<div class="muted">—</div>`}
+      </div>
+    `;
+    box.appendChild(pretty);
+
+    // ========= Vista de impresión (intacta) =========
     const rows = items.map((it)=>{
       const absStart = clamp(base + (it.start||0), 0, DAY_SPAN_MIN - snapMin);
       const dur = clamp(Math.max(snapMin, it.dur||snapMin), snapMin, DAY_SPAN_MIN);
       const absEnd = clamp(absStart + dur, 0, DAY_SPAN_MIN);
       const isNote = it.kind==="block";
-const num = isNote ? "NOTA" : (it.number||"");
-const title = isNote ? (it.title||"") : (it.slugline||it.title||"");
-const ie = isNote ? "" : (it.intExt||"");
-const locTxt = isNote ? "" : (it.location||"");
-const todTxt = isNote ? "" : (it.timeOfDay||"");
-const pagesTxt = isNote ? "" : ((Number(it.pages)||0) > 0 ? fmtPages(it.pages) : "");
-const sumTxt = isNote ? (it.detail||"") : (it.summary||"");
-const col = safeHexColor(it.color || (it.kind==="scene" ? "#BFDBFE" : "#E5E7EB"));
+      const num = isNote ? "NOTA" : (it.number||"");
+      const title = isNote ? (it.title||"") : (it.slugline||it.title||"");
+      const ie = isNote ? "" : (it.intExt||"");
+      const locTxt = isNote ? "" : (it.location||"");
+      const todTxt = isNote ? "" : (it.timeOfDay||"");
+      const pagesTxt = isNote ? "" : ((Number(it.pages)||0) > 0 ? fmtPages(it.pages) : "");
+      const sumTxt = isNote ? (it.detail||"") : (it.summary||"");
+      const col = safeHexColor(it.color || (it.kind==="scene" ? "#BFDBFE" : "#E5E7EB"));
       const bg = hexToRgba(col, isNote ? 0.10 : 0.12);
       const tA = hhmmFromMinutes(absStart);
       const tB = hhmmFromMinutes(absEnd);
       const clockHTML = `<div class="dpClock2"><div>${esc(tA)}</div><div>${esc(tB)}</div></div>`;
       return `
-        <tr class="${isNote ? "dpPrintNote" : ""}" style="background:${eattr(bg)};border-left:8px solid ${eattr(col)};">
+  <tr class="${isNote ? "dpPrintNote" : ""}" style="background:${eattr(bg)};border-left:8px solid ${eattr(col)};">
     <td class="cHour">${clockHTML}</td>
     <td class="cDur">${esc(formatDurHHMMCompact(dur))}</td>
     <td class="cNro">${esc(num)}</td>
@@ -5162,22 +5290,27 @@ const col = safeHexColor(it.color || (it.kind==="scene" ? "#BFDBFE" : "#E5E7EB")
     <td class="cSum">${esc(sumTxt)}</td>
   </tr>
 `;
-}).join("");
+    }).join("");
 
-    const table = document.createElement("div");
-    table.className = "items";
-    table.innerHTML = `
-      <table class="dayplanPrintTable">
-        <colgroup>
-          <col class="colHour"><col class="colDur"><col class="colNro"><col class="colTitle">
-          <col class="colIE"><col class="colLoc"><col class="colTod"><col class="colPag"><col class="colSum">
-        </colgroup>
-        <thead><tr><th>Hora</th><th>Dur</th><th>Nro</th><th>Título</th><th>Int/Ext</th><th>Lugar</th><th>Momento</th><th>Largo (Pág)</th><th>Resumen</th></tr></thead>
-        <tbody>${rows || `<tr><td colspan="9" class="muted">—</td></tr>`}</tbody>
-      </table>
+    const printWrap = document.createElement("div");
+    printWrap.className = "printOnly";
+    printWrap.innerHTML = `
+      <div class="items">
+        <table class="dayplanPrintTable">
+          <colgroup>
+            <col class="colHour"><col class="colDur"><col class="colNro"><col class="colTitle">
+            <col class="colIE"><col class="colLoc"><col class="colTod"><col class="colPag"><col class="colSum">
+          </colgroup>
+          <thead><tr><th>Hora</th><th>Dur</th><th>Nro</th><th>Título</th><th>I/E</th><th>Locación</th><th>Momento</th><th>Largo (Pág)</th><th>Resumen</th></tr></thead>
+          <tbody>${rows || `<tr><td colspan="9" class="muted">—</td></tr>`}</tbody>
+        </table>
+      </div>
+
+      <div class="pageBreak"></div>
+      ${buildElementsByScenePrintPage(d, { title: "Elementos por escena" })}
     `;
+    box.appendChild(printWrap);
 
-    box.appendChild(table);
     wrap.appendChild(box);
   }
 
@@ -5397,6 +5530,7 @@ const col = safeHexColor(it.color || (it.kind==="scene" ? "#BFDBFE" : "#E5E7EB")
     root.innerHTML = `<div id="callSheetPrintRoot"></div>`;
     const target = root.querySelector("#callSheetPrintRoot");
     renderCallSheetDetail(target, dayId);
+    target.insertAdjacentHTML("beforeend", `<div class="pageBreak"></div>${buildElementsByScenePrintPage(d, { title: "Elementos por escena" })}`);
 
     document.body.classList.add("gbPrintingCallsheet");
     // Menos margen para que arranque más arriba
