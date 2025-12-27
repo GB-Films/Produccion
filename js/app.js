@@ -3946,10 +3946,12 @@ items.push({
   <div class="dayplanHeader">
     <div class="dpTitle">
       <div class="dpProj">${proj}</div>
-      <button class="dpDayBtn" id="dpDayTitleBtn" type="button" title="Editar detalle del día">${dayTxt}</button>
-      <div class="dpBadges" id="dpDayBadges">
-        <span class="metaPill"><b>Call</b> ${esc(d.callTime || "—")}</span>
+      <div class="dpRowLine">
+        <button class="dpDayBtn" id="dpDayTitleBtn" type="button" title="Editar detalle del día">${dayTxt}</button>
+        <div class="dpBadges" id="dpDayBadges">
+          <span class="metaPill"><b>Call</b> ${esc(d.callTime || "—")}</span>
         <span class="metaPill"><b>Locación</b> ${esc(d.location || "—")}</span>
+        </div>
       </div>
     </div>
     <div class="dpMeta">
@@ -5278,126 +5280,141 @@ function renderShotList(){
   }
 
   function buildElementsByScenePrintPage(d, opts={}){
-    if(!d) return "";
-    const title = opts.title || "Elementos por escena";
-    const proj = esc(state.meta?.title || "Proyecto");
-    const dayTxt = `${formatDayTitle(d.date)}${d.label ? " · "+esc(d.label) : ""}`;
+  if(!d) return "";
+  const title = opts.title || "Elementos por escena";
+  const proj = esc(state.meta?.title || "Proyecto");
+  const dayTxt = `${formatDayTitle(d.date)}${d.label ? " · "+esc(d.label) : ""}`;
+  const callHHMM = normalizeHHMM(d.callTime) || "08:00";
 
-    const scenes = (d.sceneIds||[]).map(getScene).filter(Boolean);
+  const ALWAYS = new Set(["cast","props","wardrobe","art"]);
+  const scenePairs = (d.sceneIds||[]).map(sid=>({ sid, sc: getScene(sid) })).filter(x=>!!x.sc);
 
-    const sceneBlocks = scenes.map((sc)=>{
-      const num = sc.number || "";
-      const slug = sc.slugline || "";
-      const metaBits = [];
-      if(sc.intExt) metaBits.push(sc.intExt);
-      if(sc.location) metaBits.push(sc.location);
-      if(sc.timeOfDay) metaBits.push(sc.timeOfDay);
-      if((Number(sc.pages)||0) > 0) metaBits.push(`${fmtPages(sc.pages)} pág`);
+  const sceneBlocks = scenePairs.map(({sid, sc})=>{
+    const num = sc.number || "";
+    const slug = sc.slugline || "";
+    const metaBits = [];
+    if(sc.intExt) metaBits.push(sc.intExt);
+    if(sc.location) metaBits.push(sc.location);
+    if(sc.timeOfDay) metaBits.push(sc.timeOfDay);
+    if((Number(sc.pages)||0) > 0) metaBits.push(`${fmtPages(sc.pages)} pág`);
 
-      const rows = cats.map((cat)=>{
-        const arr = union(sc.elements?.[cat] || []);
-        if(!arr.length) return "";
-        const label = catNames?.[cat] || cat;
-        const items = arr.map(x=>esc(String(x))).join(", ");
-        return `<tr class="eleRow ${cat==="cast" ? "eleRowCast" : ""}"><th>${esc(label)}</th><td>${items}</td></tr>`;
-      }).filter(Boolean).join("");
+    const startOff = Number(d.times?.[sid] ?? 0) || 0;
+    const startClock = callHHMM ? fmtClockFromCall(callHHMM, startOff) : "";
 
-      const noEls = !rows;
+    const rows = cats.map((cat)=>{
+      const arr = union(sc.elements?.[cat] || []);
+      if(!ALWAYS.has(cat) && !arr.length) return "";
+      const label = catNames?.[cat] || cat;
+      const items = arr.length ? arr.map(x=>esc(String(x))).join(", ") : `<span class="muted">—</span>`;
       return `
-        <div class="eleScene">
-          <div class="eleSceneHdr">
-            <div class="eleSceneNum">Escena ${esc(num)}</div>
-            <div class="eleSceneSlug">${esc(slug)}</div>
-          </div>
-          ${metaBits.length ? `<div class="eleSceneMeta">${esc(metaBits.join(" · "))}</div>` : ``}
-          ${noEls ? `<div class="eleEmpty">Sin elementos cargados.</div>` : `
-            <table class="eleTable">
-              <tbody>${rows}</tbody>
-            </table>
-          `}
-        </div>
+        <tr class="eleRow ${cat==="cast" ? "eleRowCast" : ""}">
+          <th>
+            <span class="eleCatLabel">
+              <span class="dot" style="background:${catColors[cat]}"></span>${esc(label)}
+            </span>
+          </th>
+          <td>${items}</td>
+        </tr>
       `;
-    }).join("");
+    }).filter(Boolean).join("");
 
     return `
-      <div class="elementsPrintPage printOnly">
-        <div class="eleHeader">
-          <div class="eleTitle">${esc(title)}</div>
-          <div class="eleSub">${proj} · ${dayTxt}</div>
-          <div class="eleSub2"><b>Call:</b> ${esc(d.callTime||"")} &nbsp; <b>Locación:</b> ${esc(d.location||"")}</div>
+      <div class="eleScene">
+        <div class="eleSceneHdr">
+          <div class="eleSceneNum">Escena ${esc(num)}${startClock ? ` · ${esc(startClock)}` : ""}</div>
+          <div class="eleSceneSlug">${esc(slug)}</div>
         </div>
-        <div class="eleList">
-          ${sceneBlocks || `<div class="muted">No hay escenas asignadas.</div>`}
-        </div>
+        ${metaBits.length ? `<div class="eleSceneMeta">${esc(metaBits.join(" · "))}</div>` : ``}
+        <table class="eleTable">
+          <tbody>${rows}</tbody>
+        </table>
       </div>
     `;
-  }
+  }).join("");
 
-  // Screen version (misma estética que impresión, pero visible en la app)
-  function buildElementsBySceneScreenPage(d, opts={}){
-    if(!d) return "";
-    const project = state?.meta?.title || "Proyecto";
-    const dayLabel = `${formatDayTitle(d.date)}${d.label ? " · "+d.label : ""}`.trim();
-    const title = opts.title || "Elementos por escena";
+  return `
+    <div class="elementsPrintPage printOnly">
+      <div class="eleHeader">
+        <div class="eleTitle">${esc(title)}</div>
+        <div class="eleSub">${proj} · ${dayTxt}</div>
+        <div class="eleSub2"><b>Call:</b> ${esc(d.callTime||"")} &nbsp; <b>Locación:</b> ${esc(d.location||"")}</div>
+      </div>
+      <div class="eleList">
+        ${sceneBlocks || `<div class="muted">No hay escenas asignadas.</div>`}
+      </div>
+    </div>
+  `;
+}
 
-    // Reutilizamos la misma lista de escenas / categorías que la versión print
-    const scenes = (d.sceneIds||[]).map(getScene).filter(Boolean);
+// Screen version: tarjetas (más usable) + punto de color por categoría
+function buildElementsBySceneScreenPage(d, opts={}){
+  if(!d) return "";
+  const project = state?.meta?.title || "Proyecto";
+  const dayLabel = `${formatDayTitle(d.date)}${d.label ? " · "+d.label : ""}`.trim();
+  const title = opts.title || "Elementos por escena";
+  const callHHMM = normalizeHHMM(d.callTime) || "08:00";
 
-    let listHTML = "";
-    if(!scenes.length){
-      listHTML = `<div class="muted">No hay escenas asignadas a este día.</div>`;
-    }else{
-      listHTML = scenes.map(sc=>{
-        const meta = [
-          sc.intExt ? sc.intExt : "",
-          sc.location ? sc.location : "",
-          sc.timeOfDay ? sc.timeOfDay : "",
-          (Number(sc.pages)||0) > 0 ? `${fmtPages(sc.pages)} pág` : ""
-        ].filter(Boolean).join(" · ");
+  const ALWAYS = new Set(["cast","props","wardrobe","art"]);
+  const scenePairs = (d.sceneIds||[]).map(sid=>({ sid, sc: getScene(sid) })).filter(x=>!!x.sc);
 
-        // Rows por categoría con items
-        let rows = "";
-        let hasAny = false;
-        for(const cat of cats){
-          const items = (sc.elements && sc.elements[cat]) ? sc.elements[cat] : [];
-          if(items.length) hasAny = true;
-          rows += `
-            <tr class="${cat==="Cast" ? "eleRowCast" : ""}">
-              <th><span class="catBadge"><span class="dot" style="background:${catColors[cat]}"></span>${esc(catNames[cat])}</span></th>
-              <td>${items.length ? esc(items.join(", ")) : `<span class="muted">—</span>`}</td>
-            </tr>
-          `;
-        }
+  let cardsHTML = "";
+  if(!scenePairs.length){
+    cardsHTML = `<div class="muted">No hay escenas asignadas a este día.</div>`;
+  }else{
+    cardsHTML = scenePairs.map(({sid, sc})=>{
+      const meta = [
+        sc.intExt ? sc.intExt : "",
+        sc.location ? sc.location : "",
+        sc.timeOfDay ? sc.timeOfDay : "",
+        (Number(sc.pages)||0) > 0 ? `${fmtPages(sc.pages)} pág` : ""
+      ].filter(Boolean).join(" · ");
 
-        return `
-          <div class="eleScene">
-            <div class="eleSceneHdr">
+      const startOff = Number(d.times?.[sid] ?? 0) || 0;
+      const startClock = callHHMM ? fmtClockFromCall(callHHMM, startOff) : "";
+
+      const catBlocks = [];
+      for(const cat of cats){
+        const arr = union(sc.elements?.[cat] || []);
+        if(!ALWAYS.has(cat) && !arr.length) continue;
+        const label = catNames?.[cat] || cat;
+        const items = arr.length ? arr.map(x=>esc(String(x))).join(", ") : `<span class="muted">—</span>`;
+        catBlocks.push(`
+          <div class="eleCatCard">
+            <div class="eleCatHdr">
+              <span class="dot" style="background:${catColors[cat]}"></span>${esc(label)}
+            </div>
+            <div class="eleCatItems">${items}</div>
+          </div>
+        `);
+      }
+
+      return `
+        <div class="eleSceneCard">
+          <div class="eleSceneTop">
+            <div class="eleSceneLeft">
               <div class="eleSceneNum">#${esc(sc.number||"")}</div>
               <div class="eleSceneSlug">${esc(sc.slugline||"")}</div>
             </div>
-            <div class="eleSceneMeta">${esc(meta||"")}</div>
-            ${hasAny ? `
-              <table class="eleTable">
-                <thead><tr><th>Categoría</th><th>Elementos</th></tr></thead>
-                <tbody>${rows}</tbody>
-              </table>
-            ` : `<div class="eleEmpty">Sin elementos cargados en esta escena.</div>`}
+            <div class="eleSceneStart">${startClock ? `<span class="metaPill"><b>Inicio</b> ${esc(startClock)}</span>` : ""}</div>
           </div>
-        `;
-      }).join("");
-    }
-
-    return `
-      <div class="elementsPrintPage elementsScreenPage">
-        <div class="eleHeader">
-          <div class="eleTitle">${esc(title)}</div>
-          <div class="eleSub"><b>${esc(project)}</b> · ${esc(dayLabel||"Día")}</div>
-          <div class="eleSub2"><b>Call:</b> ${esc(d.callTime||"—")} &nbsp; <b>Locación:</b> ${esc(d.location||"—")}</div>
+          ${meta ? `<div class="eleSceneMeta">${esc(meta)}</div>` : ``}
+          <div class="eleCatsGrid">${catBlocks.join("")}</div>
         </div>
-        <div class="eleList">${listHTML}</div>
-      </div>
-    `;
+      `;
+    }).join("");
   }
+
+  return `
+    <div class="elementsScreenPage screenOnly">
+      <div class="eleHeader">
+        <div class="eleTitle">${esc(title)}</div>
+        <div class="eleSub"><b>${esc(project)}</b> · ${esc(dayLabel||"Día")}</div>
+        <div class="eleSub2"><b>Call:</b> ${esc(d.callTime||"—")} &nbsp; <b>Locación:</b> ${esc(d.location||"—")}</div>
+      </div>
+      <div class="eleCards">${cardsHTML}</div>
+    </div>
+  `;
+}
 
   function renderReportElementsDetail(d){
     const wrap = el("reportElementsDetail");

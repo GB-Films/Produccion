@@ -710,7 +710,7 @@ tr.groupRow td{
   line-height:1.05;
 }
 .dpDayBtn:hover{ text-decoration:underline; }
-.dpBadges{ display:flex; gap:8px; flex-wrap:wrap; margin-top:8px; }
+.dpBadges{ display:flex; gap:8px; flex-wrap:wrap; margin-top:0; }
 
 .crewAreaHeader{
   margin-top:8px;
@@ -1107,7 +1107,15 @@ tr.groupRow td{
   body.gbPrintingCallsheet #gbPrintRoot *{ visibility:visible !important; }
   body.gbPrintingCallsheet #gbPrintRoot{ display:block !important; position:absolute; left:0; top:0; width:100%; padding:0 !important; margin:0 !important; }
 
-  body.gbPrintingCallsheet{ background:#fff !important; color:#000 !important; }
+
+/* Elementos por escena print (unificado) */
+body.gbPrintingElements *{ visibility:hidden !important; }
+body.gbPrintingElements #gbPrintRoot,
+body.gbPrintingElements #gbPrintRoot *{ visibility:visible !important; }
+body.gbPrintingElements #gbPrintRoot{ display:block !important; position:absolute; left:0; top:0; width:100%; padding:0 !important; margin:0 !important; }
+
+body.gbPrintingElements{ background:#fff !important; color:#000 !important; }
+body.gbPrintingElements .muted{ color:#333 !important; }  body.gbPrintingCallsheet{ background:#fff !important; color:#000 !important; }
   body.gbPrintingCallsheet .muted{ color:#333 !important; }
 
   body.gbPrintingCallsheet .catBlock{ background:#fff !important; border:1px solid #ddd !important; }
@@ -1406,7 +1414,9 @@ tr.groupRow td{
   align-items:flex-end;
   flex-wrap:wrap;
 }
-.dpTitle{display:flex; flex-direction:column; gap:2px;}
+.dpTitle{display:flex; flex-direction:column; gap:6px;}
+.dpRowLine{display:flex; align-items:baseline; gap:10px; flex-wrap:wrap;}
+.dayplanHeader .metaPill{font-size:13px; padding:7px 12px;}
 .dpProj{
   font-weight:800;
   letter-spacing:.02em;
@@ -1961,6 +1971,79 @@ tr.groupRow td{
 .dpRowMeta{ margin-top:4px; color:var(--muted); font-size:12px; }
 .dpRowSum{ margin-top:6px; font-size:13px; color:rgba(255,255,255,.86); line-height:1.25; }
 
+
+
+
+/* ===== Elementos por escena (pantalla) ===== */
+.elementsScreenPage{
+  border:1px solid var(--border);
+  border-radius:18px;
+  padding:12px;
+  background: rgba(255,255,255,.02);
+}
+.elementsScreenPage .eleHeader{
+  border-bottom:1px solid rgba(255,255,255,.10);
+  padding-bottom:10px;
+  margin-bottom:12px;
+}
+.elementsScreenPage .eleTitle{ font-size:1.15rem; font-weight:900; }
+.elementsScreenPage .eleSub{ margin-top:2px; color:var(--muted); font-size:13px; }
+.elementsScreenPage .eleSub2{ margin-top:8px; color:rgba(255,255,255,.86); font-size:13px; }
+.elementsScreenPage .eleCards{ display:flex; flex-direction:column; gap:12px; }
+
+.eleSceneCard{
+  border:1px solid var(--border);
+  border-radius:18px;
+  padding:12px 12px;
+  background: rgba(255,255,255,.02);
+}
+.eleSceneTop{
+  display:flex;
+  align-items:flex-start;
+  justify-content:space-between;
+  gap:10px;
+}
+.eleSceneLeft{ min-width:0; }
+.eleSceneLeft .eleSceneNum{ font-weight:900; }
+.eleSceneLeft .eleSceneSlug{ font-weight:800; opacity:.92; margin-top:2px; line-height:1.15; }
+.eleSceneStart{ white-space:nowrap; }
+.eleSceneCard .metaPill{ background: rgba(var(--panel-rgb), .45); border:1px solid rgba(255,255,255,.10); }
+
+.eleSceneMeta{ margin-top:6px; color:var(--muted); font-size:12px; }
+
+.eleCatsGrid{
+  margin-top:10px;
+  display:grid;
+  grid-template-columns: repeat(2, minmax(0,1fr));
+  gap:10px;
+}
+@media (max-width: 720px){
+  .eleCatsGrid{ grid-template-columns: 1fr; }
+}
+
+.eleCatCard{
+  border:1px solid rgba(255,255,255,.10);
+  border-radius:14px;
+  padding:8px 10px;
+  background: rgba(0,0,0,.10);
+}
+.eleCatHdr{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  font-weight:900;
+  font-size:12px;
+}
+.eleCatItems{
+  margin-top:6px;
+  font-size:12px;
+  color:rgba(255,255,255,.88);
+  line-height:1.25;
+  word-break:break-word;
+}
+.eleCatItems .muted{ color:var(--muted); }
+
+.eleCatLabel{ display:inline-flex; align-items:center; gap:8px; }
 
 /* ===== Impresión: hoja extra de elementos por escena ===== */
 .pageBreak{ display:none; }
