@@ -1001,27 +1001,7 @@ function ensureDayShotsDone(d){
       `;
     }
 
-    // Dock
-    let dock = el("mDock");
-    if(!dock){
-      dock = document.createElement("div");
-      dock.id = "mDock";
-      dock.className = "mDock";
-      document.body.appendChild(dock);
-    }
-    if(dock.dataset.v4 !== "1"){
-      dock.dataset.v4 = "1";
-      dock.innerHTML = `
-        <button class="mDockBtn" data-view="dayplan">Plan</button>
-        <button class="mDockBtn" data-view="shotlist">Shot</button>
-        <button class="mDockBtn" data-view="callsheet">Report</button>
-        <button class="mDockBtn" data-view="reports">Filtros</button>
-        <button class="mDockBtn" id="mMoreBtn" data-view="more">Más</button>
-      `;
-    }
-
     const menuBtn = el("mMenuBtn");
-    const moreBtn = el("mMoreBtn");
     function openDrawer(){
       sidebar.classList.add("mOpen");
       back.classList.remove("hidden");
@@ -1041,10 +1021,6 @@ function ensureDayShotsDone(d){
       menuBtn.dataset.bound = "1";
       menuBtn.addEventListener("click", ()=>{ if(isMobileUI()) toggleDrawer(); });
     }
-    if(moreBtn && moreBtn.dataset.bound !== "1"){
-      moreBtn.dataset.bound = "1";
-      moreBtn.addEventListener("click", ()=>{ if(isMobileUI()) toggleDrawer(); });
-    }
     if(back && back.dataset.bound !== "1"){
       back.dataset.bound = "1";
       back.addEventListener("click", closeDrawer);
@@ -1055,18 +1031,6 @@ function ensureDayShotsDone(d){
       if(btn.dataset.mCloseBound === "1") return;
       btn.dataset.mCloseBound = "1";
       btn.addEventListener("click", ()=>{ if(isMobileUI()) closeDrawer(); }, true);
-    });
-
-    // Dock navegación
-    dock.querySelectorAll(".mDockBtn").forEach(btn=>{
-      if(btn.dataset.bound === "1") return;
-      btn.dataset.bound = "1";
-      btn.addEventListener("click", ()=>{
-        const v = btn.dataset.view;
-        if(v === "more") return toggleDrawer();
-        if(v) showView(v);
-        if(isMobileUI()) closeDrawer();
-      });
     });
 
     // Sync de proyectos (duplicamos el select, sin tocar la lógica)
@@ -1121,6 +1085,7 @@ function ensureDayShotsDone(d){
         applyMobileDayFocus();
         if(!isMobileUI()){
           bar.classList.add("hidden");
+          try{ document.documentElement.style.setProperty("--mChromeTop","0px"); }catch(_e2){}
           return;
         }
         bar.classList.remove("hidden");
@@ -1150,6 +1115,13 @@ function ensureDayShotsDone(d){
           const loc = d?.location || "—";
           dayMeta.textContent = `Call ${call} · ${loc}`;
         }
+
+        // Reservar espacio para la barra superior (evita que tape contenido)
+        try{
+          const topH = el("mTopbar")?.offsetHeight || 0;
+          const dayH = bar?.classList.contains("hidden") ? 0 : (bar?.offsetHeight || 0);
+          document.documentElement.style.setProperty("--mChromeTop", `${topH + dayH}px`);
+        }catch(_e2){}
       }catch(_e){}
     }
 
@@ -5272,13 +5244,13 @@ function renderShotList(){
     const tab = (reportsTab || "callsheet");
     const tabs = document.querySelectorAll("#reportTabs .reportTabBtn");
     tabs.forEach(btn=> btn.classList.toggle("active", btn.dataset.tab===tab));
-    ["dayplan","callsheet","shotlist"].forEach(t=>{
+    ["dayplan","callsheet","shotlist","elements"].forEach(t=>{
       el(`reportPane-${t}`)?.classList.toggle("hidden", t!==tab);
     });
   }
 
   function setReportsTab(tab){
-    const t = (["dayplan","callsheet","shotlist"].includes(tab)) ? tab : "callsheet";
+    const t = (["dayplan","callsheet","shotlist","elements"].includes(tab)) ? tab : "callsheet";
     reportsTab = t;
     localStorage.setItem("gb_reports_tab", t);
     applyReportsTabUI();
@@ -5295,6 +5267,10 @@ function renderShotList(){
     }
     if(reportsTab==="shotlist"){
       renderReportShotlistDetail(d);
+      return;
+    }
+    if(reportsTab==="elements"){
+      renderReportElementsDetail(d);
       return;
     }
     // Call Sheet
@@ -5356,6 +5332,85 @@ function renderShotList(){
       </div>
     `;
   }
+
+  // Screen version (misma estética que impresión, pero visible en la app)
+  function buildElementsBySceneScreenPage(d, opts={}){
+    if(!d) return "";
+    const project = state?.meta?.title || "Proyecto";
+    const dayLabel = `${formatDayTitle(d.date)}${d.label ? " · "+d.label : ""}`.trim();
+    const title = opts.title || "Elementos por escena";
+
+    // Reutilizamos la misma lista de escenas / categorías que la versión print
+    const scenes = (d.sceneIds||[]).map(getScene).filter(Boolean);
+
+    let listHTML = "";
+    if(!scenes.length){
+      listHTML = `<div class="muted">No hay escenas asignadas a este día.</div>`;
+    }else{
+      listHTML = scenes.map(sc=>{
+        const meta = [
+          sc.intExt ? sc.intExt : "",
+          sc.location ? sc.location : "",
+          sc.timeOfDay ? sc.timeOfDay : "",
+          (Number(sc.pages)||0) > 0 ? `${fmtPages(sc.pages)} pág` : ""
+        ].filter(Boolean).join(" · ");
+
+        // Rows por categoría con items
+        let rows = "";
+        let hasAny = false;
+        for(const cat of cats){
+          const items = (sc.elements && sc.elements[cat]) ? sc.elements[cat] : [];
+          if(items.length) hasAny = true;
+          rows += `
+            <tr class="${cat==="Cast" ? "eleRowCast" : ""}">
+              <th><span class="catBadge"><span class="dot" style="background:${catColors[cat]}"></span>${esc(catNames[cat])}</span></th>
+              <td>${items.length ? esc(items.join(", ")) : `<span class="muted">—</span>`}</td>
+            </tr>
+          `;
+        }
+
+        return `
+          <div class="eleScene">
+            <div class="eleSceneHdr">
+              <div class="eleSceneNum">#${esc(sc.number||"")}</div>
+              <div class="eleSceneSlug">${esc(sc.slugline||"")}</div>
+            </div>
+            <div class="eleSceneMeta">${esc(meta||"")}</div>
+            ${hasAny ? `
+              <table class="eleTable">
+                <thead><tr><th>Categoría</th><th>Elementos</th></tr></thead>
+                <tbody>${rows}</tbody>
+              </table>
+            ` : `<div class="eleEmpty">Sin elementos cargados en esta escena.</div>`}
+          </div>
+        `;
+      }).join("");
+    }
+
+    return `
+      <div class="elementsPrintPage elementsScreenPage">
+        <div class="eleHeader">
+          <div class="eleTitle">${esc(title)}</div>
+          <div class="eleSub"><b>${esc(project)}</b> · ${esc(dayLabel||"Día")}</div>
+          <div class="eleSub2"><b>Call:</b> ${esc(d.callTime||"—")} &nbsp; <b>Locación:</b> ${esc(d.location||"—")}</div>
+        </div>
+        <div class="eleList">${listHTML}</div>
+      </div>
+    `;
+  }
+
+  function renderReportElementsDetail(d){
+    const wrap = el("reportElementsDetail");
+    if(!wrap) return;
+    wrap.innerHTML = "";
+    if(!d){
+      wrap.innerHTML = `<div class="catBlock"><div class="items">Elegí un día con rodaje.</div></div>`;
+      return;
+    }
+    wrap.innerHTML = buildElementsBySceneScreenPage(d, { title: "Elementos por escena" });
+  }
+
+
 
 function renderReportDayplanDetail(d){
     const wrap = el("reportDayplanDetail");
@@ -5504,9 +5559,6 @@ function renderReportDayplanDetail(d){
           <tbody>${rows || `<tr><td colspan="9" class="muted">—</td></tr>`}</tbody>
         </table>
       </div>
-
-      <div class="pageBreak"></div>
-      ${buildElementsByScenePrintPage(d, { title: "Elementos por escena" })}
     `;
     box.appendChild(printWrap);
 
@@ -5611,7 +5663,7 @@ function renderReportDayplanDetail(d){
     return _gbPrintRoot;
   }
   function cleanupGbPrintRoot(){
-    try{ document.body.classList.remove("gbPrintingShotlist","gbPrintingCallsheet"); }catch(_e){}
+    try{ document.body.classList.remove("gbPrintingShotlist","gbPrintingCallsheet","gbPrintingElements"); }catch(_e){}
     try{ if(_gbPrintRoot) _gbPrintRoot.innerHTML = ""; }catch(_e){}
   }
 
@@ -5729,13 +5781,26 @@ function renderReportDayplanDetail(d){
     root.innerHTML = `<div id="callSheetPrintRoot"></div>`;
     const target = root.querySelector("#callSheetPrintRoot");
     renderCallSheetDetail(target, dayId);
-    target.insertAdjacentHTML("beforeend", `<div class="pageBreak"></div>${buildElementsByScenePrintPage(d, { title: "Elementos por escena" })}`);
-
     document.body.classList.add("gbPrintingCallsheet");
     // Menos margen para que arranque más arriba
     setPrintOrientation("portrait", 6);
     try{ window.print(); } finally { clearPrintOrientation(); cleanupGbPrintRoot(); }
   }
+
+  function printElementsByDayId(dayId){
+    const d = dayId ? getDay(dayId) : null;
+    if(!d){ toast("Elegí un día con rodaje"); return; }
+    ensureDayTimingMaps(d);
+
+    const root = ensureGbPrintRoot();
+    root.innerHTML = buildElementsByScenePrintPage(d, { title: "Elementos por escena" });
+
+    document.body.classList.add("gbPrintingElements");
+    setPrintOrientation("portrait", 6);
+    try{ window.print(); } finally { clearPrintOrientation(); cleanupGbPrintRoot(); }
+  }
+
+
 
 function printShotlistByDayId(dayId){
     const d = dayId ? getDay(dayId) : null;
@@ -6397,6 +6462,10 @@ el("scriptVerSelect")?.addEventListener("change", ()=>{
       }
       if(reportsTab === "callsheet"){
         printCallSheetByDayId(getReportsSelectedDayId());
+        return;
+      }
+      if(reportsTab === "elements"){
+        printElementsByDayId(getReportsSelectedDayId());
         return;
       }
       setPrintOrientation("landscape");

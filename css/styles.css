@@ -1851,6 +1851,11 @@ tr.groupRow td{
   .sidebar, .noPrint, #toast, #hoverTip { display:none !important; }
   .mTopbar, .mDayBar, .mDock, .mBackdrop { display:none !important; }
   .shell{ grid-template-columns: 1fr; }
+  /* Sin dock inferior: usamos sólo la barra superior */
+  .mDock{ display:none !important; }
+
+  /* En Reportes (mobile) ocultamos el calendario: ya se elige el día arriba */
+  body.mobileDayFocus #callCalCard{ display:none !important; }
   .main{ padding:0; }
   .view{ height:auto; overflow:visible; }
   .card{ box-shadow:none; border:1px solid #ddd; background:#fff; }
@@ -2290,7 +2295,7 @@ tr.groupRow td{
 
   /* Layout: sidebar como drawer */
   .shell{ grid-template-columns: 1fr; }
-  .main{ padding: 140px 10px 74px; }
+  .main{ padding: calc(var(--mChromeTop, 140px) + 10px) 10px 16px; }
 
   body.mNoScroll{ overflow:hidden; }
 
@@ -2602,7 +2607,7 @@ tr.groupRow td{
   body.mobileDayFocus .dpResize{ display:none !important; }
   body.mobileDayFocus .dpBlock{ pointer-events:none; cursor:default; }
 
-  body.mobileDayFocus #callSheetCalendarCard,
+  body.mobileDayFocus #callCalCard,
   body.mobileDayFocus #reportsTabs{ display:none !important; }
 
   body.mobileDayFocus #btnPrintCallSheet,
