@@ -3,6 +3,7 @@ window.StorageLayer = (function(){
   const KEY_ACTIVE_PROJECT = "gb_active_project_v1";
   const KEY_STATE_PREFIX   = "gb_prod_state_v1__";
   const KEY_CFG            = "gb_prod_cfg_v1";
+  const KEY_REMOTE_STAMP_PREFIX = "gb_remote_stamp_v1__";
 
   // JSONBin (fixed for this repo)
   const ACCESS_KEY = "$2a$10$nzjX1kWtm5vCMZj8qtlSoeP/kUp77ZWnpFE6kWIcnBqe1fDL1lkDi";
@@ -106,6 +107,17 @@ window.StorageLayer = (function(){
     return await res.json();
   }
 
+
+  function keyRemoteStamp(binId){
+    return KEY_REMOTE_STAMP_PREFIX + String(binId||"");
+  }
+  function getRemoteStamp(binId){
+    try{ return localStorage.getItem(keyRemoteStamp(binId)) || ""; }catch{ return ""; }
+  }
+  function setRemoteStamp(binId, stamp){
+    try{ localStorage.setItem(keyRemoteStamp(binId), String(stamp||"")); }catch{}
+  }
+
   function hardResetLocal(){
     try{ localStorage.removeItem(keyState()); }catch(e){}
   }
@@ -114,6 +126,7 @@ window.StorageLayer = (function(){
     loadLocal, saveLocal,
     loadCfg, saveCfg,
     jsonbinGet, jsonbinPut,
+    getRemoteStamp, setRemoteStamp,
     hardResetLocal,
     getProjects, getActiveProjectId, setActiveProjectId, getActiveProject
   };

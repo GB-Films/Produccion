@@ -94,6 +94,8 @@
   let syncReady = false;
   let bootHadLocal = false;
   let bootAppliedRemote = false;
+  let sessionPulledRemote = false;
+  let lastRemoteStamp = "";
 
   // Crew table: which rows are expanded to show assigned shoot days
   let expandedCrewIds = new Set();
@@ -135,6 +137,15 @@
     clearTimeout(toast._t);
     toast._t = setTimeout(()=>t.style.display="none", 2200);
   }
+
+  function saveConflictBackup(binId, snapshot){
+    try{
+      const key = `gb_conflict_backup_v1__${String(binId||"")}`;
+      const payload = { at: new Date().toISOString(), state: snapshot };
+      localStorage.setItem(key, JSON.stringify(payload));
+    }catch{}
+  }
+
 
 
   // ======= Reportes: filtros por categoría (local) =======
@@ -212,9 +223,60 @@
   }
 
   const autosyncDebounced = window.U.debounce(async ()=>{
-    const cfg = StorageLayer.loadCfg();    if(!cfg.binId || !cfg.accessKey) return;
+    const cfg = StorageLayer.loadCfg();
+    if(!cfg.binId || !cfg.accessKey) return;
+
+    // Regla de oro: nunca empujar si no pudimos traer el remoto al menos una vez en esta sesión.
+    // Esto evita el caso "abrí después de días y pisé todo".
+    if(!sessionPulledRemote){
+      await initRemoteSync();
+      if(!sessionPulledRemote) return; // seguimos sin remoto (offline/bloqueado)
+    }
+
     try{
+      const remote = await StorageLayer.jsonbinGet(cfg.binId, cfg.accessKey);
+      const remoteOK = isValidState(remote);
+
+      if(remoteOK){
+        const remoteStamp = String(remote?.meta?.updatedAt || "");
+        const storedStamp = StorageLayer.getRemoteStamp(cfg.binId) || lastRemoteStamp || "";
+
+        // Si el remoto cambió desde la última vez que lo vimos, NO empujamos: primero absorbemos remoto.
+        if(storedStamp && remoteStamp && remoteStamp !== storedStamp){
+          saveConflictBackup(cfg.binId, state); // copia local por si hay conflicto
+          state = remote;
+          StorageLayer.saveLocal(state);
+          lastRemoteStamp = remoteStamp;
+          StorageLayer.setRemoteStamp(cfg.binId, lastRemoteStamp);
+          hydrateAll();
+          toast("Actualicé remoto ✅");
+          updateSyncPill("JSONBin");
+          return;
+        }
+
+        // Si el remoto es más nuevo que lo local (por updatedAt), absorbemos remoto y listo.
+        if(tsUpdatedAt(remote) > tsUpdatedAt(state)){
+          saveConflictBackup(cfg.binId, state);
+          state = remote;
+          StorageLayer.saveLocal(state);
+          lastRemoteStamp = remoteStamp || String(state?.meta?.updatedAt || "");
+          StorageLayer.setRemoteStamp(cfg.binId, lastRemoteStamp);
+          hydrateAll();
+          toast("Actualicé remoto ✅");
+          updateSyncPill("JSONBin");
+          return;
+        }
+      }else{
+        // Remoto inválido: solo empujar si parece "sin inicializar".
+        if(!isUninitializedRemote(remote)){
+          updateSyncPill("Local");
+          return;
+        }
+      }
+
       await StorageLayer.jsonbinPut(cfg.binId, cfg.accessKey, state);
+      lastRemoteStamp = String(state?.meta?.updatedAt || "");
+      StorageLayer.setRemoteStamp(cfg.binId, lastRemoteStamp);
       updateSyncPill("JSONBin");
     }catch{
       updateSyncPill("Local");
@@ -285,6 +347,9 @@
 
     try{
       const remote = await StorageLayer.jsonbinGet(cfg.binId, cfg.accessKey);
+      sessionPulledRemote = true;
+      lastRemoteStamp = String(remote?.meta?.updatedAt || "");
+      StorageLayer.setRemoteStamp(cfg.binId, lastRemoteStamp);
       const remoteOK = isValidState(remote);
 
       if(remoteOK){
@@ -306,6 +371,8 @@
           state = remote;
           bootAppliedRemote = true;
           StorageLayer.saveLocal(state);
+          lastRemoteStamp = String(state?.meta?.updatedAt || lastRemoteStamp || "");
+          StorageLayer.setRemoteStamp(cfg.binId, lastRemoteStamp);
           selectedSceneId = null;
           selectedDayId = null;
           callSheetDayId = null;
@@ -322,6 +389,9 @@
             await StorageLayer.jsonbinPut(cfg.binId, cfg.accessKey, state);
             updateSyncPill("JSONBin");
             toast("Inicialicé remoto ✅");
+            sessionPulledRemote = true;
+            lastRemoteStamp = String(state?.meta?.updatedAt || "");
+            StorageLayer.setRemoteStamp(cfg.binId, lastRemoteStamp);
           }catch{
             updateSyncPill("Local");
           }
@@ -6644,8 +6714,8 @@ if(!state.scenes.length){
     // Auto-pull remoto when possible (prevents first-time users overwriting remote data)
     initRemoteSync();
     window.addEventListener("online", ()=>{
-      // If we started without remote (offline), retry pulling when connection returns
-      if(!bootAppliedRemote) initRemoteSync();
+      // Cuando vuelve la conexión, refrescamos desde remoto.
+      initRemoteSync();
     });
   }
 
