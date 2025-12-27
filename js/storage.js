@@ -53,7 +53,8 @@ window.StorageLayer = (function(){
   }
 
   function saveLocal(state){
-    localStorage.setItem(keyState(), JSON.stringify(state));
+    try{ localStorage.setItem(keyState(), JSON.stringify(state)); }
+    catch(e){ /* ignore (quota/private mode) */ }
   }
 
   function loadCfg(){
@@ -106,7 +107,7 @@ window.StorageLayer = (function(){
   }
 
   function hardResetLocal(){
-    localStorage.removeItem(keyState());
+    try{ localStorage.removeItem(keyState()); }catch(e){}
   }
 
   return {

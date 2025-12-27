@@ -2916,6 +2916,9 @@ function renderDayScenesDetail(){
     board.innerHTML = "";
     sortShootDaysInPlace();
 
+    const sceneById = new Map((state.scenes||[]).map(s=>[s.id,s]));
+    const crewById  = new Map((state.crew||[]).map(c=>[c.id,c]));
+
     renderReportsFilters();
     const f = getReportsFilterSet();
     const q = (el("reportsSearch")?.value || "").toLowerCase().trim();
@@ -2937,12 +2940,12 @@ function renderDayScenesDetail(){
       body.className = "reportBody";
       let shownBlocks = 0;
 
-      const scenes = (d.sceneIds||[]).map(getScene).filter(Boolean);
+      const scenes = (d.sceneIds||[]).map(id=>sceneById.get(id)).filter(Boolean);
       const cast = union(scenes.flatMap(s=>s.elements?.cast||[]));
       const pages = scenes.reduce((acc, s)=> acc + (Number(s.pages)||0), 0);
 
       const crewAll = (d.crewIds||[])
-        .map(id=>state.crew.find(c=>c.id===id))
+        .map(id=>crewById.get(id))
         .filter(Boolean)
         .map(c=>({ ...c, area: normalizeCrewArea(c.area) }))
         .filter(c=>c.area!=="Cast");
