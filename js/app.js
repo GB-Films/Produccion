@@ -941,6 +941,11 @@ function ensureDayShotsDone(d){
     }
   }
 
+  // Mobile focus: modo "1 día" (seguimiento, no edición)
+  function applyMobileDayFocus(){
+    try{ document.body.classList.toggle("mobileDayFocus", isMobileUI()); }catch(_e){}
+  }
+
 
   // ======= Mobile chrome (topbar + dock + drawer) =======
   function ensureMobileChrome(){
@@ -972,20 +977,47 @@ function ensureDayShotsDone(d){
       document.body.appendChild(top);
     }
 
+    // Day bar (selector + accesos rápidos)
+    let daybar = el("mDayBar");
+    if(!daybar){
+      daybar = document.createElement("div");
+      daybar.id = "mDayBar";
+      daybar.className = "mDayBar";
+      document.body.appendChild(daybar);
+    }
+    if(daybar.dataset.v4 !== "1"){
+      daybar.dataset.v4 = "1";
+      daybar.innerHTML = `
+        <div class="mDayRow">
+          <select id="mDaySelect" class="mDaySelect" title="Día"></select>
+          <div id="mDayMeta" class="mDayMeta">—</div>
+        </div>
+        <div class="mDayBtns">
+          <button class="mDayBtn" data-view="dayplan">Plan</button>
+          <button class="mDayBtn" data-view="shotlist">Shot</button>
+          <button class="mDayBtn" data-view="callsheet" data-tab="callsheet">Reportes</button>
+          <button class="mDayBtn" data-view="reports">Filtros</button>
+        </div>
+      `;
+    }
+
     // Dock
     let dock = el("mDock");
     if(!dock){
       dock = document.createElement("div");
       dock.id = "mDock";
       dock.className = "mDock";
+      document.body.appendChild(dock);
+    }
+    if(dock.dataset.v4 !== "1"){
+      dock.dataset.v4 = "1";
       dock.innerHTML = `
-        <button class="mDockBtn" data-view="shooting">Rod</button>
-        <button class="mDockBtn" data-view="schedule">Cron</button>
+        <button class="mDockBtn" data-view="dayplan">Plan</button>
         <button class="mDockBtn" data-view="shotlist">Shot</button>
-        <button class="mDockBtn" data-view="callsheet">Call</button>
+        <button class="mDockBtn" data-view="callsheet">Report</button>
+        <button class="mDockBtn" data-view="reports">Filtros</button>
         <button class="mDockBtn" id="mMoreBtn" data-view="more">Más</button>
       `;
-      document.body.appendChild(dock);
     }
 
     const menuBtn = el("mMenuBtn");
@@ -1079,6 +1111,95 @@ function ensureDayShotsDone(d){
     }
     syncBadges();
 
+    // ===== Day focus bar (Día + accesos) =====
+    const daySel = el("mDaySelect");
+    const dayMeta = el("mDayMeta");
+    function syncDayBar(){
+      try{
+        const bar = el("mDayBar");
+        if(!bar) return;
+        applyMobileDayFocus();
+        if(!isMobileUI()){
+          bar.classList.add("hidden");
+          return;
+        }
+        bar.classList.remove("hidden");
+
+        sortShootDaysInPlace();
+        const days = (state && Array.isArray(state.shootDays)) ? state.shootDays : [];
+
+        if(!daySel) return;
+        daySel.innerHTML = days.map(d=>{
+          const label = `${formatDayTitle(d.date)}${d.label ? " · "+d.label : ""}`.trim();
+          return `<option value="${esc(d.id)}">${esc(label||"Día")}</option>`;
+        }).join("");
+
+        const fallback = days[0]?.id || "";
+        let cur = (selectedDayId && days.some(d=>d.id===selectedDayId)) ? selectedDayId : fallback;
+        if(cur && cur !== selectedDayId){
+          selectedDayId = cur;
+          selectedDayplanDayId = cur;
+          selectedShotlistDayId = cur;
+          callSheetDayId = cur;
+        }
+        daySel.value = cur || "";
+
+        const d = cur ? getDay(cur) : null;
+        if(dayMeta){
+          const call = d?.callTime || "—";
+          const loc = d?.location || "—";
+          dayMeta.textContent = `Call ${call} · ${loc}`;
+        }
+      }catch(_e){}
+    }
+
+    function syncDayBarActive(viewName){
+      const bar = el("mDayBar");
+      if(!bar) return;
+      bar.querySelectorAll(".mDayBtn").forEach(b=>{
+        b.classList.toggle("active", b.dataset.view === viewName);
+      });
+    }
+
+    if(daySel && daySel.dataset.bound !== "1"){
+      daySel.dataset.bound = "1";
+      daySel.addEventListener("change", ()=>{
+        const id = daySel.value;
+        if(!id) return;
+        selectedDayId = id;
+        selectedDayplanDayId = id;
+        selectedShotlistDayId = id;
+        callSheetDayId = id;
+        // refrescar vistas principales (día enfocado)
+        try{ renderDayDetail(); }catch(_e){}
+        try{ renderDayPlan(); }catch(_e){}
+        try{ renderShotList(); }catch(_e){}
+        try{ renderReports(); }catch(_e){}
+        try{ renderCallSheetCalendar(); }catch(_e){}
+        try{ renderReportsDetail(); }catch(_e){}
+        syncDayBar();
+      });
+    }
+
+    // Botones rápidos
+    const bar = el("mDayBar");
+    if(bar){
+      bar.querySelectorAll(".mDayBtn").forEach(btn=>{
+        if(btn.dataset.bound === "1") return;
+        btn.dataset.bound = "1";
+        btn.addEventListener("click", ()=>{
+          const v = btn.dataset.view;
+          if(v === "callsheet"){
+            try{ setReportsTab("callsheet"); }catch(_e){}
+          }
+          if(v) showView(v);
+          syncDayBarActive(v);
+        });
+      });
+    }
+
+    syncDayBar();
+
     if(savedBase && savedBase.dataset.mObs2 !== "1"){
       savedBase.dataset.mObs2 = "1";
       const obs = new MutationObserver(syncBadges);
@@ -1097,11 +1218,12 @@ function ensureDayShotsDone(d){
         if(!isMobileUI()) closeDrawer();
         syncProjectSwitch();
         syncBadges();
+        syncDayBar();
         applyBankCollapsedUI();
       }, 120));
     }
 
-    window.MobileChrome = { openDrawer, closeDrawer, syncBadges, syncProjectSwitch };
+    window.MobileChrome = { openDrawer, closeDrawer, syncBadges, syncProjectSwitch, syncDayBar, syncDayBarActive };
   }
 
   function setupScheduleTopScrollbar(){
@@ -1184,6 +1306,10 @@ function setupScheduleWheelScroll(){
     document.querySelectorAll(".navBtn, .mDockBtn").forEach(b=>{
       b.classList.toggle("active", b.dataset.view===name);
     });
+
+    // Mobile: mantener sincronizado el selector de día + botones rápidos
+    try{ if(isMobileUI() && window.MobileChrome?.syncDayBar) window.MobileChrome.syncDayBar(); }catch(_e){}
+    try{ if(isMobileUI() && window.MobileChrome?.syncDayBarActive) window.MobileChrome.syncDayBarActive(name); }catch(_e){}
 
     if(name==="breakdown"){ initCollapsibles(); renderScriptUI(); renderShotsEditor(); }
     if(name==="shooting"){ renderSceneBank(); renderDaysBoard(); renderDayDetail(); applyBankCollapsedUI(); }
@@ -2916,6 +3042,16 @@ function renderDayScenesDetail(){
     board.innerHTML = "";
     sortShootDaysInPlace();
 
+    // Mobile: mostrar un solo día (el seleccionado arriba)
+    const mobileSingleDay = isMobileUI();
+    const focusId = (selectedDayId && state.shootDays.some(d=>d.id===selectedDayId))
+      ? selectedDayId
+      : (state.shootDays[0]?.id || null);
+    const daysToShow = mobileSingleDay && focusId
+      ? state.shootDays.filter(d=>d.id===focusId)
+      : state.shootDays;
+    try{ board.classList.toggle("singleDay", !!(mobileSingleDay && focusId)); }catch(_e){}
+
     const sceneById = new Map((state.scenes||[]).map(s=>[s.id,s]));
     const crewById  = new Map((state.crew||[]).map(c=>[c.id,c]));
 
@@ -2928,7 +3064,7 @@ function renderDayScenesDetail(){
       return;
     }
 
-    for(const d of state.shootDays){
+    for(const d of daysToShow){
       ensureDayTimingMaps(d);
       const col = document.createElement("div");
       col.className = "reportCol";
@@ -3608,6 +3744,63 @@ function updateScheduleDayDOM(dayId){
     return `rgba(${r},${g},${b},${a})`;
   }
 
+  // ===== Plan de Rodaje: línea roja "ahora" =====
+  let _dpNowTimer = null;
+
+  function localISODate(d){
+    const y = d.getFullYear();
+    const m = String(d.getMonth()+1).padStart(2,"0");
+    const dd = String(d.getDate()).padStart(2,"0");
+    return `${y}-${m}-${dd}`;
+  }
+
+  function computeDayplanNowTopPx(day){
+    try{
+      if(!day || !day.date) return null;
+      const now = new Date();
+      if(localISODate(now) !== String(day.date)) return null;
+
+      const base0 = minutesFromHHMM(day.callTime || "08:00");
+      const dpStartAbs = Math.floor(base0/60)*60;
+      const nowMin = now.getHours()*60 + now.getMinutes();
+
+      const DAY_SPAN_MIN = 24*60;
+      const spanMin = DAY_SPAN_MIN - dpStartAbs;
+      const maxPx = spanMin * DAYPLAN_PPM;
+      const top = (nowMin - dpStartAbs) * DAYPLAN_PPM;
+      if(top < 0 || top > maxPx) return null;
+      return Math.round(top);
+    }catch(_e){
+      return null;
+    }
+  }
+
+  function ensureDayplanNowTicker(){
+    if(_dpNowTimer) return;
+    _dpNowTimer = setInterval(()=>{
+      if(document.hidden) return;
+      updateDayplanNowLine();
+    }, 30_000);
+  }
+
+  function updateDayplanNowLine(){
+    const lane = el("dpLane");
+    const view = el("view-dayplan");
+    if(!lane || !view || view.classList.contains("hidden")) return;
+    const d = getDay(selectedDayplanDayId);
+    const top = computeDayplanNowTopPx(d);
+    const line = lane.querySelector(".dpNowLine");
+    if(top == null){
+      if(line) line.remove();
+      return;
+    }
+    if(line){
+      line.style.top = `${top}px`;
+    }else{
+      lane.insertAdjacentHTML("afterbegin", `<div class="dpNowLine" style="top:${top}px"><span class="dpNowDot"></span></div>`);
+    }
+  }
+
 
   function getDayplanSnap(){
     const a = Number(el("dayplanSnap")?.value || 0);
@@ -4086,6 +4279,9 @@ ${
     }).join("");
 
     lane.innerHTML = grid.join("") + blocks;
+
+    // Línea roja "ahora" (seguimiento)
+    try{ ensureDayplanNowTicker(); updateDayplanNowLine(); }catch(_e){}
 
     // Drop desde Banco de Escenas → agrega/mueve la escena en el horario donde la soltás
     if(lane.dataset.sceneDropBound !== "1"){
@@ -6354,9 +6550,10 @@ if(!state.scenes.length){
 
     bindEvents();
     ensureMobileChrome();
+    applyMobileDayFocus();
     setupScheduleWheelScroll();
     hydrateAll();
-    showView("breakdown");
+    showView(isMobileUI() ? "dayplan" : "breakdown");
 
     // Auto-pull remoto when possible (prevents first-time users overwriting remote data)
     initRemoteSync();
