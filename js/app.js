@@ -1163,6 +1163,7 @@ function ensureDayShotsDone(d){
 
   function setupSidebarCollapse(){
     const sidebar = document.querySelector(".sidebar");
+    const shell = document.querySelector(".shell");
     const toggle = el("sidebarToggle");
     if(!sidebar || !toggle) return;
 
@@ -1182,6 +1183,7 @@ function ensureDayShotsDone(d){
 
     function setCollapsed(coll){
       sidebar.classList.toggle("collapsed", !!coll);
+      try{ shell && shell.classList.toggle("sidebarCollapsed", !!coll); }catch(_e){}
       toggle.textContent = coll ? "⟩" : "⟨";
       try{ localStorage.setItem(key(), coll ? "1" : "0"); }catch{}
     }
@@ -1194,6 +1196,7 @@ function ensureDayShotsDone(d){
       if(isMobileUI()){
         // En mobile el sidebar es drawer: no colapsamos.
         sidebar.classList.remove("collapsed");
+        try{ shell && shell.classList.remove("sidebarCollapsed"); }catch(_e){}
         toggle.textContent = "⟨";
         return;
       }
@@ -2900,17 +2903,24 @@ function renderDayScenesDetail(){
           <div class="title">${esc(name)}</div>
         </div>
         <div class="right">
-          ${puOn ? `<div class="timeGroup"><span class="timeTag">PU</span><input type="time" step="300" class="input compact timeInput mini ${puHasOv ? 'timeDiffDay' : ''}" value="${esc(pu)}"/></div>` : ''}
-          <div class="timeGroup"><span class="timeTag">Call</span><input type="time" step="300" class="input compact timeInput ${diffDay ? 'timeDiffDay' : ''}" value="${esc(call)}"/></div>
-          ${rtsOn ? `<div class="timeGroup"><span class="timeTag">RTS</span><input type="time" step="300" class="input compact timeInput mini ${rtsHasOv ? 'timeDiffDay' : ''}" value="${esc(rts)}"/></div>` : ''}
-          <button class="btn icon ghost small" title="Reset persona">↺</button>
+          <div class="timeStack">
+            <div class="timeLine">
+              <div class="timeGroup">
+                <span class="timeTag">Call</span>
+                <input data-kind="call" type="time" step="300" class="input compact timeInput ${diffDay ? 'timeDiffDay' : ''}" value="${esc(call)}"/>
+              </div>
+              <button class="btn icon ghost small" title="Reset persona">↺</button>
+            </div>
+            ${puOn ? `<div class="timeLine"><div class="timeGroup"><span class="timeTag">PU</span><input data-kind="pu" type="time" step="300" class="input compact timeInput mini ${puHasOv ? 'timeDiffDay' : ''}" value="${esc(pu)}"/></div></div>` : ''}
+            ${rtsOn ? `<div class="timeLine"><div class="timeGroup"><span class="timeTag">RTS</span><input data-kind="rts" type="time" step="300" class="input compact timeInput mini ${rtsHasOv ? 'timeDiffDay' : ''}" value="${esc(rts)}"/></div></div>` : ''}
+          </div>
         </div>
       `;
 
       const inputs = row.querySelectorAll("input");
-      const callInput = inputs[puOn ? 1 : 0];
-      const puInput = puOn ? inputs[0] : null;
-      const rtsInput = rtsOn ? inputs[inputs.length - 1] : null;
+      const callInput = row.querySelector('input[data-kind="call"]');
+      const puInput = row.querySelector('input[data-kind="pu"]');
+      const rtsInput = row.querySelector('input[data-kind="rts"]');
       const resetPerson = row.querySelector("button");
 
       for(const inp of inputs){
@@ -3177,10 +3187,14 @@ function renderDayScenesDetail(){
             </div>
           </div>
           <div class="right">
-            ${puOn ? `<div class="timeGroup"><span class="timeTag">PU</span><input type="time" step="300" class="input compact timeInput mini ${puCls}" value="${esc(puEff)}" ${isSel? '' : 'disabled'} /></div>` : ''}
-            <div class="timeGroup"><span class="timeTag">Call</span><input type="time" step="300" class="input compact timeInput ${timeCls}" value="${esc(eff)}" ${isSel? '' : 'disabled'} /></div>
-            <button class="btn icon ghost small" title="Reset persona" ${isSel? '' : 'disabled'}>↺</button>
-            <span class="callBadge ${isSel ? 'ok' : 'off'}">${isSel ? 'Citado' : 'No citado'}</span>
+            <div class="timeStack">
+              <div class="timeLine">
+                <div class="timeGroup"><span class="timeTag">Call</span><input data-kind="call" type="time" step="300" class="input compact timeInput ${timeCls}" value="${esc(eff)}" ${isSel? '' : 'disabled'} /></div>
+                <button class="btn icon ghost small" title="Reset persona" ${isSel? '' : 'disabled'}>↺</button>
+                <span class="callBadge ${isSel ? 'ok' : 'off'}">${isSel ? 'Citado' : 'No citado'}</span>
+              </div>
+              ${puOn ? `<div class="timeLine"><div class="timeGroup"><span class="timeTag">PU</span><input data-kind="pu" type="time" step="300" class="input compact timeInput mini ${puCls}" value="${esc(puEff)}" ${isSel? '' : 'disabled'} /></div></div>` : ''}
+            </div>
           </div>
         `;
 
@@ -3193,8 +3207,8 @@ function renderDayScenesDetail(){
           inp.addEventListener('change', ()=>{ inp.blur(); });
         }
 
-        const callInput = inputs[puOn ? 1 : 0];
-        const puInput   = puOn ? inputs[0] : null;
+        const callInput = item.querySelector('input[data-kind="call"]');
+        const puInput   = item.querySelector('input[data-kind="pu"]');
 
         if(callInput){
           callInput.addEventListener('blur', ()=>{
@@ -5767,7 +5781,7 @@ function renderShotList(){
     castBox.className = "catBlock callCast";
     castBox.innerHTML = `
       <div class="hdr"><span class="dot" style="background:${catColors.cast}"></span>Cast</div>
-      <div class="items">${cast.length ? cast.map(n=>{ const eff = effectiveCastCall(d,n); const ov = normalizeHHMM(d?.castCallTimes?.[n]); const diffBase = !!ov && (eff !== castBase); const diffDay = !diffBase && (eff !== dayBase); const dot = diffBase ? "red" : (diffDay ? "yellow" : "green"); const puChip = d.pickupEnabled ? `<span class="callTimeExtra">PU <b>${esc(effectivePickupCast(d,n))}</b></span>` : ""; const rtsChip = d.rtsEnabled ? `<span class="callTimeExtra">RTS <b>${esc(effectiveRTSCast(d,n))}</b></span>` : ""; return `<div class="callPersonLine"><span class="callTimeDot ${dot}"></span><b class="callTime">${esc(eff)}</b>${puChip}${rtsChip} · ${esc(n)}</div>`; }).join("") : "<div>—</div>"}</div>
+      <div class="items">${cast.length ? cast.map(n=>{ const eff = effectiveCastCall(d,n); const ov = normalizeHHMM(d?.castCallTimes?.[n]); const diffBase = !!ov && (eff !== castBase); const diffDay = !diffBase && (eff !== dayBase); const dot = diffBase ? "red" : (diffDay ? "yellow" : "green"); const extras = []; if(d.pickupEnabled) extras.push(`<span class="callTimeExtra">PU <b>${esc(effectivePickupCast(d,n))}</b></span>`); if(d.rtsEnabled) extras.push(`<span class="callTimeExtra">RTS <b>${esc(effectiveRTSCast(d,n))}</b></span>`); const extrasHtml = extras.length ? `<div class="callLineExtras">${extras.join("")}</div>` : ""; return `<div class="callPersonLine"><div class="callLineMain"><span class="callTimeDot ${dot}"></span><div class="callLineText"><b class="callTime">${esc(eff)}</b> · ${esc(n)}</div></div>${extrasHtml}</div>`; }).join("") : "<div>—</div>"}</div>
     `;
     wrap.appendChild(castBox);
 
@@ -5782,7 +5796,7 @@ function renderShotList(){
       crewItems.innerHTML = crewGrouped.map(([area, arr])=>`
         <div style="margin-top:10px;">
           <div style="font-weight:900; margin-bottom:6px;">${esc(area)}</div>
-          ${arr.map(c=>{ const t = effectiveCrewCall(d, c); const areaBase = baseCrewAreaCall(d, area); const diffArea = (t !== areaBase); const diffDay = !diffArea && (t !== dayBase); const dot = diffArea ? "red" : (diffDay ? "yellow" : "green"); const puChip = d.pickupEnabled ? `<span class="callTimeExtra">PU <b>${esc(effectivePickupCrew(d, c))}</b></span>` : ""; return `<div class="callPersonLine"><span class="callTimeDot ${dot}"></span><b class="callTime">${esc(t)}</b>${puChip} · ${esc(c.name)}${c.role? ` (${esc(c.role)})`:''}${c.phone? ` · ${esc(c.phone)}`:''}</div>`; }).join("")}
+          ${arr.map(c=>{ const t = effectiveCrewCall(d, c); const areaBase = baseCrewAreaCall(d, area); const diffArea = (t !== areaBase); const diffDay = !diffArea && (t !== dayBase); const dot = diffArea ? "red" : (diffDay ? "yellow" : "green"); const extras = []; if(d.pickupEnabled) extras.push(`<span class="callTimeExtra">PU <b>${esc(effectivePickupCrew(d, c))}</b></span>`); const extrasHtml = extras.length ? `<div class="callLineExtras">${extras.join("")}</div>` : ""; const label = `${esc(c.name)}${c.role? ` (${esc(c.role)})`:''}${c.phone? ` · ${esc(c.phone)}`:''}`; return `<div class="callPersonLine"><div class="callLineMain"><span class="callTimeDot ${dot}"></span><div class="callLineText"><b class="callTime">${esc(t)}</b> · ${label}</div></div>${extrasHtml}</div>`; }).join("")}
         </div>
       `).join("");
     }

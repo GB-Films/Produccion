@@ -80,7 +80,7 @@ body{
 
 
 .shell.sidebarCollapsed{
-  grid-template-columns: 84px 1fr;
+  grid-template-columns: 76px 1fr;
 }
 
 .shell{
@@ -186,13 +186,15 @@ body{
 .navBtn.bottom{ text-align:center; }
 
 /* Sidebar colapsable (desktop) */
-.sidebar.collapsed{ padding:10px 8px; }
+.sidebar.collapsed{ padding:8px 6px; }
 .sidebar.collapsed .brand{ padding:10px; }
+.sidebar.collapsed .brandRow{ flex-direction:column; align-items:center; gap:8px; }
 .sidebar.collapsed .brandMain{ display:none; }
 .sidebar.collapsed .brandPill{ display:flex; }
-.sidebar.collapsed .navBtn{ justify-content:center; padding:10px 8px; }
+.sidebar.collapsed .navBtn{ justify-content:center; padding:10px 6px; }
 .sidebar.collapsed .navLabel{ display:none; }
 .sidebar.collapsed .navIcon{ width:38px; height:38px; border-radius:14px; font-size:15px; }
+
 
 
 .pillRow{ display:flex; gap:8px; }
@@ -647,8 +649,10 @@ tr.groupRow td{
 .timeInput{ width:110px; padding:6px 10px; height:34px; border-radius:12px; }
 
 .timeInput.mini{ width:92px; }
-.callPersonRow .right{ display:flex; align-items:center; gap:8px; flex-wrap:wrap; justify-content:flex-end; }
+.callPersonRow .right{ display:flex; align-items:flex-end; justify-content:flex-end; }
 .timeGroup{ display:flex; align-items:center; gap:6px; }
+.timeStack{ display:flex; flex-direction:column; align-items:flex-end; gap:6px; }
+.timeLine{ display:flex; align-items:center; justify-content:flex-end; gap:8px; }
 .timeTag{
   font-size:11px;
   padding:3px 8px;
@@ -702,7 +706,7 @@ tr.groupRow td{
 .crewAreaHeaderRow .areaCallCtl{ display:flex; align-items:center; gap:8px; flex-wrap:wrap; justify-content:flex-end; }
 .crewAreaHeaderRow .areaCallCtl .timeInput{ width:110px; }
 
-.crewPickItem .right{ display:flex; flex-direction:row; align-items:center; gap:8px; }
+.crewPickItem .right{ display:flex; align-items:flex-end; justify-content:flex-end; }
 .crewPickItem .right .timeInput{ width:110px; }
 .crewPickItem .right input[disabled]{ opacity:.45; }
 
@@ -712,6 +716,8 @@ tr.groupRow td{
   .timeInput{ width:100%; }
   .crewPickItem{ flex-direction:column; align-items:stretch; }
   .crewPickItem .right{ flex-direction:column; align-items:stretch; gap:6px; }
+  .timeStack{ align-items:stretch; }
+  .timeLine{ justify-content:stretch; }
   .crewPickItem .right .timeInput{ width:100%; }
 }
 .colTitle{ font-weight:900; opacity:.92; margin-bottom:4px; }
@@ -2290,7 +2296,7 @@ body.gbPrintingElements .muted{ color:#333 !important; }  body.gbPrintingCallshe
   display:inline-flex;
   align-items:center;
   gap:6px;
-  margin-left:8px;
+  margin-left:0;
   padding:2px 8px;
   border-radius:999px;
   border:1px solid var(--border);
@@ -2300,6 +2306,15 @@ body.gbPrintingElements .muted{ color:#333 !important; }  body.gbPrintingCallshe
   white-space:nowrap;
 }
 .callTimeExtra b{ color:var(--text); font-weight:900; }
+
+.callPersonLine{ display:flex; flex-direction:column; gap:4px; }
+.callLineMain{ display:flex; align-items:center; gap:8px; min-width:0; }
+.callLineText{ min-width:0; }
+.callTimeDot{ width:8px; height:8px; border-radius:999px; flex:0 0 auto; background:rgba(255,255,255,.35); }
+.callTimeDot.green{ background: rgba(var(--ok-rgb),.95); }
+.callTimeDot.yellow{ background: #f1c40f; }
+.callTimeDot.red{ background: var(--danger); }
+.callLineExtras{ display:flex; flex-wrap:wrap; gap:8px; padding-left:16px; }
 
 .catBlock{
   border:1px solid var(--border);
