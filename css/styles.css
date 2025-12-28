@@ -77,6 +77,12 @@ body{
   color:var(--text);
 }
 
+
+
+.shell.sidebarCollapsed{
+  grid-template-columns: 84px 1fr;
+}
+
 .shell{
   height:100%;
   display:grid;
@@ -98,6 +104,33 @@ body{
   border:1px solid var(--border);
   border-radius:16px;
   background:rgba(255,255,255,.03);
+}
+
+.brandRow{ display:flex; align-items:center; gap:10px; }
+.sidebarToggle{
+  width:34px; height:34px;
+  border-radius:12px;
+  border:1px solid var(--border);
+  background: rgba(255,255,255,.03);
+  color: var(--text);
+  cursor:pointer;
+  display:flex; align-items:center; justify-content:center;
+  font-size:16px;
+  flex:0 0 auto;
+}
+.sidebarToggle:hover{ border-color: var(--border2); }
+.brandMain{ flex:1 1 auto; min-width:0; display:flex; flex-direction:column; gap:8px; }
+.brandPill{
+  display:none;
+  width:40px; height:40px;
+  border-radius:14px;
+  border:1px solid var(--border);
+  background: rgba(255,255,255,.04);
+  font-weight:950;
+  letter-spacing:.04em;
+  align-items:center;
+  justify-content:center;
+  flex:0 0 auto;
 }
 .titleInput{
   width:100%;
@@ -131,10 +164,36 @@ body{
   color:var(--text);
   cursor:pointer;
   font-weight:700;
+  display:flex;
+  align-items:center;
+  gap:10px;
 }
 .navBtn:hover{ border-color:var(--border2); }
 .navBtn.active{ border-color: rgba(var(--accent-rgb),.45); box-shadow: 0 0 0 2px rgba(var(--accent-rgb),.10) inset; }
+
+.navIcon{
+  width:26px; height:26px;
+  border-radius:12px;
+  border:1px solid rgba(255,255,255,.06);
+  background: rgba(255,255,255,.04);
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  font-size:14px;
+  flex:0 0 auto;
+}
+.navLabel{ flex:1 1 auto; min-width:0; }
 .navBtn.bottom{ text-align:center; }
+
+/* Sidebar colapsable (desktop) */
+.sidebar.collapsed{ padding:10px 8px; }
+.sidebar.collapsed .brand{ padding:10px; }
+.sidebar.collapsed .brandMain{ display:none; }
+.sidebar.collapsed .brandPill{ display:flex; }
+.sidebar.collapsed .navBtn{ justify-content:center; padding:10px 8px; }
+.sidebar.collapsed .navLabel{ display:none; }
+.sidebar.collapsed .navIcon{ width:38px; height:38px; border-radius:14px; font-size:15px; }
+
 
 .pillRow{ display:flex; gap:8px; }
 .pill{
@@ -586,6 +645,44 @@ tr.groupRow td{
 }
 
 .timeInput{ width:110px; padding:6px 10px; height:34px; border-radius:12px; }
+
+.timeInput.mini{ width:92px; }
+.callPersonRow .right{ display:flex; align-items:center; gap:8px; flex-wrap:wrap; justify-content:flex-end; }
+.timeGroup{ display:flex; align-items:center; gap:6px; }
+.timeTag{
+  font-size:11px;
+  padding:3px 8px;
+  border-radius:999px;
+  border:1px solid var(--border);
+  background: rgba(255,255,255,.03);
+  color: var(--muted);
+  font-weight:900;
+  letter-spacing:.02em;
+  white-space:nowrap;
+}
+.callExtrasRow{ margin-top:8px; display:flex; gap:8px; flex-wrap:wrap; }
+.extraCtl{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  flex-wrap:wrap;
+  padding:6px 8px;
+  border:1px dashed var(--border);
+  border-radius:14px;
+  background: rgba(255,255,255,.02);
+}
+.extraCtl .miniNum{ width:90px; height:34px; border-radius:12px; padding:6px 10px; }
+.btn.pillToggle{
+  padding:6px 10px;
+  border-radius:999px;
+  height:34px;
+  font-size:12px;
+  font-weight:900;
+}
+.btn.pillToggle.on{
+  border-color: rgba(var(--accent-rgb),.55);
+  background: rgba(var(--accent-rgb),.12);
+}
 .btn.ghost{ background: rgba(255,255,255,.02); }
 .btn.small{ padding:6px 10px; border-radius:12px; font-size:12px; height:34px; }
 .btn.icon.small{ width:34px; height:34px; border-radius:12px; padding:0; display:flex; align-items:center; justify-content:center; }
@@ -2189,6 +2286,21 @@ body.gbPrintingElements .muted{ color:#333 !important; }  body.gbPrintingCallshe
 .calCell .tag{ margin-top:6px; color:var(--muted); font-size:12px; }
 
 /* ===================== Reportes + Call Sheets: bloques visuales ===================== */
+.callTimeExtra{
+  display:inline-flex;
+  align-items:center;
+  gap:6px;
+  margin-left:8px;
+  padding:2px 8px;
+  border-radius:999px;
+  border:1px solid var(--border);
+  background: rgba(255,255,255,.03);
+  font-size:12px;
+  color: var(--muted);
+  white-space:nowrap;
+}
+.callTimeExtra b{ color:var(--text); font-weight:900; }
+
 .catBlock{
   border:1px solid var(--border);
   border-radius:16px;

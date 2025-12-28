@@ -9,21 +9,26 @@
   <div class="shell">
     <aside class="sidebar">
       <div class="brand">
-        <input class="titleInput" id="projectTitle" placeholder="Proyecto"/>
-        <select class="input projectSwitch" id="projectSwitch" title="Proyecto"></select>
-        
+        <div class="brandRow">
+          <button class="sidebarToggle" id="sidebarToggle" title="Colapsar/expandir">⟨</button>
+          <div class="brandMain" id="brandMain">
+            <input class="titleInput" id="projectTitle" placeholder="Proyecto"/>
+            <select class="input projectSwitch" id="projectSwitch" title="Proyecto"></select>
+          </div>
+          <div class="brandPill" id="projectPill" title="Proyecto">GB</div>
+        </div>
       </div>
 
       <nav class="nav">
-        <button class="navBtn" data-view="breakdown">Breakdown</button>
-        <button class="navBtn" data-view="shooting">Call Diario</button>
-        <button class="navBtn" data-view="dayplan">Plan de Rodaje</button>
-        <button class="navBtn" data-view="schedule">Plan General</button>
-        <button class="navBtn" data-view="shotlist">Shotlist</button>
-        <button class="navBtn" data-view="elements">Elementos</button>
-        <button class="navBtn" data-view="crew">Equipo técnico</button>
-        <button class="navBtn" data-view="reports">Filtros</button>
-        <button class="navBtn" data-view="callsheet">REPORTES</button>
+        <button class="navBtn" data-view="breakdown"><span class="navIcon"></span><span class="navLabel">Breakdown</span></button>
+        <button class="navBtn" data-view="shooting"><span class="navIcon"></span><span class="navLabel">Call Diario</span></button>
+        <button class="navBtn" data-view="dayplan"><span class="navIcon"></span><span class="navLabel">Plan de Rodaje</span></button>
+        <button class="navBtn" data-view="schedule"><span class="navIcon"></span><span class="navLabel">Plan General</span></button>
+        <button class="navBtn" data-view="shotlist"><span class="navIcon"></span><span class="navLabel">Shotlist</span></button>
+        <button class="navBtn" data-view="elements"><span class="navIcon"></span><span class="navLabel">Elementos</span></button>
+        <button class="navBtn" data-view="crew"><span class="navIcon"></span><span class="navLabel">Equipo técnico</span></button>
+        <button class="navBtn" data-view="reports"><span class="navIcon"></span><span class="navLabel">Filtros</span></button>
+        <button class="navBtn" data-view="callsheet"><span class="navIcon"></span><span class="navLabel">REPORTES</span></button>
       </nav>
 
       
