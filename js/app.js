@@ -2473,11 +2473,19 @@ function setupScheduleWheelScroll(){
       `;
       head.addEventListener("click", ()=>{
         selectedDayId = d.id;
+        selectedDayplanDayId = d.id;
+        selectedShotlistDayId = d.id;
+        callSheetDayId = d.id;
+
         renderDaysBoard();
         renderDayDetail();
+        try{ renderDayPlan(); }catch(_e){}
+        try{ renderShotList(); }catch(_e){}
+        try{ renderReports(); }catch(_e){}
+        try{ renderCallSheetCalendar(); }catch(_e){}
+        try{ renderReportsDetail(); }catch(_e){}
       });
-
-      const zone = document.createElement("div");
+const zone = document.createElement("div");
       zone.className = "dropZone";
       zone.dataset.dayId = d.id;
 
@@ -5625,11 +5633,22 @@ function renderShotList(){
       cell.innerHTML = `<div class="d">${day}</div><div class="tag">${hasShoot ? "Rodaje" : ""}</div>`;
       cell.addEventListener("click", ()=>{
         if(!hasShoot) return;
-        callSheetDayId = shootByDate.get(ds);
+        const id = shootByDate.get(ds);
+
+        // Sync de día entre Call Sheet / Call Diario / Plan / Shotlist
+        callSheetDayId = id;
+        selectedDayId = id;
+        selectedDayplanDayId = id;
+        selectedShotlistDayId = id;
+
         renderCallSheetCalendar();
+        try{ renderDayDetail(); }catch(_e){}
+        try{ renderDayPlan(); }catch(_e){}
+        try{ renderShotList(); }catch(_e){}
+        try{ renderReports(); }catch(_e){}
         renderReportsDetail();
       });
-      grid.appendChild(cell);
+grid.appendChild(cell);
     }
   }
 
@@ -5651,7 +5670,7 @@ function renderShotList(){
     const cast = union(scenes.flatMap(s=>s.elements?.cast||[]));
 
     const crewAll = (d.crewIds||[])
-      .map(id=>state.crew.find(c=>c.id===id))
+      .map(id=>state.crew.find(c=>String(c.id)===String(id)))
       .filter(Boolean)
       .map(c=>({ ...c, area: normalizeCrewArea(c.area) }))
       .filter(c=>c.area!=="Cast");
@@ -6544,20 +6563,36 @@ function printShotlistByDayId(dayId){
     // Call Diario: selector de día
     el("shootDaySelect")?.addEventListener("change", ()=>{
       selectedDayId = el("shootDaySelect").value;
+
+      // Sync global "día enfocado" para que Reportes / Call Sheet no queden mirando otro día
       selectedDayplanDayId = selectedDayId;
+      selectedShotlistDayId = selectedDayId;
+      callSheetDayId = selectedDayId;
+
       renderDayDetail();
       renderDayPlan();
+      try{ renderShotList(); }catch(_e){}
+      try{ renderReports(); }catch(_e){}
+      try{ renderCallSheetCalendar(); }catch(_e){}
+      try{ renderReportsDetail(); }catch(_e){}
     });
-
-    // Plan del día
+// Plan del día
     el("dayplanSelect")?.addEventListener("change", ()=>{
       selectedDayplanDayId = el("dayplanSelect").value;
-      // sync con Call Diario / Call Sheet
+
+      // Sync con Call Diario / Call Sheet / Shotlist
       selectedDayId = selectedDayplanDayId;
+      selectedShotlistDayId = selectedDayplanDayId;
+      callSheetDayId = selectedDayplanDayId;
+
       renderDayPlan();
       renderDayDetail();
+      try{ renderShotList(); }catch(_e){}
+      try{ renderReports(); }catch(_e){}
+      try{ renderCallSheetCalendar(); }catch(_e){}
+      try{ renderReportsDetail(); }catch(_e){}
     });
-    el("btnDayplanAddNote")?.addEventListener("click", addDayplanNote);
+el("btnDayplanAddNote")?.addEventListener("click", addDayplanNote);
     el("btnDayplanAuto")?.addEventListener("click", ()=>{
       const d = selectedDayplanDayId ? getDay(selectedDayplanDayId) : null;
       if(!d) return;

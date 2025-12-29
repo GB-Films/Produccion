@@ -1262,6 +1262,22 @@ body.gbPrintingElements .muted{ color:#333 !important; }  body.gbPrintingCallshe
   /* Crew: sin espacio antes del primer área */
   body.gbPrintingCallsheet #gbPrintRoot .callCrew .items > div:first-child{ margin-top:0 !important; }
 
+  /* Call Sheet: tablas PU / Call / RTS legibles en impresión */
+  body.gbPrintingCallsheet .callTimeTable{
+    background:#fff !important;
+    border-color:#ddd !important;
+  }
+  body.gbPrintingCallsheet .callTimeTable thead{ display: table-header-group !important; }
+  body.gbPrintingCallsheet .callTimeTable th{
+    color:#111 !important;
+    background:#f6f6f6 !important;
+    border-bottom:1px solid #ddd !important;
+  }
+  body.gbPrintingCallsheet .callTimeTable td{
+    color:#000 !important;
+    border-bottom:1px solid #ddd !important;
+  }
+
   /* Semáforo de call times (crew / cast) */
   body.gbPrintingCallsheet #gbPrintRoot .callTimeDot{
     display:inline-block;
