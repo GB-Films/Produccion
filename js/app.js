@@ -1200,29 +1200,66 @@ function ensureDayShotsDone(d){
     tip.style.display="none";
     tip.innerHTML="";
   }
-  function buildSceneTooltip(scene){
+  function buildSceneTooltip(scene, opts){
+    const o = opts || {};
+    const includeShots = !!o.includeShots;
+    const maxShots = Number.isFinite(o.maxShots) ? o.maxShots : 10;
+
     const parts = [];
-    parts.push(`<div class="t">#${esc(scene.number||"")} — ${esc(scene.slugline||"")}</div>`);
-    parts.push(`<div class="m">${esc(scene.location||"")} · ${esc(scene.timeOfDay||"")} · Pág ${esc(scene.pages||"")}</div>`);
-    if(scene.summary) parts.push(`<div class="m" style="margin-top:8px;">${esc(scene.summary)}</div>`);
+    parts.push(`<div class=\"t\">#${esc(scene.number||\"\")} — ${esc(scene.slugline||\"\")}</div>`);
+    parts.push(`<div class=\"m\">${esc(scene.location||\"\")} · ${esc(scene.timeOfDay||\"\")} · Pág ${esc(scene.pages||\"\")}</div>`);
+    if(scene.summary) parts.push(`<div class=\"m\" style=\"margin-top:8px;\">${esc(scene.summary)}</div>`);
+
     for(const cat of cats){
       const items = scene.elements?.[cat] || [];
       if(!items.length) continue;
       parts.push(`
-        <div class="grp">
-          <div class="grpTitle">
-            <span class="catBadge"><span class="dot" style="background:${catColors[cat]}"></span>${esc(catNames[cat])}</span>
+        <div class=\"grp\">
+          <div class=\"grpTitle\">
+            <span class=\"catBadge\"><span class=\"dot\" style=\"background:${catColors[cat]}\"></span>${esc(catNames[cat])}</span>
           </div>
-          <div class="m">${esc(items.join(", "))}</div>
+          <div class=\"m\">${esc(items.join(\", \"))}</div>
         </div>
       `);
     }
-    return parts.join("");
+
+    if(includeShots){
+      try{ ensureSceneExtras(scene); }catch(_e){}
+      const shots = (scene.shots||[]);
+      if(shots.length){
+        let totalMin = 0;
+        try{ totalMin = sceneShotsTotalMin(scene); }catch(_e){ totalMin = 0; }
+        const shown = shots.slice(0, Math.max(0, maxShots|0));
+        const more = shots.length - shown.length;
+        const lines = shown.map((sh, i)=>{
+          const t = String(sh?.type||\"\").trim();
+          const desc = String(sh?.desc||\"\").trim();
+          let dur = 0;
+          try{ dur = shotDurMin(sh); }catch(_e){ dur = 0; }
+          const durTxt = dur ? formatDuration(dur) : \"\";
+          return `<div class=\"m\"><span class=\"muted\">${i+1}.</span> <b>${esc(t||\"Plano\")}</b>${desc? ` · ${esc(desc)}`:\"\"}${durTxt? ` <span class=\"muted\">(${esc(durTxt)})</span>`:\"\"}</div>`;
+        }).join(\"\");
+
+        const headExtra = `${shots.length}${totalMin? ` · ${formatDuration(totalMin)}`:\"\"}`;
+        parts.push(`
+          <div class=\"grp\">
+            <div class=\"grpTitle\">
+              <span class=\"catBadge\"><span class=\"dot\" style=\"background:var(--cat-camera)\"></span>Planos (${headExtra})</span>
+            </div>
+            ${lines}
+            ${more>0 ? `<div class=\"m\" style=\"margin-top:6px;\">+${more} más…</div>` : \"\"}
+          </div>
+        `);
+      }
+    }
+
+    return parts.join(\"\");
   }
-  function attachSceneHover(node, scene){
+  function attachSceneHover(node, scene, opts){
     node.addEventListener("mouseenter", (e)=>{
       if(schedDrag) return;
-      showHoverTip(buildSceneTooltip(scene), e.clientX, e.clientY);
+      try{ if(dayplanPointer) return; }catch(_e){}
+      showHoverTip(buildSceneTooltip(scene, opts), e.clientX, e.clientY);
     });
     node.addEventListener("mousemove", (e)=>{
       const tip = el("hoverTip");
@@ -4894,6 +4931,15 @@ ${
     }).join("");
 
     lane.innerHTML = grid.join("") + blocks;
+
+    // Hover preview (igual que Cronograma + Planos)
+    try{
+      lane.querySelectorAll('.dpBlock[data-kind="scene"]').forEach((blk)=>{
+        const sid = blk.dataset.id;
+        const sc = sid ? getScene(sid) : null;
+        if(sc) attachSceneHover(blk, sc, { includeShots:true, maxShots: 12 });
+      });
+    }catch(_e){}
 
     // Línea roja "ahora" (seguimiento)
     try{ ensureDayplanNowTicker(); updateDayplanNowLine(); }catch(_e){}
