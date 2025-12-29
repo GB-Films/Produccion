@@ -3032,6 +3032,7 @@ body.gbPrintingElements .muted{ color:#333 !important; }  body.gbPrintingCallshe
 /* Call Sheet: columnas PU / Call / RTS */
 .callTimeTable{
   width:100%;
+  table-layout:fixed;
   border-collapse:separate;
   border-spacing:0;
   border:1px solid var(--border);
@@ -3057,6 +3058,22 @@ body.gbPrintingElements .muted{ color:#333 !important; }  body.gbPrintingCallshe
   white-space:nowrap;
   font-variant-numeric: tabular-nums;
 }
+
+/* Anchos fijos para alinear columnas en Call Sheet */
+.callTimeTable.csCast th:nth-child(1), .callTimeTable.csCast td:nth-child(1){ width:46%; }
+.callTimeTable.csCast th:nth-child(2), .callTimeTable.csCast td:nth-child(2){ width:18%; }
+.callTimeTable.csCast th:nth-child(3), .callTimeTable.csCast td:nth-child(3){ width:18%; }
+.callTimeTable.csCast th:nth-child(4), .callTimeTable.csCast td:nth-child(4){ width:18%; }
+
+.callTimeTable.csCrew th:nth-child(1), .callTimeTable.csCrew td:nth-child(1){ width:26%; }
+.callTimeTable.csCrew th:nth-child(2), .callTimeTable.csCrew td:nth-child(2){ width:22%; }
+.callTimeTable.csCrew th:nth-child(3), .callTimeTable.csCrew td:nth-child(3){ width:16%; }
+.callTimeTable.csCrew th:nth-child(4), .callTimeTable.csCrew td:nth-child(4){ width:16%; }
+.callTimeTable.csCrew th:nth-child(5), .callTimeTable.csCrew td:nth-child(5){ width:20%; }
+
+/* Mantener tiempos compactos */
+.callTimeTable td.time{ text-align:left; }
+.callTimeTable td.name{ word-break:break-word; }
 .callTimeTable td.name{
   font-weight:900;
 }

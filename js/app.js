@@ -5762,7 +5762,7 @@ grid.appendChild(cell);
     castBox.innerHTML = `
       <div class="hdr"><span class="dot" style="background:${catColors.cast}"></span>Cast</div>
       <div class="items">
-        <table class="callTimeTable">
+        <table class="callTimeTable csCast">
           <thead>
             <tr>
               <th>Nombre</th>
@@ -5801,7 +5801,7 @@ grid.appendChild(cell);
         <div style="margin-top:10px;">
           <div style="font-weight:900; margin-bottom:6px;">${esc(area)}</div>
 
-          <table class="callTimeTable">
+          <table class="callTimeTable csCrew">
             <thead>
               <tr>
                 <th>Nombre</th>
@@ -6377,8 +6377,20 @@ function renderReportDayplanDetail(d){
   }
 
   function getReportsSelectedDayId(){
-    return callSheetDayId || selectedDayId || selectedShotlistDayId || (state.shootDays?.[0]?.id || null);
+    const candidates = [
+      callSheetDayId,
+      selectedDayId,
+      selectedShotlistDayId,
+      selectedDayplanDayId,
+      (state?.shootDays?.[0]?.id || null)
+    ].filter(Boolean);
+
+    for(const id of candidates){
+      try{ if(getDay(id)) return id; }catch(_e){}
+    }
+    return null;
   }
+
 
   
   function printCallSheetByDayId(dayId){
