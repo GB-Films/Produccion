@@ -639,6 +639,7 @@ tr.groupRow td{
   min-width:0;
 }
 .callPersonCard .nameRow .title{ font-weight:900; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.callPersonCard .meta{ font-size:12px; color: var(--muted); margin-top:2px; font-weight:800; letter-spacing:.01em; }
 .callPersonCard .dot{ width:10px; height:10px; border-radius:999px; flex:0 0 auto; }
 
 .timeStack{
@@ -3087,10 +3088,13 @@ body.gbPrintingElements .muted{ color:#333 !important; }  body.gbPrintingCallshe
   white-space:nowrap;
   font-variant-numeric: tabular-nums;
 }
-.callTimeTable--cast th:nth-child(2), .callTimeTable--cast td:nth-child(2),
 .callTimeTable--cast th:nth-child(3), .callTimeTable--cast td:nth-child(3),
-.callTimeTable--cast th:nth-child(4), .callTimeTable--cast td:nth-child(4){
+.callTimeTable--cast th:nth-child(4), .callTimeTable--cast td:nth-child(4),
+.callTimeTable--cast th:nth-child(5), .callTimeTable--cast td:nth-child(5){
   width:78px;
+}
+.callTimeTable--cast th:nth-child(2), .callTimeTable--cast td:nth-child(2){
+  width:160px;
 }
 .callTimeTable--crew th:nth-child(3), .callTimeTable--crew td:nth-child(3),
 .callTimeTable--crew th:nth-child(4), .callTimeTable--crew td:nth-child(4){

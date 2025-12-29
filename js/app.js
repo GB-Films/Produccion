@@ -1806,6 +1806,13 @@ function setupScheduleWheelScroll(){
         .filter(Boolean)
     ).sort((a,b)=>a.localeCompare(b));
   }
+
+  function findCastCrewEntryByName(name){
+    const key = normName(name);
+    return (state.crew||[]).find(c=>{
+      return normalizeCrewArea(c.area)==="Cast" && normName(c.name)===key;
+    }) || null;
+  }
   function getExistingElementsByCat(cat){
     const set = new Set();
     for(const s of state.scenes){
@@ -2905,6 +2912,9 @@ function renderDayScenesDetail(){
 
       const diff = minutesFromHHMM(call) - minutesFromHHMM(castBase);
       const dotStyle = diff === 0 ? "background: rgba(var(--ok-rgb),.9)" : "background: rgba(255, 208, 0, .9)";
+      const castRec = findCastCrewEntryByName(name);
+      const castMeta = [castRec?.role, castRec?.phone].filter(Boolean).join(" • ");
+
 
       const card = document.createElement("div");
       card.className = "callPersonCard";
@@ -2912,7 +2922,10 @@ function renderDayScenesDetail(){
         <div class="nameRow">
           <div class="left">
             <div class="dot" style="${dotStyle}"></div>
-            <div class="title">${escapeHtml(name)}</div>
+            <div class="txt">
+              <div class="title">${escapeHtml(name)}</div>
+              ${castMeta ? '<div class="meta">'+escapeHtml(castMeta)+'</div>' : ''}
+            </div>
           </div>
         </div>
 
@@ -3057,7 +3070,25 @@ function renderDayScenesDetail(){
     cleanupDayCallTimes(d);
     cleanupDayExtras(d);
 
-    const crew = (state.crew||[]).slice().sort((a,b)=> String(a.area||"").localeCompare(String(b.area||"")) || String(a.name||"").localeCompare(String(b.name||"")));
+    const castIds = new Set((state.crew||[])
+      .filter(c=> normalizeCrewArea(c.area)==="Cast")
+      .map(c=>String(c.id)));
+
+    if(castIds.size){
+      const beforeLen = (d.crewIds||[]).length;
+      d.crewIds = (d.crewIds||[]).filter(id=>!castIds.has(String(id)));
+      for(const id of castIds){
+        if(d.crewCallTimes) delete d.crewCallTimes[id];
+        if(d.crewPickUpTimes) delete d.crewPickUpTimes[id];
+      }
+      if((d.crewIds||[]).length !== beforeLen) touch();
+    }
+
+    const crew = (state.crew||[])
+      .map(c=>({ ...c, area: normalizeCrewArea(c.area) }))
+      .filter(c=>c.area!=="Cast")
+      .slice()
+      .sort((a,b)=> String(a.area||"").localeCompare(String(b.area||"")) || String(a.name||"").localeCompare(String(b.name||"")));
     if(!crew.length){
       wrap.innerHTML = `<div class="muted">No hay Equipo técnico cargado.</div>`;
       return;
@@ -5800,6 +5831,7 @@ grid.appendChild(cell);
           <thead>
             <tr>
               <th>Nombre</th>
+              <th>Rol</th>
               <th class="time">PU</th>
               <th class="time">Call</th>
               <th class="time">RTS</th>
@@ -5807,6 +5839,8 @@ grid.appendChild(cell);
           </thead>
           <tbody>
             ${cast.length ? cast.map(n=>{
+              const castRec = findCastCrewEntryByName(n);
+              const role = castRec?.role || "";
               const call = effectiveCastCall(d, n);
               const pu = d.pickupCastEnabled ? effectiveCastPU(d, n) : "—";
               const rts = d.rtsEnabled ? effectiveCastRTS(d, n) : "—";
@@ -5819,11 +5853,12 @@ grid.appendChild(cell);
               const rtsCell = (rts === "—") ? "—" : `<span class="callTimeDot ${sem}"></span><b>${esc(rts)}</b>`;
               return `<tr>
                 <td class="name">${esc(n)}</td>
+                <td>${esc(role)}</td>
                 <td class="time ${puCls}">${puCell}</td>
                 <td class="time ${tdCls}"><span class="callTimeDot ${sem}"></span><b>${esc(call)}</b></td>
                 <td class="time ${rtsCls}">${rtsCell}</td>
               </tr>`;
-            }).join("") : `<tr><td colspan="4" class="mutedCell">—</td></tr>`}
+            }).join("") : `<tr><td colspan="5" class="mutedCell">—</td></tr>`}
           </tbody>
         </table>
       </div>
