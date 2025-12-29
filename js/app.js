@@ -5803,13 +5803,24 @@ grid.appendChild(cell);
           <tbody>
             ${cast.length ? cast.map(n=>{
               const call = effectiveCastCall(d, n);
+              const callOv = normalizeHHMM(d?.castCallTimes?.[n]);
+              const callIsOv = !!callOv && callOv !== castBase;
+
+              const basePu = shiftHHMM(call, Number(d.pickupCastOffsetMin ?? -30));
               const pu = d.pickupCastEnabled ? effectiveCastPU(d, n) : "—";
+              const puOv = normalizeHHMM(d?.castPickUpTimes?.[n]);
+              const puIsOv = d.pickupCastEnabled && !!puOv && puOv !== basePu;
+
+              const baseRts = shiftHHMM(call, Number(d.rtsOffsetMin ?? DEF_RTS));
               const rts = d.rtsEnabled ? effectiveCastRTS(d, n) : "—";
+              const rtsOv = normalizeHHMM(d?.castRTSTimes?.[n]);
+              const rtsIsOv = d.rtsEnabled && !!rtsOv && rtsOv !== baseRts;
+
               return `<tr>
                 <td class="name">${esc(n)}</td>
-                <td class="time">${esc(pu)}</td>
-                <td class="time"><b>${esc(call)}</b></td>
-                <td class="time">${esc(rts)}</td>
+                <td class="time ${puIsOv ? "timeDiffDay" : ""}">${esc(pu)}</td>
+                <td class="time ${callIsOv ? "timeDiffDay" : ""}"><b>${esc(call)}</b></td>
+                <td class="time ${rtsIsOv ? "timeDiffDay" : ""}">${esc(rts)}</td>
               </tr>`;
             }).join("") : `<tr><td colspan="4" class="mutedCell">—</td></tr>`}
           </tbody>
@@ -5843,12 +5854,22 @@ grid.appendChild(cell);
             <tbody>
               ${arr.map(c=>{
                 const call = effectiveCrewCall(d, c);
+                const areaBase = baseCrewAreaCall(d, area);
+                const callOv = normalizeHHMM(d?.crewCallTimes?.[c.id]);
+                const callIsOv = !!callOv && callOv !== areaBase;
+                const callIsDiffDay = normalizeHHMM(call) !== dayBase;
+                const callCls = `${callIsDiffDay ? "timeDiffDay" : ""} ${callIsOv ? "timeDiffArea" : ""}`.trim();
+
+                const basePu = shiftHHMM(call, Number(d.pickupCrewOffsetMin ?? -30));
                 const pu = d.pickupCrewEnabled ? effectiveCrewPU(d, c) : "—";
+                const puOv = normalizeHHMM(d?.crewPickUpTimes?.[c.id]);
+                const puIsOv = d.pickupCrewEnabled && !!puOv && puOv !== basePu;
+
                 return `<tr>
                   <td class="name">${esc(c.name||"")}</td>
                   <td>${esc(c.role||"")}</td>
-                  <td class="time">${esc(pu)}</td>
-                  <td class="time"><b>${esc(call)}</b></td>
+                  <td class="time ${puIsOv ? "timeDiffDay" : ""}">${esc(pu)}</td>
+                  <td class="time ${callCls}"><b>${esc(call)}</b></td>
                   <td class="time">${c.phone ? esc(c.phone) : "—"}</td>
                 </tr>`;
               }).join("")}
