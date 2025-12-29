@@ -2786,19 +2786,22 @@ function renderDayScenesDetail(){
         <button class="btn small ghost" id="cast_apply" title="Aplicar Call Cast a todo el Cast">Aplicar</button>
         <button class="btn small ghost" id="cast_reset" title="Resetear todo el Cast a Call Cast">Reset</button>
       </div>
-
       <div class="callExtrasRow">
-        <span class="miniLbl">PU Cast</span>
-        <span class="chip toggle ${d.pickupCastEnabled ? "active" : ""}" id="tglPUCast">PU</span>
-        <span class="miniLbl">Offset</span>
-        <input type="number" class="input compact" id="puCastOffset" style="width:88px" value="${Math.round(Number(d.pickupCastOffsetMin ?? -30))}" ${d.pickupCastEnabled ? "" : "disabled"}/>
-        <button class="btn icon ghost small" id="puCastReset" title="Reset PU Cast a default">↺</button>
+        <div class="callExtraLine">
+          <span class="miniLbl">PU Cast</span>
+          <span class="chip toggle ${d.pickupCastEnabled ? "active" : ""}" id="tglPUCast">PU</span>
+          <span class="miniLbl">Offset</span>
+          <input type="number" class="input compact" id="puCastOffset" style="width:88px" value="${Math.round(Number(d.pickupCastOffsetMin ?? -30))}" ${d.pickupCastEnabled ? "" : "disabled"}/>
+          <button class="btn icon ghost small" id="puCastReset" title="Reset PU Cast a default">↺</button>
+        </div>
 
-        <span class="miniLbl" style="margin-left:10px;">RTS</span>
-        <span class="chip toggle ${d.rtsEnabled ? "active" : ""}" id="tglRTS">RTS</span>
-        <span class="miniLbl">Offset</span>
-        <input type="number" class="input compact" id="rtsOffset" style="width:88px" value="${Math.round(Number(d.rtsOffsetMin ?? DEF_RTS))}" ${d.rtsEnabled ? "" : "disabled"}/>
-        <button class="btn icon ghost small" id="rtsReset" title="Reset RTS a default del proyecto">↺</button>
+        <div class="callExtraLine">
+          <span class="miniLbl">RTS</span>
+          <span class="chip toggle ${d.rtsEnabled ? "active" : ""}" id="tglRTS">RTS</span>
+          <span class="miniLbl">Offset</span>
+          <input type="number" class="input compact" id="rtsOffset" style="width:88px" value="${Math.round(Number(d.rtsOffsetMin ?? DEF_RTS))}" ${d.rtsEnabled ? "" : "disabled"}/>
+          <button class="btn icon ghost small" id="rtsReset" title="Reset RTS a default del proyecto">↺</button>
+        </div>
       </div>
     `;
     wrap.appendChild(top);
@@ -5810,11 +5813,15 @@ grid.appendChild(cell);
               const diff = call !== castBase;
               const sem = diff ? "yellow" : "green";
               const tdCls = diff ? "timeDiffDay" : "";
+              const puCls = (tdCls && pu !== "—") ? tdCls : "";
+              const rtsCls = (tdCls && rts !== "—") ? tdCls : "";
+              const puCell = (pu === "—") ? "—" : `<span class="callTimeDot ${sem}"></span><b>${esc(pu)}</b>`;
+              const rtsCell = (rts === "—") ? "—" : `<span class="callTimeDot ${sem}"></span><b>${esc(rts)}</b>`;
               return `<tr>
                 <td class="name">${esc(n)}</td>
-                <td class="time">${esc(pu)}</td>
+                <td class="time ${puCls}">${puCell}</td>
                 <td class="time ${tdCls}"><span class="callTimeDot ${sem}"></span><b>${esc(call)}</b></td>
-                <td class="time">${esc(rts)}</td>
+                <td class="time ${rtsCls}">${rtsCell}</td>
               </tr>`;
             }).join("") : `<tr><td colspan="4" class="mutedCell">—</td></tr>`}
           </tbody>
@@ -5855,11 +5862,13 @@ grid.appendChild(cell);
                 const diffDay = call !== dayBase;
                 const sem = diffArea ? "red" : (diffDay ? "yellow" : "green");
                 const tdCls = diffArea ? "timeDiffArea" : (diffDay ? "timeDiffDay" : "");
+                const puCls = (tdCls && pu !== "—") ? tdCls : "";
+                const puCell = (pu === "—") ? "—" : `<span class="callTimeDot ${sem}"></span><b>${esc(pu)}</b>`;
                 return `
                 <tr>
                   <td class="name">${esc(c.name||"")}</td>
                   <td>${esc(c.role||"")}</td>
-                  <td class="time">${esc(pu)}</td>
+                  <td class="time ${puCls}">${puCell}</td>
                   <td class="time ${tdCls}"><span class="callTimeDot ${sem}"></span><b>${esc(call)}</b></td>
                   <td class="time">${c.phone ? esc(c.phone) : "—"}</td>
                 </tr>`;
