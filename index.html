@@ -1,9 +1,12 @@
 <!doctype html>
-<html lang="es-AR"><head>
+<html lang="es-AR" data-build="20251229-05"><head>
   <meta charset="utf-8"/>
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate"/>
+  <meta http-equiv="Pragma" content="no-cache"/>
+  <meta http-equiv="Expires" content="0"/>
   <meta content="width=device-width,initial-scale=1,viewport-fit=cover" name="viewport"/>
   <title>GB Production Board</title>
-  <link href="css/styles.css?v=20251229-04" rel="stylesheet"/>
+  <link href="css/styles.css?v=20251229-05" rel="stylesheet"/>
 </head>
 <body>
   <div class="shell">
@@ -562,11 +565,29 @@
 
     </main>
   </div>
+  <!-- Cache bust fuerte (mobile): cargamos assets con un v dinámico por sesión -->
+  <script>
+  (function(){
+    const v = Date.now().toString(36);
+    // CSS: fuerza versión de sesión
+    try{
+      const link = document.querySelector('link[href^="css/styles.css"]') || document.querySelector('link[href*="css/styles.css"]');
+      if(link) link.href = "css/styles.css?v=" + v;
+    }catch(e){}
 
-  <!-- Cache bust: mismo sufijo en TODOS los assets (si no, mobile a veces se queda con storage.js viejo y “desaparece” el proyecto) -->
-  <script src="js/utils.js?v=20251229-04"></script>
-  <script src="js/storage.js?v=20251229-04"></script>
-  <script src="js/app.js?v=20251229-04"></script>
-
+    // JS en orden (sin async)
+    const files = ["js/utils.js","js/storage.js","js/app.js"];
+    function add(i){
+      if(i >= files.length) return;
+      const s = document.createElement("script");
+      s.src = files[i] + "?v=" + v;
+      s.async = false;
+      s.onload = () => add(i+1);
+      s.onerror = () => add(i+1);
+      document.body.appendChild(s);
+    }
+    add(0);
+  })();
+  </script>
 
 </body></html>

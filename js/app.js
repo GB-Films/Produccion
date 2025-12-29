@@ -521,6 +521,14 @@
         // Otherwise adopt the newest by updatedAt
         if(!shouldAdoptRemote && tsUpdatedAt(remote) > tsUpdatedAt(state)) shouldAdoptRemote = true;
 
+        // Mobile safety: si el remoto tiene claramente más contenido que el local, preferimos remoto
+        // (evita quedar pegado a un local viejo en celulares con cache agresivo).
+        if(!shouldAdoptRemote && remoteHasData){
+          const remoteScore = (remote.scenes?.length||0) + (remote.shootDays?.length||0) + (remote.crew?.length||0);
+          const localScore  = (state.scenes?.length||0)  + (state.shootDays?.length||0)  + (state.crew?.length||0);
+          if(isMobileUI() && remoteScore > localScore) shouldAdoptRemote = true;
+        }
+
         if(shouldAdoptRemote){
           state = remote;
           bootAppliedRemote = true;
@@ -7526,5 +7534,6 @@ if(!state.scenes.length){
     });
   }
 
-  window.addEventListener("DOMContentLoaded", init);
+  if(document.readyState === "loading") window.addEventListener("DOMContentLoaded", init);
+  else init();
 })();
