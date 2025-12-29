@@ -1410,6 +1410,15 @@ body.gbPrintingElements .muted{ color:#333 !important; }  body.gbPrintingCallshe
 .calCell:hover{ border-color:var(--border2); }
 .calCell.hasShoot{ border-color: rgba(var(--accent-rgb),.40); }
 .calCell.selected{ outline:2px solid rgba(var(--accent-rgb),.35); }
+@media (min-width: 821px){
+  .calCell.selected{
+    outline: 3px solid rgba(var(--accent-rgb),.55);
+    border-color: rgba(var(--accent-rgb),.65);
+    background: rgba(var(--accent-rgb),.14);
+    box-shadow: 0 14px 28px rgba(0,0,0,.22), 0 0 0 3px rgba(var(--accent-rgb),.10) inset;
+  }
+}
+
 .calCell .d{ font-weight:900; }
 .calCell .tag{ margin-top:6px; color:var(--muted); font-size:12px; }
 
@@ -2683,9 +2692,9 @@ body.gbPrintingElements .muted{ color:#333 !important; }  body.gbPrintingCallshe
     overflow:hidden;
     text-overflow:ellipsis;
   }
-  .mDayBtns{ display:flex; gap:8px; }
+  .mDayBtns{ display:flex; flex-wrap:wrap; gap:8px; }
   .mDayBtn{
-    flex:1;
+    flex:1 1 calc(33.333% - 6px);
     border-radius:14px;
     border:1px solid rgba(var(--accent-rgb),.22);
     background: rgba(255,255,255,.05);
@@ -2693,6 +2702,7 @@ body.gbPrintingElements .muted{ color:#333 !important; }  body.gbPrintingCallshe
     padding:10px 0;
     font-weight:950;
     font-size:12px;
+    min-width:0;
   }
   .mDayBtn.active{
     background: rgba(var(--accent-rgb),.24);
@@ -2846,7 +2856,6 @@ body.gbPrintingElements .muted{ color:#333 !important; }  body.gbPrintingCallshe
   body.mobileDayFocus #callCalCard,
   body.mobileDayFocus #reportsTabs{ display:none !important; }
 
-  body.mobileDayFocus #btnPrintCallSheet,
   body.mobileDayFocus #btnShotPrint{ display:none !important; }
 
   /* Call Sheet en mobile: lectura (inputs como texto) */
@@ -3115,4 +3124,9 @@ body.gbPrintingElements .muted{ color:#333 !important; }  body.gbPrintingCallshe
 }
 .callTimeTable--crew th:nth-child(5), .callTimeTable--crew td:nth-child(5){
   width:120px;
+}
+
+
+@media (max-width: 420px){
+  .mDayBtn{ flex-basis: calc(50% - 6px); }
 }

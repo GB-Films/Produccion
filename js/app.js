@@ -1360,6 +1360,7 @@ function ensureDayShotsDone(d){
           <div id="mDayMeta" class="mDayMeta">—</div>
         </div>
         <div class="mDayBtns">
+          <button class="mDayBtn" data-view="shooting">Call</button>
           <button class="mDayBtn" data-view="dayplan">Plan</button>
           <button class="mDayBtn" data-view="shotlist">Shot</button>
           <button class="mDayBtn" data-view="callsheet" data-tab="callsheet">Reportes</button>
