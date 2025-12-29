@@ -3101,6 +3101,7 @@ function renderDayScenesDetail(){
     });
 
     const byArea = new Map();
+    const dayBase = baseDayCall(d);
     for(const c of crew){
       const area = normalizeCrewArea(c.area) || "Otros";
       if(!byArea.has(area)) byArea.set(area, []);
@@ -3172,8 +3173,9 @@ function renderDayScenesDetail(){
       for(const c of list){
         const isSel = (d.crewIds||[]).includes(c.id);
         const call = effectiveCrewCall(d, c);
-        const callOv = normalizeHHMM(d?.crewCallTimes?.[c.id]);
-        const callIsOv = !!callOv && callOv !== baseCrewAreaCall(d, area);
+        const diffArea = call !== areaBase;
+        const diffDay = call !== dayBase;
+        const callDiffCls = diffArea ? "timeDiffArea" : (diffDay ? "timeDiffDay" : "");
 
         const basePu = shiftHHMM(call, Number(d.pickupCrewOffsetMin ?? -30));
         const pu = d.pickupCrewEnabled ? effectiveCrewPU(d, c) : "";
@@ -3181,13 +3183,13 @@ function renderDayScenesDetail(){
         const puIsOv = d.pickupCrewEnabled && !!puOv && puOv !== basePu;
 
         const item = document.createElement("div");
-        item.className = "crewPickItem" + (isSel ? " sel" : "");
+        item.className = "crewPickItem" + (isSel ? " selected" : "");
         item.innerHTML = `
           <div class="left">
-            <div class="dot ${isSel ? "ok" : "off"}"></div>
-            <div class="crewText">
-              <div class="crewTitle">${escapeHtml(c.name||"")}</div>
-              <div class="crewSub">${escapeHtml(c.role||"")} ${c.phone ? "• "+escapeHtml(c.phone) : ""}</div>
+            <div class="statusDot"></div>
+            <div>
+              <div class="title">${escapeHtml(c.name||"")}</div>
+              <div class="meta">${escapeHtml(c.role||"")} ${c.phone ? "• "+escapeHtml(c.phone) : ""}</div>
             </div>
           </div>
           <div class="right">
@@ -3195,7 +3197,7 @@ function renderDayScenesDetail(){
               <div class="timeLine">
                 <div class="k">CALL</div>
                 <div style="display:flex; gap:6px; align-items:center; justify-content:flex-end;">
-                  <input type="time" class="input timeInput ${callIsOv ? "timeDiffArea" : ""}" value="${call}" ${isSel ? "" : "disabled"}/>
+                  <input type="time" class="input timeInput ${callDiffCls}" value="${call}" ${isSel ? "" : "disabled"}/>
                   <button class="btn icon ghost small" title="Reset CALL" ${isSel ? "" : "disabled"}>↺</button>
                 </div>
               </div>
@@ -5805,10 +5807,13 @@ grid.appendChild(cell);
               const call = effectiveCastCall(d, n);
               const pu = d.pickupCastEnabled ? effectiveCastPU(d, n) : "—";
               const rts = d.rtsEnabled ? effectiveCastRTS(d, n) : "—";
+              const diff = call !== castBase;
+              const sem = diff ? "yellow" : "green";
+              const tdCls = diff ? "timeDiffDay" : "";
               return `<tr>
                 <td class="name">${esc(n)}</td>
                 <td class="time">${esc(pu)}</td>
-                <td class="time"><b>${esc(call)}</b></td>
+                <td class="time ${tdCls}"><span class="callTimeDot ${sem}"></span><b>${esc(call)}</b></td>
                 <td class="time">${esc(rts)}</td>
               </tr>`;
             }).join("") : `<tr><td colspan="4" class="mutedCell">—</td></tr>`}
@@ -5826,7 +5831,9 @@ grid.appendChild(cell);
     if(!crewAll.length){
       crewItems.innerHTML = `<div>—</div>`;
     }else{
-      crewItems.innerHTML = crewGrouped.map(([area, arr])=>`
+      crewItems.innerHTML = crewGrouped.map(([area, arr])=>{
+        const areaBase = baseCrewAreaCall(d, area);
+        return `
         <div style="margin-top:10px;">
           <div style="font-weight:900; margin-bottom:6px;">${esc(area)}</div>
 
@@ -5844,18 +5851,24 @@ grid.appendChild(cell);
               ${arr.map(c=>{
                 const call = effectiveCrewCall(d, c);
                 const pu = d.pickupCrewEnabled ? effectiveCrewPU(d, c) : "—";
-                return `<tr>
+                const diffArea = call !== areaBase;
+                const diffDay = call !== dayBase;
+                const sem = diffArea ? "red" : (diffDay ? "yellow" : "green");
+                const tdCls = diffArea ? "timeDiffArea" : (diffDay ? "timeDiffDay" : "");
+                return `
+                <tr>
                   <td class="name">${esc(c.name||"")}</td>
                   <td>${esc(c.role||"")}</td>
                   <td class="time">${esc(pu)}</td>
-                  <td class="time"><b>${esc(call)}</b></td>
+                  <td class="time ${tdCls}"><span class="callTimeDot ${sem}"></span><b>${esc(call)}</b></td>
                   <td class="time">${c.phone ? esc(c.phone) : "—"}</td>
                 </tr>`;
               }).join("")}
             </tbody>
           </table>
         </div>
-      `).join("");
+      `;
+      }).join("");
     }
     crewBox.appendChild(crewItems);
     wrap.appendChild(crewBox);
