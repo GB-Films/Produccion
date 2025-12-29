@@ -395,6 +395,8 @@ tr.groupRow td{
 .hoverTip{
   position:fixed;
   max-width:440px;
+  max-height:70vh;
+  overflow:auto;
   z-index:90;
   border:1px solid var(--border);
   background: rgba(0,0,0,.55);
