@@ -5725,7 +5725,11 @@ grid.appendChild(cell);
       wrap.innerHTML = `<div class="catBlock"><div class="items">Elegí un día con rodaje.</div></div>`;
       return;
     }
+    ensureProjectConfig();
     ensureDayTimingMaps(d);
+    // Mantener consistencia con Call Diario (evita estados viejos que cambian colores/overrides)
+    cleanupDayCallTimes(d);
+    cleanupDayExtras(d);
     const dayBase = baseDayCall(d);
     const castBase = baseCastCall(d);
 
@@ -5847,10 +5851,23 @@ grid.appendChild(cell);
               const diff = call !== castBase;
               const sem = diff ? "yellow" : "green";
               const tdCls = diff ? "timeDiffDay" : "";
-              const puCls = (tdCls && pu !== "—") ? tdCls : "";
-              const rtsCls = (tdCls && rts !== "—") ? tdCls : "";
-              const puCell = (pu === "—") ? "—" : `<span class="callTimeDot ${sem}"></span><b>${esc(pu)}</b>`;
-              const rtsCell = (rts === "—") ? "—" : `<span class="callTimeDot ${sem}"></span><b>${esc(rts)}</b>`;
+
+              // PU/RTS: en Call Diario el resaltado indica *override* (no se hereda del Call)
+              const basePu = shiftHHMM(call, Number(d.pickupCastOffsetMin ?? -30));
+              const puOv = normalizeHHMM(d?.castPickUpTimes?.[n]);
+              const puIsOv = d.pickupCastEnabled && !!puOv && puOv !== basePu;
+
+              const rtsOff = Number(d.rtsOffsetMin ?? Number(state?.project?.rtsOffsetMin ?? 60));
+              const baseRts = shiftHHMM(call, rtsOff);
+              const rtsOv = normalizeHHMM(d?.castRTSTimes?.[n]);
+              const rtsIsOv = d.rtsEnabled && !!rtsOv && rtsOv !== baseRts;
+
+              const puSem = puIsOv ? "yellow" : "green";
+              const rtsSem = rtsIsOv ? "yellow" : "green";
+              const puCls = (puIsOv && pu !== "—") ? "timeDiffDay" : "";
+              const rtsCls = (rtsIsOv && rts !== "—") ? "timeDiffDay" : "";
+              const puCell = (pu === "—") ? "—" : `<span class="callTimeDot ${puSem}"></span><b>${esc(pu)}</b>`;
+              const rtsCell = (rts === "—") ? "—" : `<span class="callTimeDot ${rtsSem}"></span><b>${esc(rts)}</b>`;
               return `<tr>
                 <td class="name">${esc(n)}</td>
                 <td>${esc(role)}</td>
@@ -5897,8 +5914,14 @@ grid.appendChild(cell);
                 const diffDay = call !== dayBase;
                 const sem = diffArea ? "red" : (diffDay ? "yellow" : "green");
                 const tdCls = diffArea ? "timeDiffArea" : (diffDay ? "timeDiffDay" : "");
-                const puCls = (tdCls && pu !== "—") ? tdCls : "";
-                const puCell = (pu === "—") ? "—" : `<span class="callTimeDot ${sem}"></span><b>${esc(pu)}</b>`;
+
+                // PU: en Call Diario el resaltado indica override propio (no hereda del Call)
+                const basePu = shiftHHMM(call, Number(d.pickupCrewOffsetMin ?? -30));
+                const puOv = normalizeHHMM(d?.crewPickUpTimes?.[c.id]);
+                const puIsOv = d.pickupCrewEnabled && !!puOv && puOv !== basePu;
+                const puSem = puIsOv ? "yellow" : "green";
+                const puCls = (puIsOv && pu !== "—") ? "timeDiffDay" : "";
+                const puCell = (pu === "—") ? "—" : `<span class="callTimeDot ${puSem}"></span><b>${esc(pu)}</b>`;
                 return `
                 <tr>
                   <td class="name">${esc(c.name||"")}</td>
