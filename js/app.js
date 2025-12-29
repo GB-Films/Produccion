@@ -148,6 +148,10 @@
       .replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;")
       .replaceAll('"',"&quot;").replaceAll("'","&#039;");
   }
+
+  // Compat: algunas partes usan escapeHtml() en vez de esc()
+  function escapeHtml(s){ return esc(s); }
+
   function toast(msg){
     const t = el("toast");
     if(!t) return;
