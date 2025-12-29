@@ -1352,16 +1352,17 @@ function ensureDayShotsDone(d){
       daybar.className = "mDayBar";
       document.body.appendChild(daybar);
     }
-    if(daybar.dataset.v4 !== "1"){
-      daybar.dataset.v4 = "1";
+    // v5: botones en una sola fila + orden solicitado
+    if(daybar.dataset.v5 !== "1"){
+      daybar.dataset.v5 = "1";
       daybar.innerHTML = `
         <div class="mDayRow">
           <select id="mDaySelect" class="mDaySelect" title="Día"></select>
           <div id="mDayMeta" class="mDayMeta">—</div>
         </div>
         <div class="mDayBtns">
-          <button class="mDayBtn" data-view="shooting">Call</button>
           <button class="mDayBtn" data-view="dayplan">Plan</button>
+          <button class="mDayBtn" data-view="shooting">Call</button>
           <button class="mDayBtn" data-view="shotlist">Shot</button>
           <button class="mDayBtn" data-view="callsheet" data-tab="callsheet">Reportes</button>
           <button class="mDayBtn" data-view="reports">Filtros</button>
