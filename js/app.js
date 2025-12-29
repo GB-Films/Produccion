@@ -4324,6 +4324,10 @@ function updateScheduleDayDOM(dayId){
   let dayplanPaletteKey = null;
   let dayplanPointer = null;
 
+  // Doble click robusto (sobrevive re-renders del timeline)
+  let dayplanLastTapId = null;
+  let dayplanLastTapAt = 0;
+
   let dayplanMetaOpen = false;
 
   const DAYPLAN_PPM = 1.2; // px por minuto (altura total ~1728px)
@@ -5055,6 +5059,25 @@ return `
         const actEl = e.target.closest("[data-action]");
         const action = actEl?.dataset.action || "";
 
+
+        // Doble click (sin depender de `dblclick`): 2 taps rápidos sobre la misma escena → Breakdown
+        if(action || kind !== "scene"){
+          dayplanLastTapId = null;
+          dayplanLastTapAt = 0;
+        }else if(id){
+          const now = (typeof performance !== "undefined" && performance.now) ? performance.now() : Date.now();
+          if(dayplanLastTapId === id && (now - dayplanLastTapAt) < 420){
+            dayplanLastTapId = null; dayplanLastTapAt = 0;
+            try{ e.preventDefault(); }catch(_e){}
+            try{ e.stopPropagation(); }catch(_e){}
+            jumpToSceneInBreakdown(id);
+            return;
+          }
+          dayplanLastTapId = id;
+          dayplanLastTapAt = now;
+        }
+
+
         if(action === "palette"){
           dayplanPaletteKey = (dayplanPaletteKey === key) ? null : key;
           dayplanSelectedKey = key;
@@ -5106,12 +5129,9 @@ return `
           renderReportsDetail();
           return;
         }
-        if(action === "openScene" && kind === "scene"){
-          selectedSceneId = id;
-          showView("breakdown");
-          renderScenesTable();
-          renderSceneEditor();
-          renderShotsEditor();
+        if(action === "openScene" && kind === "scene")
+        {
+          jumpToSceneInBreakdown(id);
           return;
         }
 
@@ -5129,11 +5149,7 @@ return `
         if(e.target?.closest?.("[data-action]")) return;
         const id = block.dataset.id;
         if(!id) return;
-        selectedSceneId = id;
-        showView("breakdown");
-        renderScenesTable();
-        renderSceneEditor();
-        renderShotsEditor();
+        jumpToSceneInBreakdown(id);
       });
 
       // Drag / resize
