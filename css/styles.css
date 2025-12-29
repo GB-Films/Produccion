@@ -1208,62 +1208,131 @@ tr.groupRow td{
 /* ===== Shotlist print (unificado) ===== */
 #gbPrintRoot{ display:none; }
 
-/* ===== Print runtime fallback (mobile-safe) =====
-   Algunos browsers móviles imprimen usando estilos "screen" y se saltean @media print.
-   Como acá la vida es corta, cuando activamos gbPrinting* forzamos el mismo look que en escritorio.
-*/
-body.gbPrintingShotlist, body.gbPrintingCallsheet, body.gbPrintingElements{
-  background:#fff !important;
-  color:#000 !important;
-}
-
-/* Mostrar SOLO el root de impresión (aunque @media print no se aplique) */
+/* ===== Print (fallback tambiÃ©n en screen para mÃ³viles) ===== */
 body.gbPrintingShotlist *{ visibility:hidden !important; }
 body.gbPrintingShotlist #gbPrintRoot,
 body.gbPrintingShotlist #gbPrintRoot *{ visibility:visible !important; }
-body.gbPrintingShotlist #gbPrintRoot{ display:block !important; position:absolute; left:0; top:0; width:100%; }
+body.gbPrintingShotlist #gbPrintRoot{ display:block !important; position:absolute; left:0; top:0; width:100%; padding:0 !important; margin:0 !important; background:#fff; color:#000; }
 
 body.gbPrintingCallsheet *{ visibility:hidden !important; }
 body.gbPrintingCallsheet #gbPrintRoot,
 body.gbPrintingCallsheet #gbPrintRoot *{ visibility:visible !important; }
-body.gbPrintingCallsheet #gbPrintRoot{ display:block !important; position:absolute; left:0; top:0; width:100%; padding:0 !important; margin:0 !important; }
+body.gbPrintingCallsheet #gbPrintRoot{ display:block !important; position:absolute; left:0; top:0; width:100%; padding:0 !important; margin:0 !important; background:#fff; color:#000; }
 
 body.gbPrintingElements *{ visibility:hidden !important; }
 body.gbPrintingElements #gbPrintRoot,
 body.gbPrintingElements #gbPrintRoot *{ visibility:visible !important; }
-body.gbPrintingElements #gbPrintRoot{ display:block !important; position:absolute; left:0; top:0; width:100%; padding:0 !important; margin:0 !important; }
+body.gbPrintingElements #gbPrintRoot{ display:block !important; position:absolute; left:0; top:0; width:100%; padding:0 !important; margin:0 !important; background:#fff; color:#000; }
 
-/* Contraste y look (call sheet) */
-body.gbPrintingCallsheet .muted{ color:#333 !important; }
-body.gbPrintingCallsheet .catBlock{ background:#fff !important; border:1px solid #ddd !important; border-radius:0 !important; overflow:visible !important; }
+body.gbPrintingShotlist .muted,
+body.gbPrintingCallsheet .muted,
+body.gbPrintingElements .muted{ color:#333 !important; }
+
+/* Call Sheet: asegurar contraste aunque el browser ignore @media print */
+body.gbPrintingCallsheet #gbPrintRoot,
+body.gbPrintingCallsheet #gbPrintRoot *{ color:#000 !important; }
+body.gbPrintingCallsheet .catBlock{ background:#fff !important; border:1px solid #ddd !important; overflow:visible !important; border-radius:0 !important; }
 body.gbPrintingCallsheet .catBlock .hdr{ background:#f6f6f6 !important; border-bottom:1px solid #ddd !important; color:#111 !important; }
 body.gbPrintingCallsheet .kpi{ background:#f6f6f6 !important; border:1px solid #ddd !important; color:#111 !important; }
 body.gbPrintingCallsheet .kpi b{ color:#000 !important; }
+
+body.gbPrintingCallsheet #gbPrintRoot .callSheetPrintPage{ width:100% !important; max-width:190mm !important; box-sizing:border-box; margin:0 auto !important; }
+
 body.gbPrintingCallsheet .callTimeTable{ background:#fff !important; border-color:#ddd !important; }
+body.gbPrintingCallsheet .callTimeTable thead{ display: table-header-group !important; }
 body.gbPrintingCallsheet .callTimeTable th{ color:#111 !important; background:#f6f6f6 !important; border-bottom:1px solid #ddd !important; }
 body.gbPrintingCallsheet .callTimeTable td{ color:#000 !important; border-bottom:1px solid #ddd !important; }
 
-/* Semáforo + overrides (para que coincida con escritorio) */
-body.gbPrintingCallsheet #gbPrintRoot .callTimeDot{
-  display:inline-block;
-  width:10px; height:10px;
-  border-radius:999px;
-  margin-right:6px;
-  border:2px solid rgba(0,0,0,.35);
-  background: transparent;
-  vertical-align:middle;
+/* Mobile print: todo entra en A4 */
+body.gbPrintMobile.gbPrintingCallsheet #gbPrintRoot{ font-size:10.5pt !important; }
+body.gbPrintMobile.gbPrintingCallsheet #gbPrintRoot .catBlock .items{ font-size:10.5pt !important; }
+body.gbPrintMobile.gbPrintingCallsheet #gbPrintRoot .callTimeTable th,
+body.gbPrintMobile.gbPrintingCallsheet #gbPrintRoot .callTimeTable td{ padding:5px 6px !important; font-size:10pt !important; line-height:1.15; }
+
+body.gbPrintMobile.gbPrintingCallsheet #gbPrintRoot .callTimeTable--cast th:nth-child(2),
+body.gbPrintMobile.gbPrintingCallsheet #gbPrintRoot .callTimeTable--cast td:nth-child(2){ width:130px !important; }
+body.gbPrintMobile.gbPrintingCallsheet #gbPrintRoot .callTimeTable--cast th:nth-child(3),
+body.gbPrintMobile.gbPrintingCallsheet #gbPrintRoot .callTimeTable--cast td:nth-child(3),
+body.gbPrintMobile.gbPrintingCallsheet #gbPrintRoot .callTimeTable--cast th:nth-child(4),
+body.gbPrintMobile.gbPrintingCallsheet #gbPrintRoot .callTimeTable--cast td:nth-child(4),
+body.gbPrintMobile.gbPrintingCallsheet #gbPrintRoot .callTimeTable--cast th:nth-child(5),
+body.gbPrintMobile.gbPrintingCallsheet #gbPrintRoot .callTimeTable--cast td:nth-child(5){ width:64px !important; }
+
+body.gbPrintMobile.gbPrintingCallsheet #gbPrintRoot .callTimeTable--crew th:nth-child(2),
+body.gbPrintMobile.gbPrintingCallsheet #gbPrintRoot .callTimeTable--crew td:nth-child(2){ width:140px !important; }
+body.gbPrintMobile.gbPrintingCallsheet #gbPrintRoot .callTimeTable--crew th:nth-child(3),
+body.gbPrintMobile.gbPrintingCallsheet #gbPrintRoot .callTimeTable--crew td:nth-child(3),
+body.gbPrintMobile.gbPrintingCallsheet #gbPrintRoot .callTimeTable--crew th:nth-child(4),
+body.gbPrintMobile.gbPrintingCallsheet #gbPrintRoot .callTimeTable--crew td:nth-child(4){ width:64px !important; }
+body.gbPrintMobile.gbPrintingCallsheet #gbPrintRoot .callTimeTable--crew th:nth-child(5),
+body.gbPrintMobile.gbPrintingCallsheet #gbPrintRoot .callTimeTable--crew td:nth-child(5){ width:95px !important; }
+
+body.gbPrintMobile.gbPrintingCallsheet #gbPrintRoot .callCrewArea{ border:1px solid #ddd !important; border-radius:12px !important; padding:8px !important; }
+
+/* ===== Print (fallback también en screen para móviles) ===== */
+body.gbPrintingShotlist *{ visibility:hidden !important; }
+body.gbPrintingShotlist #gbPrintRoot,
+body.gbPrintingShotlist #gbPrintRoot *{ visibility:visible !important; }
+body.gbPrintingShotlist #gbPrintRoot{ display:block !important; position:absolute; left:0; top:0; width:100%; padding:0 !important; margin:0 !important; background:#fff; color:#000; }
+
+body.gbPrintingCallsheet *{ visibility:hidden !important; }
+body.gbPrintingCallsheet #gbPrintRoot,
+body.gbPrintingCallsheet #gbPrintRoot *{ visibility:visible !important; }
+body.gbPrintingCallsheet #gbPrintRoot{ display:block !important; position:absolute; left:0; top:0; width:100%; padding:0 !important; margin:0 !important; background:#fff; color:#000; }
+
+body.gbPrintingElements *{ visibility:hidden !important; }
+body.gbPrintingElements #gbPrintRoot,
+body.gbPrintingElements #gbPrintRoot *{ visibility:visible !important; }
+body.gbPrintingElements #gbPrintRoot{ display:block !important; position:absolute; left:0; top:0; width:100%; padding:0 !important; margin:0 !important; background:#fff; color:#000; }
+
+body.gbPrintingShotlist .muted,
+body.gbPrintingCallsheet .muted,
+body.gbPrintingElements .muted{ color:#333 !important; }
+
+/* Call Sheet print: asegurar contraste aunque el navegador ignore @media print */
+body.gbPrintingCallsheet #gbPrintRoot,
+body.gbPrintingCallsheet #gbPrintRoot *{ color:#000 !important; }
+body.gbPrintingCallsheet #gbPrintRoot .muted{ color:#333 !important; }
+
+body.gbPrintingCallsheet #gbPrintRoot .callSheetPrintPage{
+  width:100% !important;
+  max-width:190mm !important;
+  margin:0 auto !important;
+  box-sizing:border-box;
 }
-body.gbPrintingCallsheet #gbPrintRoot .callTimeDot.green{ border-color:#2ecc71; background: rgba(46,204,113,.18); }
-body.gbPrintingCallsheet #gbPrintRoot .callTimeDot.yellow{ border-color:#f1c40f; background: rgba(241,196,15,.18); }
-body.gbPrintingCallsheet #gbPrintRoot .callTimeDot.red{ border-color:#e74c3c; background: rgba(231,76,60,.18); }
 
-body.gbPrintingCallsheet #gbPrintRoot .callTimeTable td.time.timeDiffDay{ border-left:3px solid #f1c40f !important; }
-body.gbPrintingCallsheet #gbPrintRoot .callTimeTable td.time.timeDiffArea{ border-left:3px solid #e74c3c !important; }
+/* Mobile print: ajustar para A4 sin tener que pedirle A3 al teléfono */
+body.gbPrintMobile.gbPrintingCallsheet #gbPrintRoot{ font-size:10.5pt !important; }
+body.gbPrintMobile.gbPrintingCallsheet #gbPrintRoot .catBlock .items{ font-size:10.5pt !important; }
+body.gbPrintMobile.gbPrintingCallsheet #gbPrintRoot .callTimeTable th,
+body.gbPrintMobile.gbPrintingCallsheet #gbPrintRoot .callTimeTable td{ padding:5px 6px !important; font-size:10pt !important; line-height:1.2; }
+body.gbPrintMobile.gbPrintingCallsheet #gbPrintRoot .callTimeTable--cast th:nth-child(2),
+body.gbPrintMobile.gbPrintingCallsheet #gbPrintRoot .callTimeTable--cast td:nth-child(2){ width:130px !important; }
+body.gbPrintMobile.gbPrintingCallsheet #gbPrintRoot .callTimeTable--cast th:nth-child(3),
+body.gbPrintMobile.gbPrintingCallsheet #gbPrintRoot .callTimeTable--cast td:nth-child(3),
+body.gbPrintMobile.gbPrintingCallsheet #gbPrintRoot .callTimeTable--cast th:nth-child(4),
+body.gbPrintMobile.gbPrintingCallsheet #gbPrintRoot .callTimeTable--cast td:nth-child(4),
+body.gbPrintMobile.gbPrintingCallsheet #gbPrintRoot .callTimeTable--cast th:nth-child(5),
+body.gbPrintMobile.gbPrintingCallsheet #gbPrintRoot .callTimeTable--cast td:nth-child(5){ width:64px !important; }
+body.gbPrintMobile.gbPrintingCallsheet #gbPrintRoot .callTimeTable--crew th:nth-child(3),
+body.gbPrintMobile.gbPrintingCallsheet #gbPrintRoot .callTimeTable--crew td:nth-child(3),
+body.gbPrintMobile.gbPrintingCallsheet #gbPrintRoot .callTimeTable--crew th:nth-child(4),
+body.gbPrintMobile.gbPrintingCallsheet #gbPrintRoot .callTimeTable--crew td:nth-child(4){ width:64px !important; }
+body.gbPrintMobile.gbPrintingCallsheet #gbPrintRoot .callTimeTable--crew th:nth-child(5),
+body.gbPrintMobile.gbPrintingCallsheet #gbPrintRoot .callTimeTable--crew td:nth-child(5){ width:95px !important; }
 
-/* Contraste y look (shotlist) */
-body.gbPrintingShotlist .muted{ color:#333 !important; }
-body.gbPrintingShotlist .shotSceneBox{ background:#fff !important; border:1px solid #ddd !important; }
-body.gbPrintingShotlist .shotSceneHead{ background:#f6f6f6 !important; border-bottom:1px solid #ddd !important; }
+/* Mobile print: contenedores por Área de Crew */
+body.gbPrintMobile.gbPrintingCallsheet #gbPrintRoot .callCrewArea{
+  border:1px solid #ddd !important;
+  border-radius:12px !important;
+  padding:8px 8px 10px !important;
+  margin-top:10px !important;
+  break-inside: avoid;
+  page-break-inside: avoid;
+}
+body.gbPrintMobile.gbPrintingCallsheet #gbPrintRoot .callCrewAreaTitle{ margin-bottom:6px !important; font-weight:900 !important; }
+
+
 
 .shotPrintHeader{ margin-bottom:12px; }
 .shotPrintTitle{ font-weight:950; font-size:18pt; }
@@ -1293,7 +1362,9 @@ body.gbPrintingElements #gbPrintRoot *{ visibility:visible !important; }
 body.gbPrintingElements #gbPrintRoot{ display:block !important; position:absolute; left:0; top:0; width:100%; padding:0 !important; margin:0 !important; }
 
 body.gbPrintingElements{ background:#fff !important; color:#000 !important; }
-body.gbPrintingElements .muted{ color:#333 !important; }  body.gbPrintingCallsheet{ background:#fff !important; color:#000 !important; }
+body.gbPrintingElements .muted{ color:#333 !important; }
+
+  body.gbPrintingCallsheet{ background:#fff !important; color:#000 !important; }
   body.gbPrintingCallsheet .muted{ color:#333 !important; }
 
   body.gbPrintingCallsheet .catBlock{ background:#fff !important; border:1px solid #ddd !important; }
@@ -3159,6 +3230,11 @@ body.gbPrintingElements .muted{ color:#333 !important; }  body.gbPrintingCallshe
   font-weight:900;
 }
 .callTimeTable .mutedCell{ color: var(--muted); }
+
+
+/* Call Sheet: áreas de Crew */
+.callCrewArea{ margin-top:10px; }
+.callCrewAreaTitle{ font-weight:900; margin-bottom:6px; }
 
 
 /* Call Sheet: columnas alineadas (screen + print) */

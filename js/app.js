@@ -3709,12 +3709,6 @@ function renderDayScenesDetail(){
     renderReportsFilters();
     const f = getReportsFilterSet();
     const q = (el("reportsSearch")?.value || "").toLowerCase().trim();
-    const hasQ = !!q;
-
-    const inQ = (s)=>{
-      if(!hasQ) return true;
-      return String(s||"").toLowerCase().includes(q);
-    };
 
     if(!f || f.size === 0){
       board.innerHTML = `<div class="muted">Seleccioná al menos un filtro arriba.</div>`;
@@ -3737,40 +3731,13 @@ function renderDayScenesDetail(){
       const cast = union(scenes.flatMap(s=>s.elements?.cast||[]));
       const pages = scenes.reduce((acc, s)=> acc + (Number(s.pages)||0), 0);
 
-      // Cuando hay búsqueda: NO mostramos áreas/categorías completas.
-      // Mostramos solo ítems que coinciden y, si el match es un elemento, filtramos también las escenas que lo contienen.
-      const scenesByText = !hasQ ? scenes : scenes.filter(s=>{
-        const hay = `${s.number||""} ${s.slugline||""} ${s.location||""} ${s.timeOfDay||""} ${s.summary||""}`.toLowerCase();
-        return hay.includes(q);
-      });
-      const scenesByElement = !hasQ ? scenes : scenes.filter(s=>{
-        for(const cat of cats){
-          const arr = (s.elements?.[cat]||[]);
-          for(const it of arr){
-            if(inQ(it)) return true;
-          }
-        }
-        return false;
-      });
-      const elementQueryHere = hasQ && scenesByElement.length > 0;
-      const scenesForScenesBox = !hasQ ? scenes : (elementQueryHere ? scenesByElement : scenesByText);
-      const castShown = !hasQ ? cast : cast.filter(inQ);
-
       const crewAll = (d.crewIds||[])
         .map(id=>crewById.get(id))
         .filter(Boolean)
         .map(c=>({ ...c, area: normalizeCrewArea(c.area) }))
         .filter(c=>c.area!=="Cast");
 
-      // Importante: NO matchear por área para evitar el bug "encuentra una coincidencia y trae TODO el área".
-      const crewShown = !hasQ
-        ? crewAll
-        : crewAll.filter(c=>{
-            const hay = `${c.name||""} ${c.role||""} ${c.phone||""} ${c.email||""} ${c.notes||""}`.toLowerCase();
-            return hay.includes(q);
-          });
-
-      const grouped = groupCrewByArea(crewShown);
+      const grouped = groupCrewByArea(crewAll);
 
       head.innerHTML = `
         <div class="t">${esc(formatDayTitle(d.date))}${d.label? " · "+esc(d.label):""}</div>
@@ -3788,13 +3755,10 @@ function renderDayScenesDetail(){
       scenesBox.className = "catBlock";
       scenesBox.innerHTML = `
         <div class="hdr"><span class="dot" style="background:var(--cat-props)"></span>Escenas</div>
-        <div class="items">${scenesForScenesBox.length ? scenesForScenesBox.map(s=>`<div>#${esc(s.number)} ${esc(s.slugline)}</div>`).join("") : `<div>—</div>`}</div>
+        <div class="items">${scenes.length ? scenes.map(s=>`<div>#${esc(s.number)} ${esc(s.slugline)}</div>`).join("") : `<div>—</div>`}</div>
       `;
-      if(!hasQ){
-        body.appendChild(scenesBox);
-        shownBlocks++;
-      }
-      else if(scenesForScenesBox.length){
+      const hayScenes = scenes.map(s=>`${s.number||""} ${s.slugline||""}`).join(" ").toLowerCase();
+      if(!q || hayScenes.includes(q)){
         body.appendChild(scenesBox);
         shownBlocks++;
       }
@@ -3805,13 +3769,10 @@ function renderDayScenesDetail(){
       castBox.className = "catBlock";
       castBox.innerHTML = `
         <div class="hdr"><span class="dot" style="background:${catColors.cast}"></span>Cast</div>
-        <div class="items">${castShown.length ? castShown.map(n=>`<div>${esc(n)}</div>`).join("") : `<div>—</div>`}</div>
+        <div class="items">${cast.length ? cast.map(n=>`<div>${esc(n)}</div>`).join("") : `<div>—</div>`}</div>
       `;
-      if(!hasQ){
-        body.appendChild(castBox);
-        shownBlocks++;
-      }
-      else if(castShown.length){
+      const hayCast = cast.join(" ").toLowerCase();
+      if(!q || hayCast.includes(q)){
         body.appendChild(castBox);
         shownBlocks++;
       }
@@ -3824,7 +3785,7 @@ function renderDayScenesDetail(){
       const crewItems = document.createElement("div");
       crewItems.className = "items";
 
-      if(!crewShown.length){
+      if(!crewAll.length){
         crewItems.innerHTML = `<div>—</div>`;
       }else{
         crewItems.innerHTML = grouped.map(([area, arr])=>`
@@ -3837,11 +3798,8 @@ function renderDayScenesDetail(){
         `).join("");
       }
       crewBox.appendChild(crewItems);
-      if(!hasQ){
-        body.appendChild(crewBox);
-        shownBlocks++;
-      }
-      else if(crewShown.length){
+      const hayCrew = crewAll.map(c=>`${c.area||""} ${c.name||""} ${c.role||""}`).join(" ").toLowerCase();
+      if(!q || hayCrew.includes(q)){
         body.appendChild(crewBox);
         shownBlocks++;
       }
@@ -3852,16 +3810,17 @@ function renderDayScenesDetail(){
         if(!f.has(cat)) continue;
         const items = union(scenes.flatMap(s=>s.elements?.[cat]||[]));
         if(!items.length) continue;
-        const itemsShown = !hasQ ? items : items.filter(inQ);
-        if(hasQ && !itemsShown.length) continue;
         const box = document.createElement("div");
         box.className = "catBlock";
         box.innerHTML = `
           <div class="hdr"><span class="dot" style="background:${catColors[cat]}"></span>${esc(catNames[cat])}</div>
-          <div class="items">${itemsShown.map(x=>`<div>${esc(x)}</div>`).join("")}</div>
+          <div class="items">${items.map(x=>`<div>${esc(x)}</div>`).join("")}</div>
         `;
-        body.appendChild(box);
-        shownBlocks++;
+        const hayCat = items.join(" ").toLowerCase();
+        if(!q || hayCat.includes(q)){
+          body.appendChild(box);
+          shownBlocks++;
+        }
       }
 
 
@@ -6064,8 +6023,8 @@ grid.appendChild(cell);
       crewItems.innerHTML = crewGrouped.map(([area, arr])=>{
         const areaBase = baseCrewAreaCall(d, area);
         return `
-        <div style="margin-top:10px;">
-          <div style="font-weight:900; margin-bottom:6px;">${esc(area)}</div>
+        <div class="callCrewArea">
+          <div class="callCrewAreaTitle">${esc(area)}</div>
 
           <table class="callTimeTable callTimeTable--crew">
             <thead>
@@ -6551,8 +6510,15 @@ function renderReportDayplanDetail(d){
     return _gbPrintRoot;
   }
   function cleanupGbPrintRoot(){
-    try{ document.body.classList.remove("gbPrintingShotlist","gbPrintingCallsheet","gbPrintingElements"); }catch(_e){}
+    try{ document.body.classList.remove("gbPrintingShotlist","gbPrintingCallsheet","gbPrintingElements","gbPrintMobile"); }catch(_e){}
     try{ if(_gbPrintRoot) _gbPrintRoot.innerHTML = ""; }catch(_e){}
+  }
+
+  function applyPrintDeviceFlag(){
+    try{
+      const isMobile = !!(window.matchMedia && window.matchMedia("(max-width: 820px)").matches);
+      document.body.classList.toggle("gbPrintMobile", isMobile);
+    }catch(_e){}
   }
 
   function buildShotlistPrintHTML(d){
@@ -6672,8 +6638,9 @@ function renderReportDayplanDetail(d){
     const d = dayId ? getDay(dayId) : null;
     if(!d){ toast("Elegí un día con rodaje"); return; }
     ensureDayTimingMaps(d);
+    applyPrintDeviceFlag();
     const root = ensureGbPrintRoot();
-    root.innerHTML = `<div id="callSheetPrintRoot"></div>`;
+    root.innerHTML = `<div id="callSheetPrintRoot" class="callSheetPrintPage"></div>`;
     const target = root.querySelector("#callSheetPrintRoot");
     renderCallSheetDetail(target, dayId);
     document.body.classList.add("gbPrintingCallsheet");
@@ -6687,6 +6654,7 @@ function renderReportDayplanDetail(d){
     if(!d){ toast("Elegí un día con rodaje"); return; }
     ensureDayTimingMaps(d);
 
+    applyPrintDeviceFlag();
     const root = ensureGbPrintRoot();
     root.innerHTML = buildElementsByScenePrintPage(d, { title: "Elementos por escena" });
 
@@ -6702,6 +6670,7 @@ function printShotlistByDayId(dayId){
     if(!d){ toast("Elegí un día con rodaje"); return; }
     ensureDayTimingMaps(d);
     ensureDayShotsDone(d);
+    applyPrintDeviceFlag();
     const root = ensureGbPrintRoot();
     root.innerHTML = buildShotlistPrintHTML(d);
     document.body.classList.add("gbPrintingShotlist");
