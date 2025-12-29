@@ -6527,14 +6527,38 @@ function renderReportDayplanDetail(d){
     return _gbPrintRoot;
   }
   function cleanupGbPrintRoot(){
-    try{ document.body.classList.remove("gbPrintingShotlist","gbPrintingCallsheet","gbPrintingElements","gbPrintMobile"); }catch(_e){}
+    try{ document.body.classList.remove("gbPrintingShotlist","gbPrintingCallsheet","gbPrintingElements","gbPrintingDayplan","gbPrintMobile"); }catch(_e){}
     try{ if(_gbPrintRoot) _gbPrintRoot.innerHTML = ""; }catch(_e){}
   }
 
   function applyPrintDeviceFlag(){
-    // Queremos que el export/print sea idéntico entre celular y escritorio.
-    // Por eso desactivamos cualquier override "mobile" durante impresión.
+    // Buscamos que el export sea igual en móvil y desktop: sin overrides específicos de móvil.
     try{ document.body.classList.remove("gbPrintMobile"); }catch(_e){}
+  }
+
+  // En algunos móviles (especialmente iOS) window.print() NO bloquea.
+  // Si limpiamos el DOM inmediatamente, termina exportando la vista de pantalla.
+  let _gbPrintCleanupTimer = null;
+  function runPrintJob(fallbackDelayMs=3500){
+    try{ if(_gbPrintCleanupTimer) clearTimeout(_gbPrintCleanupTimer); }catch(_e){}
+    _gbPrintCleanupTimer = null;
+
+    let cleaned = false;
+    const cleanup = ()=>{
+      if(cleaned) return;
+      cleaned = true;
+      try{ clearPrintOrientation(); }catch(_e){}
+      try{ cleanupGbPrintRoot(); }catch(_e){}
+      try{ window.removeEventListener('afterprint', cleanup); }catch(_e){}
+      try{ if(_gbPrintCleanupTimer) clearTimeout(_gbPrintCleanupTimer); }catch(_e){}
+      _gbPrintCleanupTimer = null;
+    };
+
+    try{ window.addEventListener('afterprint', cleanup, { once:true }); }catch(_e){ window.addEventListener('afterprint', cleanup); }
+    try{ _gbPrintCleanupTimer = setTimeout(cleanup, Number(fallbackDelayMs)||3500); }catch(_e){}
+
+    try{ window.print(); }
+    catch(_e){ cleanup(); }
   }
 
   function buildShotlistPrintHTML(d){
@@ -6650,7 +6674,92 @@ function renderReportDayplanDetail(d){
   }
 
   
-  function printCallSheetByDayId(dayId){
+  function buildDayplanPrintHTML(d){
+    ensureDayTimingMaps(d);
+
+    const eattr = (s)=> esc(String(s||"")) .replace(/"/g,"&quot;");
+    const items = buildDayplanItems(d);
+
+    const proj = esc(state.meta?.title || "Proyecto");
+    const dayTxt = `${formatDayTitle(d.date)}${d.label ? " · "+esc(d.label) : ""}`;
+
+    const scenes = (d.sceneIds||[]).map(getScene).filter(Boolean);
+    const pages = scenes.reduce((acc, s)=> acc + (Number(s.pages)||0), 0);
+
+    const base = minutesFromHHMM(d.callTime || "08:00");
+    const snapMin = Number(el("schedSnap")?.value || 15);
+    try{ resolveOverlapsPushDown(d, snapMin); }catch(_e){}
+
+    const rows = items.map((it)=>{
+      const absStart = clamp(base + (it.start||0), 0, DAY_SPAN_MIN - snapMin);
+      const dur = clamp(Math.max(snapMin, it.dur||snapMin), snapMin, DAY_SPAN_MIN);
+      const absEnd = clamp(absStart + dur, 0, DAY_SPAN_MIN);
+      const isNote = it.kind==="block";
+      const num = isNote ? "NOTA" : (it.number||"");
+      const title = isNote ? (it.title||"") : (it.slugline||it.title||"");
+      const ie = isNote ? "" : (it.intExt||"");
+      const locTxt = isNote ? "" : (it.location||"");
+      const todTxt = isNote ? "" : (it.timeOfDay||"");
+      const pagesTxt = isNote ? "" : ((Number(it.pages)||0) > 0 ? fmtPages(it.pages) : "");
+      const sumTxt = isNote ? (it.detail||"") : (it.summary||"");
+      const col = safeHexColor(it.color || (it.kind==="scene" ? "#BFDBFE" : "#E5E7EB"));
+      const bg = hexToRgba(col, isNote ? 0.10 : 0.12);
+      const tA = hhmmFromMinutes(absStart);
+      const tB = hhmmFromMinutes(absEnd);
+      const clockHTML = `<div class="dpClock2"><div>${esc(tA)}</div><div>${esc(tB)}</div></div>`;
+      return `
+  <tr class="${isNote ? "dpPrintNote" : ""}" style="background:${eattr(bg)};border-left:8px solid ${eattr(col)};">
+    <td class="cHour">${clockHTML}</td>
+    <td class="cDur">${esc(formatDurHHMMCompact(dur))}</td>
+    <td class="cNro">${esc(num)}</td>
+    <td class="cTitle">${esc(title)}</td>
+    <td class="cIE">${esc(ie)}</td>
+    <td class="cLoc">${esc(locTxt)}</td>
+    <td class="cTod">${esc(todTxt)}</td>
+    <td class="cPag">${esc(pagesTxt)}</td>
+    <td class="cSum">${esc(sumTxt)}</td>
+  </tr>`;
+    }).join("");
+
+    return `
+      <div class="catBlock">
+        <div class="hdr"><span class="dot" style="background:var(--cat-vehicles)"></span>Plan de Rodaje</div>
+        <div class="items">
+          <div><b>${proj}</b> · ${dayTxt}</div>
+          <div><b>Call:</b> ${esc(d.callTime||"")} &nbsp; <b>Locación:</b> ${esc(d.location||"")}</div>
+          <div class="kpiRow" style="margin-top:10px;">
+            <span class="kpi"><b>${scenes.length}</b> escenas</span>
+            <span class="kpi"><b>${esc(fmtPages(pages))}</b> pág</span>
+          </div>
+        </div>
+        <div class="items">
+          <table class="dayplanPrintTable">
+            <colgroup>
+              <col class="colHour"><col class="colDur"><col class="colNro"><col class="colTitle">
+              <col class="colIE"><col class="colLoc"><col class="colTod"><col class="colPag"><col class="colSum">
+            </colgroup>
+            <thead><tr><th>Hora</th><th>Dur</th><th>Nro</th><th>Título</th><th>I/E</th><th>Locación</th><th>Momento</th><th>Largo (Pág)</th><th>Resumen</th></tr></thead>
+            <tbody>${rows || `<tr><td colspan="9" class="muted">—</td></tr>`}</tbody>
+          </table>
+        </div>
+      </div>
+    `;
+  }
+
+  function printDayplanByDayId(dayId){
+    const d = dayId ? getDay(dayId) : null;
+    if(!d){ toast("Elegí un día con rodaje"); return; }
+    ensureDayTimingMaps(d);
+    applyPrintDeviceFlag();
+    const root = ensureGbPrintRoot();
+    root.innerHTML = buildDayplanPrintHTML(d);
+    document.body.classList.add("gbPrintingDayplan");
+    setPrintOrientation("landscape");
+    runPrintJob();
+  }
+
+  
+function printCallSheetByDayId(dayId){
     const d = dayId ? getDay(dayId) : null;
     if(!d){ toast("Elegí un día con rodaje"); return; }
     ensureDayTimingMaps(d);
@@ -6662,7 +6771,7 @@ function renderReportDayplanDetail(d){
     document.body.classList.add("gbPrintingCallsheet");
     // Menos margen para que arranque más arriba
     setPrintOrientation("portrait", 6);
-    try{ window.print(); } finally { clearPrintOrientation(); cleanupGbPrintRoot(); }
+    runPrintJob();
   }
 
   function printElementsByDayId(dayId){
@@ -6676,7 +6785,7 @@ function renderReportDayplanDetail(d){
 
     document.body.classList.add("gbPrintingElements");
     setPrintOrientation("portrait", 6);
-    try{ window.print(); } finally { clearPrintOrientation(); cleanupGbPrintRoot(); }
+    runPrintJob();
   }
 
 
@@ -6691,7 +6800,7 @@ function printShotlistByDayId(dayId){
     root.innerHTML = buildShotlistPrintHTML(d);
     document.body.classList.add("gbPrintingShotlist");
     setPrintOrientation("portrait");
-    try{ window.print(); } finally { clearPrintOrientation(); cleanupGbPrintRoot(); }
+    runPrintJob();
   }
 
   // Bank collapse
@@ -6875,7 +6984,7 @@ el("btnDayplanAddNote")?.addEventListener("click", addDayplanNote);
       renderReportsDetail();
       renderReports();
     });
-    el("btnDayplanPrint")?.addEventListener("click", ()=>{ setPrintOrientation("landscape"); window.print(); });
+    el("btnDayplanPrint")?.addEventListener("click", ()=>{ printDayplanByDayId(selectedDayplanDayId || selectedDayId || state.shootDays?.[0]?.id || null); });
     el("dayplanSnap")?.addEventListener("change", ()=> renderDayPlan());
 
     // Número de escena: no permitimos duplicados (si chocan, auto 6A/6B…)
@@ -7364,8 +7473,7 @@ el("scriptVerSelect")?.addEventListener("change", ()=>{
         printElementsByDayId(getReportsSelectedDayId());
         return;
       }
-      setPrintOrientation("landscape");
-      window.print();
+      printDayplanByDayId(getReportsSelectedDayId());
     });
     window.addEventListener("afterprint", ()=>{ clearPrintOrientation(); cleanupGbPrintRoot(); });
 
