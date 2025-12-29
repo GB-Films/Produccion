@@ -6532,10 +6532,9 @@ function renderReportDayplanDetail(d){
   }
 
   function applyPrintDeviceFlag(){
-    try{
-      const isMobile = !!(window.matchMedia && window.matchMedia("(max-width: 820px)").matches);
-      document.body.classList.toggle("gbPrintMobile", isMobile);
-    }catch(_e){}
+    // Queremos que el export/print sea idéntico entre celular y escritorio.
+    // Por eso desactivamos cualquier override "mobile" durante impresión.
+    try{ document.body.classList.remove("gbPrintMobile"); }catch(_e){}
   }
 
   function buildShotlistPrintHTML(d){
