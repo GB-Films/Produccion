@@ -78,6 +78,23 @@
   let selectedSceneId = null;
   let selectedDayId = null;
   let callSheetDayId = null;
+
+  // Mantener el "día foco" sincronizado entre Call Diario / Plan de Rodaje / Shotlist / Reportes.
+  function syncAllDaySelections(id){
+    if(!id) return;
+    selectedDayId = id;
+    selectedDayplanDayId = id;
+    selectedShotlistDayId = id;
+    callSheetDayId = id;
+
+    // Sync selects if present
+    try{
+      const a = el("shootDaySelect"); if(a) a.value = id;
+      const b = el("dayplanSelect"); if(b) b.value = id;
+      const c = el("shotDaySelect"); if(c) c.value = id;
+    }catch(_e){}
+  }
+
   let selectedShotlistDayId = null;
   let selectedDayplanDayId = null;
   let dayDetailOpenSceneKeys = new Set();
@@ -5423,9 +5440,15 @@ function renderShotList(){
     if(!sel.dataset.bound){
       sel.dataset.bound = "1";
       sel.addEventListener("change", ()=>{
-        selectedShotlistDayId = sel.value;
-        renderShotList();
-      });
+          const id = sel.value;
+          selectedShotlistDayId = id;
+          syncAllDaySelections(id);
+          renderShotList();
+          try{ renderDayDetail(); }catch(_e){}
+          try{ renderDayPlan(); }catch(_e){}
+          try{ renderCallSheetCalendar(); }catch(_e){}
+          try{ renderReportsDetail(); }catch(_e){}
+        });
     }
     if(btnPrint && !btnPrint.dataset.bound){
       btnPrint.dataset.bound = "1";
@@ -5697,7 +5720,7 @@ grid.appendChild(cell);
     wrap.appendChild(header);
 
     const snapMin = Number(el("schedSnap")?.value || 15);
-    resolveOverlapsPushDown(d, snapMin);
+    try{ resolveOverlapsPushDown(d, snapMin); }catch(e){ console.warn('CallSheet overlaps:', e); }
 
     const scenesBox = document.createElement("div");
     scenesBox.className = "catBlock callScenes";
@@ -5706,7 +5729,8 @@ grid.appendChild(cell);
     list.className = "items";
 
     const timeline = [];
-    for(const sid of (d.sceneIds||[])){
+    try{
+      for(const sid of (d.sceneIds||[])){
       const s = getScene(sid);
       if(!s) continue;
       timeline.push({
@@ -5736,6 +5760,7 @@ grid.appendChild(cell);
       });
     }
     timeline.sort((a,b)=> (a.start||0) - (b.start||0));
+    }catch(e){ console.warn('CallSheet timeline:', e); }
 
     if(!timeline.length){
       list.innerHTML = `<div>—</div>`;
@@ -5762,13 +5787,13 @@ grid.appendChild(cell);
     castBox.innerHTML = `
       <div class="hdr"><span class="dot" style="background:${catColors.cast}"></span>Cast</div>
       <div class="items">
-        <table class="callTimeTable csCast">
+        <table class="callTimeTable callTimeTable--cast">
           <thead>
             <tr>
               <th>Nombre</th>
-              <th>PU</th>
-              <th>Call</th>
-              <th>RTS</th>
+              <th class="time">PU</th>
+              <th class="time">Call</th>
+              <th class="time">RTS</th>
             </tr>
           </thead>
           <tbody>
@@ -5801,13 +5826,13 @@ grid.appendChild(cell);
         <div style="margin-top:10px;">
           <div style="font-weight:900; margin-bottom:6px;">${esc(area)}</div>
 
-          <table class="callTimeTable csCrew">
+          <table class="callTimeTable callTimeTable--crew">
             <thead>
               <tr>
                 <th>Nombre</th>
                 <th>Rol</th>
-                <th>PU</th>
-                <th>Call</th>
+                <th class="time">PU</th>
+                <th class="time">Call</th>
                 <th>Tel</th>
               </tr>
             </thead>
@@ -6377,20 +6402,15 @@ function renderReportDayplanDetail(d){
   }
 
   function getReportsSelectedDayId(){
-    const candidates = [
-      callSheetDayId,
-      selectedDayId,
-      selectedShotlistDayId,
-      selectedDayplanDayId,
-      (state?.shootDays?.[0]?.id || null)
-    ].filter(Boolean);
+    // Prefer a valid focused day. If stored IDs point to deleted days, ignore them.
+    const exists = (id)=> !!(id && getDay(id));
+    if(!exists(callSheetDayId)) callSheetDayId = null;
+    if(!exists(selectedDayId)) selectedDayId = null;
+    if(!exists(selectedShotlistDayId)) selectedShotlistDayId = null;
+    if(!exists(selectedDayplanDayId)) selectedDayplanDayId = null;
 
-    for(const id of candidates){
-      try{ if(getDay(id)) return id; }catch(_e){}
-    }
-    return null;
+    return (callSheetDayId || selectedDayId || selectedShotlistDayId || selectedDayplanDayId || (state.shootDays?.[0]?.id || null));
   }
-
 
   
   function printCallSheetByDayId(dayId){
