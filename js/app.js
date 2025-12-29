@@ -319,15 +319,35 @@
     if(syncReady) autosyncDebounced();
   }
 
-  const autosyncDebounced = window.U.debounce(async ()=>{
+  // ======= Autosync robusto (evita pisadas por respuestas tardías) =======
+  // Bug que te estaba pegando: si un PUT viejo termina después, guardaba un "stamp"
+  // más nuevo del que realmente quedó en JSONBin, y el próximo sync interpretaba
+  // eso como "cambio remoto" y te pisaba el último cambio.
+  let autosyncInFlight = false;
+  let autosyncPending = false;
+
+  async function autosyncRun(){
+    if(autosyncInFlight){
+      autosyncPending = true;
+      return;
+    }
+    autosyncInFlight = true;
+    autosyncPending = false;
+
     const cfg = StorageLayer.loadCfg();
-    if(!cfg.binId || !cfg.accessKey) return;
+    if(!cfg.binId || !cfg.accessKey){
+      autosyncInFlight = false;
+      return;
+    }
 
     // Regla de oro: nunca empujar si no pudimos traer el remoto al menos una vez en esta sesión.
     // Esto evita el caso "abrí después de días y pisé todo".
     if(!sessionPulledRemote){
       await initRemoteSync();
-      if(!sessionPulledRemote) return; // seguimos sin remoto (offline/bloqueado)
+      if(!sessionPulledRemote){
+        autosyncInFlight = false;
+        return; // seguimos sin remoto (offline/bloqueado)
+      }
     }
 
     try{
@@ -371,14 +391,26 @@
         }
       }
 
-      await StorageLayer.jsonbinPut(cfg.binId, cfg.accessKey, state);
-      lastRemoteStamp = String(state?.meta?.updatedAt || "");
+      // IMPORTANTÍSIMO: pusheamos un snapshot coherente y guardamos el stamp del snapshot,
+      // no el de "lo que sea" que quedó en state cuando la request vuelve.
+      const snapshot = JSON.parse(JSON.stringify(state));
+      const pushStamp = String(snapshot?.meta?.updatedAt || "");
+      await StorageLayer.jsonbinPut(cfg.binId, cfg.accessKey, snapshot);
+      lastRemoteStamp = pushStamp;
       StorageLayer.setRemoteStamp(cfg.binId, lastRemoteStamp);
       updateSyncPill("JSONBin");
     }catch{
       updateSyncPill("Local");
+    }finally{
+      autosyncInFlight = false;
+      if(autosyncPending){
+        // Reintento rápido para empujar el último estado (sin obligarte a esperar).
+        setTimeout(()=>autosyncRun(), 250);
+      }
     }
-  }, 900);
+  }
+
+  const autosyncDebounced = window.U.debounce(autosyncRun, 900);
 
   function updateSyncPill(mode){
     const p = el("syncPill");
