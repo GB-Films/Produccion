@@ -231,6 +231,22 @@
       collapsed = !collapsed;
       apply(collapsed);
     });
+
+    // En modo colapsado: se expande clickeando las iniciales del proyecto (sin flechita)
+    try{
+      if(pill){
+        pill.setAttribute("role","button");
+        pill.setAttribute("tabindex","0");
+        const toggle = ()=>{ collapsed = !collapsed; apply(collapsed); };
+        pill.addEventListener("click", toggle);
+        pill.addEventListener("keydown", (e)=>{
+          if(e.key==="Enter" || e.key===" "){
+            e.preventDefault();
+            toggle();
+          }
+        });
+      }
+    }catch(_e){}
   }
 
 
@@ -5103,6 +5119,21 @@ return `
         dayplanSelectedKey = key;
         dayplanPaletteKey = null;
         renderDayPlan();
+      });
+
+      // Doble click en una escena: ir directo al Breakdown de esa escena
+      lane.addEventListener("dblclick", (e)=>{
+        const block = e.target?.closest?.(".dpBlock");
+        if(!block) return;
+        if(block.dataset.kind !== "scene") return;
+        if(e.target?.closest?.("[data-action]")) return;
+        const id = block.dataset.id;
+        if(!id) return;
+        selectedSceneId = id;
+        showView("breakdown");
+        renderScenesTable();
+        renderSceneEditor();
+        renderShotsEditor();
       });
 
       // Drag / resize
