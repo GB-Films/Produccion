@@ -83,6 +83,58 @@ body{
   grid-template-columns: 280px 1fr;
 }
 
+/* ===================== Sidebar colapsable + íconos ===================== */
+.brandTop{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:10px;
+  margin-bottom:10px;
+}
+.projPill{
+  display:none;
+  width:42px;
+  height:42px;
+  border-radius:14px;
+  border:1px solid var(--border);
+  background: rgba(var(--accent-rgb), .14);
+  color: var(--text);
+  font-weight:950;
+  letter-spacing:.02em;
+  align-items:center;
+  justify-content:center;
+}
+
+.navBtn{
+  display:flex;
+  align-items:center;
+  gap:10px;
+}
+.navIco{
+  width:28px;
+  height:28px;
+  border-radius:10px;
+  border:1px solid var(--border);
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  font-size:14px;
+  background: rgba(255,255,255,.02);
+  flex:0 0 auto;
+}
+.navLbl{ min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+
+.shell.navCollapsed{ grid-template-columns: 86px 1fr; }
+.shell.navCollapsed .sidebar{ padding:12px 10px; }
+.shell.navCollapsed .brand{ padding:12px 10px; }
+.shell.navCollapsed .titleInput,
+.shell.navCollapsed .projectSwitch{ display:none; }
+.shell.navCollapsed .projPill{ display:flex; }
+
+.shell.navCollapsed .navBtn{ justify-content:center; padding:10px 8px; }
+.shell.navCollapsed .navLbl{ display:none; }
+.shell.navCollapsed .navIco{ width:44px; height:44px; border-radius:16px; font-size:18px; }
+
 .sidebar{
   padding:14px;
   border-right:1px solid var(--border);
@@ -566,6 +618,63 @@ tr.groupRow td{
 .callGroupRow .lbl{ font-weight:900; opacity:.92; min-width:78px; }
 
 .callPeopleList{ display:flex; flex-direction:column; gap:8px; }
+
+/* Call Diario: stack de horarios (CALL / PU / RTS) */
+.callPersonCard{
+  border:1px solid var(--border);
+  border-radius:16px;
+  padding:10px 12px;
+  background: rgba(255,255,255,.02);
+}
+.callPersonCard .nameRow{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:10px;
+}
+.callPersonCard .nameRow .left{
+  display:flex;
+  align-items:center;
+  gap:10px;
+  min-width:0;
+}
+.callPersonCard .nameRow .title{ font-weight:900; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.callPersonCard .dot{ width:10px; height:10px; border-radius:999px; flex:0 0 auto; }
+
+.timeStack{
+  display:flex;
+  flex-direction:column;
+  gap:6px;
+  margin-top:8px;
+}
+.timeLine{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:8px;
+}
+.timeLine .k{
+  font-size:12px;
+  color: var(--muted);
+  font-weight:900;
+  letter-spacing:.02em;
+  width:46px;
+  flex:0 0 auto;
+}
+.timeLine .timeInput{ width:120px; }
+
+.callExtrasRow{
+  display:flex;
+  flex-wrap:wrap;
+  align-items:center;
+  gap:8px;
+  margin-top:10px;
+}
+.callExtrasRow .miniLbl{ font-size:12px; color: var(--muted); font-weight:900; letter-spacing:.02em; margin-right:2px; }
+
+.crewTimeStack{ display:flex; flex-direction:column; align-items:flex-end; gap:6px; }
+.crewTimeStack .timeLine{ width:100%; justify-content:flex-end; }
+.crewTimeStack .timeLine .k{ width:46px; text-align:right; }
 .callPersonRow{
   border:1px solid var(--border);
   border-radius:16px;
@@ -591,54 +700,6 @@ tr.groupRow td{
 .btn.icon.small{ width:34px; height:34px; border-radius:12px; padding:0; display:flex; align-items:center; justify-content:center; }
 .timeDiffDay{ background: rgba(255, 208, 0, .18) !important; border-color: rgba(255, 208, 0, .55) !important; }
 .timeDiffArea{ background: rgba(255, 92, 92, .18) !important; border-color: rgba(255, 92, 92, .55) !important; }
-
-
-/* Call Sheet: tabla de tiempos (PU / Call / RTS) */
-.callTimeTable{
-  width:100%;
-  border-collapse:collapse;
-  table-layout:fixed;
-  font-size:13px;
-}
-.callTimeTable th,
-.callTimeTable td{
-  border:1px solid rgba(255,255,255,.10);
-  padding:6px 8px;
-  vertical-align:middle;
-}
-.callTimeTable thead th{
-  background: rgba(255,255,255,.04);
-  font-weight:900;
-}
-.callTimeTable td.name{ font-weight:900; }
-.callTimeTable td.time,
-.callTimeTable th.time{
-  text-align:center;
-  white-space:nowrap;
-  font-variant-numeric: tabular-nums;
-}
-
-.callTimeTable--cast th:nth-child(2),
-.callTimeTable--cast th:nth-child(3),
-.callTimeTable--cast th:nth-child(4){ width:78px; }
-
-.callTimeTable--crew th:nth-child(1){ width:28%; }
-.callTimeTable--crew th:nth-child(2){ width:26%; }
-.callTimeTable--crew th:nth-child(3){ width:72px; }
-.callTimeTable--crew th:nth-child(4){ width:72px; }
-.callTimeTable--crew th:nth-child(5){ width:98px; }
-
-/* Print: mantener colores y alinear tablas */
-body.gbPrintingCallsheet{ -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-body.gbPrintingCallsheet .callTimeTable th,
-body.gbPrintingCallsheet .callTimeTable td{
-  border:1px solid #ddd !important;
-  color:#111 !important;
-}
-body.gbPrintingCallsheet .callTimeTable thead th{
-  background:#f2f2f2 !important;
-  color:#111 !important;
-}
 .callBadge{ font-size:11px; padding:4px 8px; border-radius:999px; border:1px solid var(--border); background: rgba(255,255,255,.03); color: var(--muted); white-space:nowrap; }
 .callBadge.ok{ border-color: rgba(var(--ok-rgb),.55); color: rgba(var(--ok-rgb),.95); background: rgba(var(--ok-rgb),.06); }
 .callBadge.off{ border-color: rgba(255,92,92,.45); }
@@ -653,8 +714,8 @@ body.gbPrintingCallsheet .callTimeTable thead th{
 .crewAreaHeaderRow .areaCallCtl{ display:flex; align-items:center; gap:8px; flex-wrap:wrap; justify-content:flex-end; }
 .crewAreaHeaderRow .areaCallCtl .timeInput{ width:110px; }
 
-.crewPickItem .right{ display:flex; flex-direction:row; align-items:center; gap:8px; }
-.crewPickItem .right .timeInput{ width:110px; }
+.crewPickItem .right{ display:flex; flex-direction:column; align-items:flex-end; gap:6px; }
+.crewPickItem .right .timeInput{ width:120px; }
 .crewPickItem .right input[disabled]{ opacity:.45; }
 
 @media (max-width: 520px){
@@ -1200,6 +1261,22 @@ body.gbPrintingElements .muted{ color:#333 !important; }  body.gbPrintingCallshe
 
   /* Crew: sin espacio antes del primer área */
   body.gbPrintingCallsheet #gbPrintRoot .callCrew .items > div:first-child{ margin-top:0 !important; }
+
+  /* Call Sheet: tablas PU / Call / RTS legibles en impresión */
+  body.gbPrintingCallsheet .callTimeTable{
+    background:#fff !important;
+    border-color:#ddd !important;
+  }
+  body.gbPrintingCallsheet .callTimeTable thead{ display: table-header-group !important; }
+  body.gbPrintingCallsheet .callTimeTable th{
+    color:#111 !important;
+    background:#f6f6f6 !important;
+    border-bottom:1px solid #ddd !important;
+  }
+  body.gbPrintingCallsheet .callTimeTable td{
+    color:#000 !important;
+    border-bottom:1px solid #ddd !important;
+  }
 
   /* Semáforo de call times (crew / cast) */
   body.gbPrintingCallsheet #gbPrintRoot .callTimeDot{
@@ -2949,4 +3026,62 @@ body.gbPrintingElements .muted{ color:#333 !important; }  body.gbPrintingCallshe
   #dayplanCard .cardContent{
     padding:0 !important;
   }
+}
+
+
+/* Call Sheet: columnas PU / Call / RTS */
+.callTimeTable{
+  width:100%;
+  border-collapse:separate;
+  border-spacing:0;
+  border:1px solid var(--border);
+  border-radius:14px;
+  overflow:hidden;
+  background: rgba(255,255,255,.02);
+}
+.callTimeTable th,
+.callTimeTable td{
+  padding:8px 10px;
+  border-bottom:1px solid rgba(255,255,255,.06);
+  vertical-align:top;
+}
+.callTimeTable th{
+  font-size:12px;
+  color: var(--muted);
+  font-weight:950;
+  letter-spacing:.02em;
+  text-align:left;
+}
+.callTimeTable tr:last-child td{ border-bottom:none; }
+.callTimeTable td.time{
+  white-space:nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.callTimeTable td.name{
+  font-weight:900;
+}
+.callTimeTable .mutedCell{ color: var(--muted); }
+
+
+/* Call Sheet: columnas alineadas (screen + print) */
+.callTimeTable{
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+.callTimeTable th.time, .callTimeTable td.time{
+  text-align:center;
+  white-space:nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.callTimeTable--cast th:nth-child(2), .callTimeTable--cast td:nth-child(2),
+.callTimeTable--cast th:nth-child(3), .callTimeTable--cast td:nth-child(3),
+.callTimeTable--cast th:nth-child(4), .callTimeTable--cast td:nth-child(4){
+  width:78px;
+}
+.callTimeTable--crew th:nth-child(3), .callTimeTable--crew td:nth-child(3),
+.callTimeTable--crew th:nth-child(4), .callTimeTable--crew td:nth-child(4){
+  width:78px;
+}
+.callTimeTable--crew th:nth-child(5), .callTimeTable--crew td:nth-child(5){
+  width:120px;
 }
