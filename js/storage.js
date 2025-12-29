@@ -87,7 +87,16 @@ window.StorageLayer = (function(){
 
   async function jsonbinGet(binId, accessKey){
     const res = await fetch(`https://api.jsonbin.io/v3/b/${encodeURIComponent(binId)}/latest`, {
-      headers: { "X-Access-Key": accessKey }
+      method: "GET",
+      mode: "cors",
+      credentials: "omit",
+      cache: "no-store",
+      headers: {
+        "Accept": "application/json",
+        "X-Access-Key": accessKey,
+        "Cache-Control": "no-cache",
+        "Pragma": "no-cache"
+      }
     });
     if(!res.ok) throw new Error(`JSONBin GET failed: ${res.status}`);
     const data = await res.json();
@@ -97,8 +106,12 @@ window.StorageLayer = (function(){
   async function jsonbinPut(binId, accessKey, record){
     const res = await fetch(`https://api.jsonbin.io/v3/b/${encodeURIComponent(binId)}`, {
       method:"PUT",
+      mode: "cors",
+      credentials: "omit",
+      cache: "no-store",
       headers:{
         "Content-Type":"application/json",
+        "Accept": "application/json",
         "X-Access-Key": accessKey
       },
       body: JSON.stringify(record)

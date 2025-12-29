@@ -554,8 +554,17 @@
         }
       }
     }catch(err){
-      // Offline or blocked: stay local
+      // Offline / bloqueado (muy común en webviews mobile o con bloqueadores)
       updateSyncPill("Local");
+      try{
+        if(!initRemoteSync._warned){
+          initRemoteSync._warned = true;
+          // Solo avisamos una vez por sesión para no molestar.
+          const isNarrow = (typeof window !== "undefined" && window.matchMedia) ? window.matchMedia("(max-width: 860px)").matches : false;
+          const extra = isNarrow ? " (probá abrir en el navegador completo)" : "";
+          toast("No pude conectar con JSONBin, estoy en modo Local" + extra);
+        }
+      }catch(_e){}
     }finally{
       syncReady = true;
       initRemoteSync._running = false;

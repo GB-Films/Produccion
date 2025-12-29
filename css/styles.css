@@ -1240,13 +1240,8 @@ body.gbPrintingCallsheet #gbPrintRoot .callSheetPrintPage{ width:100% !important
 
 body.gbPrintingCallsheet .callTimeTable{ background:#fff !important; border-color:#ddd !important; }
 body.gbPrintingCallsheet .callTimeTable thead{ display: table-header-group !important; }
-body.gbPrintingCallsheet .callTimeTable th{ color:#111 !important; background:#f6f6f6 !important; border-bottom:1px solid #ddd !important; font-weight:900 !important; }
+body.gbPrintingCallsheet .callTimeTable th{ color:#111 !important; background:#f6f6f6 !important; border-bottom:1px solid #ddd !important; }
 body.gbPrintingCallsheet .callTimeTable td{ color:#000 !important; border-bottom:1px solid #ddd !important; }
-
-/* Mobile print Call Sheet: stackear Escenas + Cast (100% ancho) aunque el browser imprima el DOM visible */
-body.gbPrintMobile.gbPrintingCallsheet #callSheetDetail{ grid-template-columns: 1fr !important; }
-body.gbPrintMobile.gbPrintingCallsheet #callSheetDetail .callScenes,
-body.gbPrintMobile.gbPrintingCallsheet #callSheetDetail .callCast{ grid-column: 1 / -1 !important; }
 
 /* Mobile print: todo entra en A4 */
 body.gbPrintMobile.gbPrintingCallsheet #gbPrintRoot{ font-size:10.5pt !important; }
@@ -1337,17 +1332,6 @@ body.gbPrintMobile.gbPrintingCallsheet #gbPrintRoot .callCrewArea{
 }
 body.gbPrintMobile.gbPrintingCallsheet #gbPrintRoot .callCrewAreaTitle{ margin-bottom:6px !important; font-weight:900 !important; }
 
-/* Mobile print (Call Sheet): Escenas full-width y Cast debajo, full-width.
-   Esto corrige cuando el navegador móvil imprime el layout de pantalla (grid 2 columnas). */
-body.gbPrintMobile.gbPrintingCallsheet #callSheetDetail{
-  grid-template-columns: 1fr !important;
-}
-body.gbPrintMobile.gbPrintingCallsheet #callSheetDetail .callScenes,
-body.gbPrintMobile.gbPrintingCallsheet #callSheetDetail .callCast{
-  grid-column: 1 / -1 !important;
-  width:100% !important;
-}
-
 
 
 .shotPrintHeader{ margin-bottom:12px; }
@@ -1428,7 +1412,6 @@ body.gbPrintingElements .muted{ color:#333 !important; }
     color:#111 !important;
     background:#f6f6f6 !important;
     border-bottom:1px solid #ddd !important;
-    font-weight:900 !important;
   }
   body.gbPrintingCallsheet .callTimeTable td{
     color:#000 !important;
