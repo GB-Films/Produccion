@@ -2746,19 +2746,27 @@ function renderDayScenesDetail(){
         </div>
         <div class="callExtrasRow">
           <div class="callExtraLine">
-            <span class="miniLbl">PU Cast</span>
-            <span class="chip toggle ${d.pickupCastEnabled ? "active" : ""}" id="tglPUCast">PU</span>
-            <span class="miniLbl">Offset</span>
-            <input type="number" class="input compact" id="puCastOffset" style="width:88px" value="${Math.round(Number(d.pickupCastOffsetMin ?? -30))}" ${d.pickupCastEnabled ? "" : "disabled"}/>
-            <button class="btn icon ghost small" id="puCastReset" title="Reset PU Cast a default">↺</button>
+            <div class="left">
+              <span class="miniLbl">PU Cast</span>
+              <span class="chip toggle ${d.pickupCastEnabled ? "active" : ""}" id="tglPUCast">PU</span>
+            </div>
+            <div class="right">
+              <span class="miniLbl">Offset</span>
+              <input type="number" class="input compact" id="puCastOffset" style="width:88px" value="${Math.round(Number(d.pickupCastOffsetMin ?? -30))}" ${d.pickupCastEnabled ? "" : "disabled"}/>
+              <button class="btn icon ghost small" id="puCastReset" title="Reset PU Cast a default">↺</button>
+            </div>
           </div>
 
           <div class="callExtraLine">
-            <span class="miniLbl">RTS</span>
-            <span class="chip toggle ${d.rtsEnabled ? "active" : ""}" id="tglRTS">RTS</span>
-            <span class="miniLbl">Offset</span>
-            <input type="number" class="input compact" id="rtsOffset" style="width:88px" value="${Math.round(Number(d.rtsOffsetMin ?? DEF_RTS))}" ${d.rtsEnabled ? "" : "disabled"}/>
-            <button class="btn icon ghost small" id="rtsReset" title="Reset RTS a default del proyecto">↺</button>
+            <div class="left">
+              <span class="miniLbl">RTS</span>
+              <span class="chip toggle ${d.rtsEnabled ? "active" : ""}" id="tglRTS">RTS</span>
+            </div>
+            <div class="right">
+              <span class="miniLbl">Offset</span>
+              <input type="number" class="input compact" id="rtsOffset" style="width:88px" value="${Math.round(Number(d.rtsOffsetMin ?? DEF_RTS))}" ${d.rtsEnabled ? "" : "disabled"}/>
+              <button class="btn icon ghost small" id="rtsReset" title="Reset RTS a default del proyecto">↺</button>
+            </div>
           </div>
         </div>
       `;
@@ -2868,51 +2876,51 @@ function renderDayScenesDetail(){
 
 
         const card = document.createElement("div");
-        card.className = "callPersonCard";
+        card.className = "callPersonRow";
         card.innerHTML = `
-          <div class="nameRow">
-            <div class="left">
-              <div class="dot" style="${dotStyle}"></div>
-              <div class="txt">
-                <div class="title">${escapeHtml(name)}</div>
-                ${castMeta ? '<div class="meta">'+escapeHtml(castMeta)+'</div>' : ''}
-              </div>
+          <div class="left">
+            <div class="dot" style="${dotStyle}"></div>
+            <div class="txt" style="min-width:0;">
+              <div class="title">${escapeHtml(name)}</div>
+              ${castMeta ? '<div class="meta">'+escapeHtml(castMeta)+'</div>' : ''}
             </div>
           </div>
 
-          <div class="timeStack">
-            <div class="timeLine">
-              <div class="k">CALL</div>
-              <div style="display:flex; gap:6px; align-items:center;">
-                <input type="time" class="input timeInput ${callIsOv ? "timeDiffDay" : ""}" value="${call}"/>
-                <button class="btn icon ghost small" title="Reset CALL">↺</button>
+          <div class="right" style="min-width:0;">
+            <div class="crewTimeStack">
+              <div class="timeLine">
+                <div class="k">CALL</div>
+                <div style="display:flex; gap:6px; align-items:center; justify-content:flex-end;">
+                  <input type="time" class="input timeInput ${callIsOv ? "timeDiffDay" : ""}" value="${call}" data-kind="call"/>
+                  <button class="btn icon ghost small" title="Reset CALL" data-kind="callReset">↺</button>
+                </div>
               </div>
+
+              ${d.pickupCastEnabled ? `
+                <div class="timeLine">
+                  <div class="k">PU</div>
+                  <div style="display:flex; gap:6px; align-items:center; justify-content:flex-end;">
+                    <input type="time" class="input timeInput ${puIsOv ? "timeDiffDay" : ""}" value="${pu}" data-kind="pu"/>
+                    <button class="btn icon ghost small" title="Reset PU" data-kind="puReset">↺</button>
+                  </div>
+                </div>
+              ` : ""}
+
+              ${d.rtsEnabled ? `
+                <div class="timeLine">
+                  <div class="k">RTS</div>
+                  <div style="display:flex; gap:6px; align-items:center; justify-content:flex-end;">
+                    <input type="time" class="input timeInput ${rtsIsOv ? "timeDiffDay" : ""}" value="${rts}" data-kind="rts"/>
+                    <button class="btn icon ghost small" title="Reset RTS" data-kind="rtsReset">↺</button>
+                  </div>
+                </div>
+              ` : ""}
             </div>
-
-            ${d.pickupCastEnabled ? `
-              <div class="timeLine">
-                <div class="k">PU</div>
-                <div style="display:flex; gap:6px; align-items:center;">
-                  <input type="time" class="input timeInput ${puIsOv ? "timeDiffDay" : ""}" value="${pu}"/>
-                  <button class="btn icon ghost small" title="Reset PU">↺</button>
-                </div>
-              </div>
-            ` : ""}
-
-            ${d.rtsEnabled ? `
-              <div class="timeLine">
-                <div class="k">RTS</div>
-                <div style="display:flex; gap:6px; align-items:center;">
-                  <input type="time" class="input timeInput ${rtsIsOv ? "timeDiffDay" : ""}" value="${rts}"/>
-                  <button class="btn icon ghost small" title="Reset RTS">↺</button>
-                </div>
-              </div>
-            ` : ""}
           </div>
         `;
 
-        const callInput = card.querySelectorAll("input[type=time]")[0];
-        const callReset = card.querySelectorAll("button")[0];
+        const callInput = card.querySelector('input[data-kind="call"]');
+        const callReset = card.querySelector('button[data-kind="callReset"]');
 
         callInput.addEventListener("change", ()=>{
           const v = normalizeHHMM(callInput.value);
@@ -2934,8 +2942,8 @@ function renderDayScenesDetail(){
 
         // PU
         if(d.pickupCastEnabled){
-          const puInput = card.querySelectorAll("input[type=time]")[1];
-          const puReset = card.querySelectorAll("button")[1];
+          const puInput = card.querySelector('input[data-kind="pu"]');
+          const puReset = card.querySelector('button[data-kind="puReset"]');
 
           puInput.addEventListener("change", ()=>{
             const v = normalizeHHMM(puInput.value);
@@ -2957,10 +2965,8 @@ function renderDayScenesDetail(){
 
         // RTS
         if(d.rtsEnabled){
-          const idxInput = d.pickupCastEnabled ? 2 : 1;
-          const idxBtn = d.pickupCastEnabled ? 2 : 1;
-          const rtsInput = card.querySelectorAll("input[type=time]")[idxInput];
-          const rtsReset = card.querySelectorAll("button")[idxBtn];
+          const rtsInput = card.querySelector('input[data-kind="rts"]');
+          const rtsReset = card.querySelector('button[data-kind="rtsReset"]');
 
           rtsInput.addEventListener("change", ()=>{
             const v = normalizeHHMM(rtsInput.value);
