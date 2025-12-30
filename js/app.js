@@ -3725,7 +3725,17 @@ function renderDayScenesDetail(){
 
     renderReportsFilters();
     const f = getReportsFilterSet();
-    const q = (el("reportsSearch")?.value || "").toLowerCase().trim();
+
+    const qRaw = (el("reportsSearch")?.value || "").toLowerCase().trim();
+    const qTokens = qRaw ? qRaw.split(/\s+/).filter(Boolean) : [];
+    const matches = (txt)=>{
+      if(!qTokens.length) return true;
+      const hay = String(txt ?? "").toLowerCase();
+      for(const t of qTokens){
+        if(!hay.includes(t)) return false;
+      }
+      return true;
+    };
 
     if(!f || f.size === 0){
       board.innerHTML = `<div class="muted">Seleccioná al menos un filtro arriba.</div>`;
@@ -3745,7 +3755,7 @@ function renderDayScenesDetail(){
       let shownBlocks = 0;
 
       const scenes = (d.sceneIds||[]).map(id=>sceneById.get(id)).filter(Boolean);
-      const cast = union(scenes.flatMap(s=>s.elements?.cast||[]));
+      const castAll = union(scenes.flatMap(s=>s.elements?.cast||[]));
       const pages = scenes.reduce((acc, s)=> acc + (Number(s.pages)||0), 0);
 
       const crewAll = (d.crewIds||[])
@@ -3754,96 +3764,168 @@ function renderDayScenesDetail(){
         .map(c=>({ ...c, area: normalizeCrewArea(c.area) }))
         .filter(c=>c.area!=="Cast");
 
-      const grouped = groupCrewByArea(crewAll);
-
       head.innerHTML = `
         <div class="t">${esc(formatDayTitle(d.date))}${d.label? " · "+esc(d.label):""}</div>
         <div class="m">Call ${esc(d.callTime||"")} · ${esc(d.location||"")}</div>
         <div class="kpiRow">
           <span class="kpi"><b>${scenes.length}</b> escenas</span>
           <span class="kpi"><b>${fmtPages(pages)}</b> pág</span>
-          <span class="kpi"><b>${cast.length}</b> cast</span>
+          <span class="kpi"><b>${castAll.length}</b> cast</span>
           <span class="kpi"><b>${crewAll.length}</b> crew</span>
         </div>
       `;
 
-      if(f.has("scenes")){
-      const scenesBox = document.createElement("div");
-      scenesBox.className = "catBlock";
-      scenesBox.innerHTML = `
-        <div class="hdr"><span class="dot" style="background:var(--cat-props)"></span>Escenas</div>
-        <div class="items">${scenes.length ? scenes.map(s=>`<div>#${esc(s.number)} ${esc(s.slugline)}</div>`).join("") : `<div>—</div>`}</div>
-      `;
-      const hayScenes = scenes.map(s=>`${s.number||""} ${s.slugline||""}`).join(" ").toLowerCase();
-      if(!q || hayScenes.includes(q)){
-        body.appendChild(scenesBox);
-        shownBlocks++;
-      }
+      // ===== Búsqueda precisa: solo traer coincidencias (no toda la categoría) =====
+      // relatedSceneIds se llena SOLO por coincidencias en elementos/cast (para mostrar también su escena)
+      const relatedSceneIds = new Set();
+
+      // Cast
+      let castList = castAll;
+      if(qTokens.length && f.has("cast")){
+        const seen = new Set();
+        const arr = [];
+        for(const s of scenes){
+          for(const raw of (s.elements?.cast||[])){
+            const name = String(raw||"").trim();
+            if(!name) continue;
+            if(matches(name)){
+              const key = name.toLowerCase();
+              if(!seen.has(key)){ seen.add(key); arr.push(name); }
+              relatedSceneIds.add(s.id);
+            }
+          }
+        }
+        castList = arr;
       }
 
+      // Crew (no tiene escena asociada, solo filtra personas)
+      let crewList = crewAll;
+      if(qTokens.length && f.has("crew")){
+        crewList = crewAll.filter(c=> matches(`${c.area||""} ${c.name||""} ${c.role||""}`));
+      }
+      const groupedCrew = groupCrewByArea(crewList);
+
+      // Elementos por categoría (incluye escena relacionada)
+      const matchedByCat = {};
+      if(qTokens.length){
+        for(const cat of cats){
+          if(cat === "cast") continue;
+          if(!f.has(cat)) continue;
+          const seen = new Set();
+          const arr = [];
+          for(const s of scenes){
+            const list = (s.elements?.[cat] || []);
+            for(const raw of list){
+              const it = String(raw||"").trim();
+              if(!it) continue;
+              if(matches(it)){
+                const key = it.toLowerCase();
+                if(!seen.has(key)){ seen.add(key); arr.push(it); }
+                relatedSceneIds.add(s.id);
+              }
+            }
+          }
+          matchedByCat[cat] = arr;
+        }
+      }
+
+      // Escenas (si hay coincidencia en elementos/cast, mostrar también su escena aunque el filtro "Escenas" esté apagado)
+      const showScenesBox = f.has("scenes") || (qTokens.length && relatedSceneIds.size>0);
+      if(showScenesBox){
+        let listScenes = [];
+        if(!qTokens.length){
+          listScenes = scenes;
+        }else{
+          const seen = new Set();
+          for(const s of scenes){
+            const sceneHay = `${s.number||""} ${s.slugline||""} ${s.location||""} ${s.summary||""}`;
+            const ok = relatedSceneIds.has(s.id) || (f.has("scenes") && matches(sceneHay));
+            if(ok && !seen.has(s.id)) { seen.add(s.id); listScenes.push(s); }
+          }
+        }
+
+        // En búsqueda: si no hay escenas para mostrar, no agregamos el bloque.
+        if(!qTokens.length || listScenes.length){
+          const label = f.has("scenes") ? "Escenas" : "Escenas relacionadas";
+          const scenesBox = document.createElement("div");
+          scenesBox.className = "catBlock";
+          scenesBox.innerHTML = `
+            <div class="hdr"><span class="dot" style="background:var(--cat-props)"></span>${esc(label)}</div>
+            <div class="items">${listScenes.length ? listScenes.map(s=>`<div>#${esc(s.number)} ${esc(s.slugline)}</div>`).join("") : `<div>—</div>`}</div>
+          `;
+          body.appendChild(scenesBox);
+          shownBlocks++;
+        }
+      }
+
+      // Cast
       if(f.has("cast")){
-      const castBox = document.createElement("div");
-      castBox.className = "catBlock";
-      castBox.innerHTML = `
-        <div class="hdr"><span class="dot" style="background:${catColors.cast}"></span>Cast</div>
-        <div class="items">${cast.length ? cast.map(n=>`<div>${esc(n)}</div>`).join("") : `<div>—</div>`}</div>
-      `;
-      const hayCast = cast.join(" ").toLowerCase();
-      if(!q || hayCast.includes(q)){
-        body.appendChild(castBox);
-        shownBlocks++;
-      }
+        const list = qTokens.length ? castList : castAll;
+        if(!qTokens.length || list.length){
+          const castBox = document.createElement("div");
+          castBox.className = "catBlock";
+          castBox.innerHTML = `
+            <div class="hdr"><span class="dot" style="background:${catColors.cast}"></span>Cast</div>
+            <div class="items">${list.length ? list.map(n=>`<div>${esc(n)}</div>`).join("") : `<div>—</div>`}</div>
+          `;
+          body.appendChild(castBox);
+          shownBlocks++;
+        }
       }
 
+      // Crew
       if(f.has("crew")){
-      const crewBox = document.createElement("div");
-      crewBox.className = "catBlock";
-      crewBox.innerHTML = `<div class="hdr"><span class="dot" style="background:var(--cat-sound)"></span>Crew citado</div>`;
-      const crewItems = document.createElement("div");
-      crewItems.className = "items";
+        if(!qTokens.length || crewList.length){
+          const crewBox = document.createElement("div");
+          crewBox.className = "catBlock";
+          crewBox.innerHTML = `<div class="hdr"><span class="dot" style="background:var(--cat-sound)"></span>Crew citado</div>`;
+          const crewItems = document.createElement("div");
+          crewItems.className = "items";
 
-      if(!crewAll.length){
-        crewItems.innerHTML = `<div>—</div>`;
-      }else{
-        crewItems.innerHTML = grouped.map(([area, arr])=>`
-          <div class="repCrewArea">
-            <div class="repCrewAreaT">${esc(area)}</div>
-            <div class="repCrewAreaL">
-              ${arr.map(c=>`<div>${esc(c.name)}${c.role? ` (${esc(c.role)})`:""}</div>`).join("")}
-            </div>
-          </div>
-        `).join("");
-      }
-      crewBox.appendChild(crewItems);
-      const hayCrew = crewAll.map(c=>`${c.area||""} ${c.name||""} ${c.role||""}`).join(" ").toLowerCase();
-      if(!q || hayCrew.includes(q)){
-        body.appendChild(crewBox);
-        shownBlocks++;
-      }
+          if(!crewList.length){
+            crewItems.innerHTML = `<div>—</div>`;
+          }else{
+            crewItems.innerHTML = groupedCrew.map(([area, arr])=>`
+              <div class="repCrewArea">
+                <div class="repCrewAreaT">${esc(area)}</div>
+                <div class="repCrewAreaL">
+                  ${arr.map(c=>`<div>${esc(c.name)}${c.role? ` (${esc(c.role)})`:""}</div>`).join("")}
+                </div>
+              </div>
+            `).join("");
+          }
+          crewBox.appendChild(crewItems);
+          body.appendChild(crewBox);
+          shownBlocks++;
+        }
       }
 
+      // Categorías de elementos
       for(const cat of cats){
-        if(cat==="cast") continue;
+        if(cat === "cast") continue;
         if(!f.has(cat)) continue;
-        const items = union(scenes.flatMap(s=>s.elements?.[cat]||[]));
+
+        const items = qTokens.length
+          ? (matchedByCat[cat] || [])
+          : union(scenes.flatMap(s=>s.elements?.[cat]||[]));
+
+        // En búsqueda, si no hay coincidencias, no mostramos el bloque
         if(!items.length) continue;
+
         const box = document.createElement("div");
         box.className = "catBlock";
         box.innerHTML = `
           <div class="hdr"><span class="dot" style="background:${catColors[cat]}"></span>${esc(catNames[cat])}</div>
           <div class="items">${items.map(x=>`<div>${esc(x)}</div>`).join("")}</div>
         `;
-        const hayCat = items.join(" ").toLowerCase();
-        if(!q || hayCat.includes(q)){
-          body.appendChild(box);
-          shownBlocks++;
-        }
+        body.appendChild(box);
+        shownBlocks++;
       }
 
-
-      if(q && shownBlocks===0){
-        const hhay = `${formatDayTitle(d.date)} ${d.label||""} ${d.location||""} ${d.callTime||""}`.toLowerCase();
-        if(!hhay.includes(q)) continue;
+      // Si hay búsqueda y no se mostró nada, solo mantenemos el día si el encabezado coincide
+      if(qTokens.length && shownBlocks===0){
+        const hhay = `${formatDayTitle(d.date)} ${d.label||""} ${d.location||""} ${d.callTime||""}`;
+        if(!matches(hhay)) continue;
         body.innerHTML = `<div class="muted">Sin resultados.</div>`;
       }
 
@@ -3852,12 +3934,13 @@ function renderDayScenesDetail(){
       board.appendChild(col);
     }
 
-    if(q && !board.children.length){
+    if(qTokens.length && !board.children.length){
       board.innerHTML = `<div class="muted">Sin resultados.</div>`;
     }
   }
 
   // ===================== Schedule =====================
+
   function renderScheduleBoard(){
     const board = el("schedBoard");
     if(!board) return;
@@ -6527,38 +6610,15 @@ function renderReportDayplanDetail(d){
     return _gbPrintRoot;
   }
   function cleanupGbPrintRoot(){
-    try{ document.body.classList.remove("gbPrintingShotlist","gbPrintingCallsheet","gbPrintingElements","gbPrintingDayplan","gbPrintMobile"); }catch(_e){}
+    try{ document.body.classList.remove("gbPrintingShotlist","gbPrintingCallsheet","gbPrintingElements","gbPrintMobile"); }catch(_e){}
     try{ if(_gbPrintRoot) _gbPrintRoot.innerHTML = ""; }catch(_e){}
   }
 
   function applyPrintDeviceFlag(){
-    // Buscamos que el export sea igual en móvil y desktop: sin overrides específicos de móvil.
-    try{ document.body.classList.remove("gbPrintMobile"); }catch(_e){}
-  }
-
-  // En algunos móviles (especialmente iOS) window.print() NO bloquea.
-  // Si limpiamos el DOM inmediatamente, termina exportando la vista de pantalla.
-  let _gbPrintCleanupTimer = null;
-  function runPrintJob(fallbackDelayMs=3500){
-    try{ if(_gbPrintCleanupTimer) clearTimeout(_gbPrintCleanupTimer); }catch(_e){}
-    _gbPrintCleanupTimer = null;
-
-    let cleaned = false;
-    const cleanup = ()=>{
-      if(cleaned) return;
-      cleaned = true;
-      try{ clearPrintOrientation(); }catch(_e){}
-      try{ cleanupGbPrintRoot(); }catch(_e){}
-      try{ window.removeEventListener('afterprint', cleanup); }catch(_e){}
-      try{ if(_gbPrintCleanupTimer) clearTimeout(_gbPrintCleanupTimer); }catch(_e){}
-      _gbPrintCleanupTimer = null;
-    };
-
-    try{ window.addEventListener('afterprint', cleanup, { once:true }); }catch(_e){ window.addEventListener('afterprint', cleanup); }
-    try{ _gbPrintCleanupTimer = setTimeout(cleanup, Number(fallbackDelayMs)||3500); }catch(_e){}
-
-    try{ window.print(); }
-    catch(_e){ cleanup(); }
+    try{
+      const isMobile = !!(window.matchMedia && window.matchMedia("(max-width: 820px)").matches);
+      document.body.classList.toggle("gbPrintMobile", isMobile);
+    }catch(_e){}
   }
 
   function buildShotlistPrintHTML(d){
@@ -6674,92 +6734,7 @@ function renderReportDayplanDetail(d){
   }
 
   
-  function buildDayplanPrintHTML(d){
-    ensureDayTimingMaps(d);
-
-    const eattr = (s)=> esc(String(s||"")) .replace(/"/g,"&quot;");
-    const items = buildDayplanItems(d);
-
-    const proj = esc(state.meta?.title || "Proyecto");
-    const dayTxt = `${formatDayTitle(d.date)}${d.label ? " · "+esc(d.label) : ""}`;
-
-    const scenes = (d.sceneIds||[]).map(getScene).filter(Boolean);
-    const pages = scenes.reduce((acc, s)=> acc + (Number(s.pages)||0), 0);
-
-    const base = minutesFromHHMM(d.callTime || "08:00");
-    const snapMin = Number(el("schedSnap")?.value || 15);
-    try{ resolveOverlapsPushDown(d, snapMin); }catch(_e){}
-
-    const rows = items.map((it)=>{
-      const absStart = clamp(base + (it.start||0), 0, DAY_SPAN_MIN - snapMin);
-      const dur = clamp(Math.max(snapMin, it.dur||snapMin), snapMin, DAY_SPAN_MIN);
-      const absEnd = clamp(absStart + dur, 0, DAY_SPAN_MIN);
-      const isNote = it.kind==="block";
-      const num = isNote ? "NOTA" : (it.number||"");
-      const title = isNote ? (it.title||"") : (it.slugline||it.title||"");
-      const ie = isNote ? "" : (it.intExt||"");
-      const locTxt = isNote ? "" : (it.location||"");
-      const todTxt = isNote ? "" : (it.timeOfDay||"");
-      const pagesTxt = isNote ? "" : ((Number(it.pages)||0) > 0 ? fmtPages(it.pages) : "");
-      const sumTxt = isNote ? (it.detail||"") : (it.summary||"");
-      const col = safeHexColor(it.color || (it.kind==="scene" ? "#BFDBFE" : "#E5E7EB"));
-      const bg = hexToRgba(col, isNote ? 0.10 : 0.12);
-      const tA = hhmmFromMinutes(absStart);
-      const tB = hhmmFromMinutes(absEnd);
-      const clockHTML = `<div class="dpClock2"><div>${esc(tA)}</div><div>${esc(tB)}</div></div>`;
-      return `
-  <tr class="${isNote ? "dpPrintNote" : ""}" style="background:${eattr(bg)};border-left:8px solid ${eattr(col)};">
-    <td class="cHour">${clockHTML}</td>
-    <td class="cDur">${esc(formatDurHHMMCompact(dur))}</td>
-    <td class="cNro">${esc(num)}</td>
-    <td class="cTitle">${esc(title)}</td>
-    <td class="cIE">${esc(ie)}</td>
-    <td class="cLoc">${esc(locTxt)}</td>
-    <td class="cTod">${esc(todTxt)}</td>
-    <td class="cPag">${esc(pagesTxt)}</td>
-    <td class="cSum">${esc(sumTxt)}</td>
-  </tr>`;
-    }).join("");
-
-    return `
-      <div class="catBlock">
-        <div class="hdr"><span class="dot" style="background:var(--cat-vehicles)"></span>Plan de Rodaje</div>
-        <div class="items">
-          <div><b>${proj}</b> · ${dayTxt}</div>
-          <div><b>Call:</b> ${esc(d.callTime||"")} &nbsp; <b>Locación:</b> ${esc(d.location||"")}</div>
-          <div class="kpiRow" style="margin-top:10px;">
-            <span class="kpi"><b>${scenes.length}</b> escenas</span>
-            <span class="kpi"><b>${esc(fmtPages(pages))}</b> pág</span>
-          </div>
-        </div>
-        <div class="items">
-          <table class="dayplanPrintTable">
-            <colgroup>
-              <col class="colHour"><col class="colDur"><col class="colNro"><col class="colTitle">
-              <col class="colIE"><col class="colLoc"><col class="colTod"><col class="colPag"><col class="colSum">
-            </colgroup>
-            <thead><tr><th>Hora</th><th>Dur</th><th>Nro</th><th>Título</th><th>I/E</th><th>Locación</th><th>Momento</th><th>Largo (Pág)</th><th>Resumen</th></tr></thead>
-            <tbody>${rows || `<tr><td colspan="9" class="muted">—</td></tr>`}</tbody>
-          </table>
-        </div>
-      </div>
-    `;
-  }
-
-  function printDayplanByDayId(dayId){
-    const d = dayId ? getDay(dayId) : null;
-    if(!d){ toast("Elegí un día con rodaje"); return; }
-    ensureDayTimingMaps(d);
-    applyPrintDeviceFlag();
-    const root = ensureGbPrintRoot();
-    root.innerHTML = buildDayplanPrintHTML(d);
-    document.body.classList.add("gbPrintingDayplan");
-    setPrintOrientation("landscape");
-    runPrintJob();
-  }
-
-  
-function printCallSheetByDayId(dayId){
+  function printCallSheetByDayId(dayId){
     const d = dayId ? getDay(dayId) : null;
     if(!d){ toast("Elegí un día con rodaje"); return; }
     ensureDayTimingMaps(d);
@@ -6771,7 +6746,7 @@ function printCallSheetByDayId(dayId){
     document.body.classList.add("gbPrintingCallsheet");
     // Menos margen para que arranque más arriba
     setPrintOrientation("portrait", 6);
-    runPrintJob();
+    try{ window.print(); } finally { clearPrintOrientation(); cleanupGbPrintRoot(); }
   }
 
   function printElementsByDayId(dayId){
@@ -6785,7 +6760,7 @@ function printCallSheetByDayId(dayId){
 
     document.body.classList.add("gbPrintingElements");
     setPrintOrientation("portrait", 6);
-    runPrintJob();
+    try{ window.print(); } finally { clearPrintOrientation(); cleanupGbPrintRoot(); }
   }
 
 
@@ -6800,7 +6775,7 @@ function printShotlistByDayId(dayId){
     root.innerHTML = buildShotlistPrintHTML(d);
     document.body.classList.add("gbPrintingShotlist");
     setPrintOrientation("portrait");
-    runPrintJob();
+    try{ window.print(); } finally { clearPrintOrientation(); cleanupGbPrintRoot(); }
   }
 
   // Bank collapse
@@ -6984,7 +6959,7 @@ el("btnDayplanAddNote")?.addEventListener("click", addDayplanNote);
       renderReportsDetail();
       renderReports();
     });
-    el("btnDayplanPrint")?.addEventListener("click", ()=>{ printDayplanByDayId(selectedDayplanDayId || selectedDayId || state.shootDays?.[0]?.id || null); });
+    el("btnDayplanPrint")?.addEventListener("click", ()=>{ setPrintOrientation("landscape"); window.print(); });
     el("dayplanSnap")?.addEventListener("change", ()=> renderDayPlan());
 
     // Número de escena: no permitimos duplicados (si chocan, auto 6A/6B…)
@@ -7473,7 +7448,8 @@ el("scriptVerSelect")?.addEventListener("change", ()=>{
         printElementsByDayId(getReportsSelectedDayId());
         return;
       }
-      printDayplanByDayId(getReportsSelectedDayId());
+      setPrintOrientation("landscape");
+      window.print();
     });
     window.addEventListener("afterprint", ()=>{ clearPrintOrientation(); cleanupGbPrintRoot(); });
 

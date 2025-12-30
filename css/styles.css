@@ -1224,16 +1224,6 @@ body.gbPrintingElements #gbPrintRoot,
 body.gbPrintingElements #gbPrintRoot *{ visibility:visible !important; }
 body.gbPrintingElements #gbPrintRoot{ display:block !important; position:absolute; left:0; top:0; width:100%; padding:0 !important; margin:0 !important; background:#fff; color:#000; }
 
-body.gbPrintingDayplan *{ visibility:hidden !important; }
-body.gbPrintingDayplan #gbPrintRoot,
-body.gbPrintingDayplan #gbPrintRoot *{ visibility:visible !important; }
-body.gbPrintingDayplan #gbPrintRoot{ display:block !important; position:absolute; left:0; top:0; width:100%; padding:0 !important; margin:0 !important; background:#fff; color:#000; }
-body.gbPrintingDayplan #gbPrintRoot,
-body.gbPrintingDayplan #gbPrintRoot *{ color:#000 !important; }
-body.gbPrintingDayplan .muted{ color:#333 !important; }
-body.gbPrintingDayplan .catBlock{ background:#fff !important; border:1px solid #ddd !important; overflow:visible !important; border-radius:0 !important; }
-
-
 body.gbPrintingShotlist .muted,
 body.gbPrintingCallsheet .muted,
 body.gbPrintingElements .muted{ color:#333 !important; }
