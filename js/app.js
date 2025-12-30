@@ -139,7 +139,6 @@
     }catch{}
   }
   let schedDrag = null;
-  let schedPress = null; // long-press (mobile) antes de iniciar drag en Cronograma
   let schedTap = null; // fallback doble click (Plan General)
 
   function uid(p="id"){ return `${p}_${Math.random().toString(16).slice(2)}_${Date.now().toString(16)}`; }
@@ -579,10 +578,6 @@
     }
   }
 
-  function daysForCrew(crewId){
-    sortShootDaysInPlace();
-    return (state.shootDays||[]).filter(d=> (d.crewIds||[]).includes(crewId));
-  }
 
 
 
@@ -870,14 +865,6 @@ function enforceScriptVersionsLimit(notify=false){
     return `${cap} ${dd}/${mm}`;
   }
 
-  function formatDayTitleCompact(dateStr){
-    if(!dateStr) return "Sin fecha";
-    const d = new Date(dateStr+"T00:00:00");
-    const weekday = new Intl.DateTimeFormat("es-AR",{weekday:"long"}).format(d);
-    const cap = weekday.charAt(0).toUpperCase()+weekday.slice(1);
-    const dd = String(d.getDate());
-    return `${cap} ${dd}`;
-  }
 
 
   function formatDDMMYYYY(dateIso){
@@ -1681,90 +1668,6 @@ function setupScheduleWheelScroll(){
 }
 
   // ======= Script parser (INT/EXT) =======
-  function parseScreenplayToScenes(text, extraKeywordsCsv=""){
-    const rawLines = (text||"").split(/\r?\n/);
-    const lines = rawLines.map(l => String(l ?? "").replace(/\s+$/,"")).filter(l => l.trim() !== "");
-    if(!lines.length) return [];
-
-    const extra = (extraKeywordsCsv||"").split(",").map(s=>s.trim()).filter(Boolean).map(s=>s.toUpperCase());
-
-    function stripSceneNumber(line){
-      return line
-        .replace(/^\s*\(?\s*\d+\s*\)?\s*[.)-:]\s*/,"")
-        .replace(/^\s*\(?\s*\d+\s*\)?\s+/,"");
-    }
-    function isHeading(line){
-      const cleaned = stripSceneNumber(line).trimStart();
-      const up = cleaned.toUpperCase();
-      for(const k of extra){ if(up.startsWith(k)) return true; }
-      const starters = [
-        "INT/EXT.", "INT/EXT ", "INT./EXT.", "INT./EXT ", "I/E.", "I/E ",
-        "INT.", "INT ", "INT-", "INT:",
-        "EXT.", "EXT ", "EXT-", "EXT:",
-        "INTERIOR", "EXTERIOR"
-      ];
-      return starters.some(s=>up.startsWith(s));
-    }
-
-    const out = [];
-    let current = null;
-    let autoN = 1;
-
-    for(const line of lines){
-      if(isHeading(line)){
-        if(current) out.push(finalize(current));
-        current = { rawHeading: line.trim(), body:[], autoNumber:autoN++ };
-      }else{
-        if(!current) current = { rawHeading:"ESCENA", body:[], autoNumber:autoN++ };
-        current.body.push(line);
-      }
-    }
-    if(current) out.push(finalize(current));
-
-    return out.map(s=>({
-      id: uid("scene"),
-      number: String(s.number),
-      slugline: s.slugline,
-      location: s.location,
-      timeOfDay: s.timeOfDay,
-      pages: 0,
-      summary: s.summary,
-      notes:"",
-      elements: Object.fromEntries(cats.map(c=>[c,[]])),
-      shots: []
-    }));
-
-    function finalize(s){
-      const heading = s.rawHeading;
-      let num = s.autoNumber;
-      const mNum = heading.match(/^\s*(\d+)\s*[.)-:]\s*/);
-      if(mNum) num = Number(mNum[1]);
-
-      const slugline = stripSceneNumber(heading).trim();
-
-      const parts = slugline.split(/\s[-–—]\s/g).map(p=>p.trim()).filter(Boolean);
-      let location = "";
-      let tod = "";
-
-      if(parts.length >= 2){
-        tod = normalizeTOD(parts[parts.length-1]);
-        const mid = parts.slice(0, parts.length-1).join(" - ");
-        location = mid
-          .replace(/^(INT\/EXT\.?|INT\.\/EXT\.?|I\/E\.?|INT\.?|EXT\.?)\s*/i,"")
-          .replace(/^(INTERIOR|EXTERIOR)\s*/i,"")
-          .trim();
-      }else{
-        location = slugline
-          .replace(/^(INT\/EXT\.?|INT\.\/EXT\.?|I\/E\.?|INT\.?|EXT\.?)\s*/i,"")
-          .replace(/^(INTERIOR|EXTERIOR)\s*/i,"")
-          .trim();
-      }
-
-      const bodyText = (s.body||[]).join(" ");
-      const summary = bodyText.slice(0, 220);
-      return { number:num, slugline, location, timeOfDay:tod, summary };
-    }
-  }
 
 
   // ======= Guion (versionado) =======
@@ -1839,29 +1742,7 @@ function setupScheduleWheelScroll(){
     }
   }
 
-  function buildScriptReadView(version){
-    if(!version) return "";
-    const parts = [];
-    for(const sc of (version.scenes||[])){
-      const head = `${canonSceneNumber(sc.number)} ${String(sc.slugline||"").trim()}`.trim();
-      parts.push(head);
-      if(sc.body) parts.push(String(sc.body).trim());
-      parts.push(""); // blank line between scenes
-    }
-    return parts.join("\n").trim();
-  }
 
-  function cloneScriptScenes(scenes){
-    return (scenes||[]).map(sc=>({
-      id: uid("scrScene"),
-      number: canonSceneNumber(sc.number||""),
-      slugline: sc.slugline||"",
-      location: sc.location||"",
-      timeOfDay: sc.timeOfDay||"",
-      body: sc.body||"",
-      summary: sc.summary||""
-    }));
-  }
 
   function getActiveScriptVersion(){
     ensureScriptState();
@@ -1870,10 +1751,6 @@ function setupScheduleWheelScroll(){
     return state.script.versions.find(v=>v.id===id) || state.script.versions[0] || null;
   }
 
-  function setActiveScriptVersion(versionId){
-    ensureScriptState();
-    state.script.activeVersionId = versionId;
-  }
 
   function renderScriptVersionSelect(){
     const sel = el("scriptVerSelect");
@@ -2833,314 +2710,6 @@ function renderDayScenesDetail(){
 }
 
 
-  function renderDayNeeds(){
-    const wrap = el("dayNeeds");
-    if(!wrap) return;
-    wrap.innerHTML = "";
-    const d = selectedDayId ? getDay(selectedDayId) : null;
-    if(!d){ wrap.innerHTML = `<div class="muted">Seleccioná un día</div>`; return; }
-
-    const scenes = dayScenes(d);
-    const needs = {};
-    for(const cat of cats){
-      const items = union(scenes.flatMap(s=>s.elements?.[cat] || []));
-      if(!items.length) continue;
-      if(cat==="cast") continue;
-      needs[cat] = items;
-    }
-
-    const keys = Object.keys(needs);
-    if(!keys.length){
-      wrap.innerHTML = `<div class="catBlock"><div class="items">No hay elementos cargados en breakdown.</div></div>`;
-      return;
-    }
-
-    for(const cat of cats){
-      if(!needs[cat]) continue;
-      const box = document.createElement("div");
-      box.className = "catBlock";
-      box.innerHTML = `
-        <div class="hdr"><span class="dot" style="background:${catColors[cat]}"></span>${esc(catNames[cat])}</div>
-        <div class="items">${esc(needs[cat].join(", "))}</div>
-      `;
-      wrap.appendChild(box);
-    }
-  }  function renderDayCast(){
-    const wrap = el("dayCast");
-    if(!wrap) return;
-    wrap.innerHTML = "";
-
-    const d = selectedDayId ? getDay(selectedDayId) : null;
-    if(!d){ wrap.innerHTML = `<div class="muted">Seleccioná un día.</div>`; return; }
-
-    ensureProjectConfig();
-    ensureDayTimingMaps(d);
-    cleanupDayCallTimes(d);
-    cleanupDayExtras(d);
-
-    const scenes = (d.sceneIds||[]).map(getScene).filter(Boolean);
-    const cast = union((scenes||[]).map(sc=> (sc.elements?.cast||[])).flat());
-
-    if(!cast.length){
-      wrap.innerHTML = `<div class="muted">No hay Cast en las escenas del día.</div>`;
-      return;
-    }
-
-    const dayBase = baseDayCall(d);
-    const castBase = baseCastCall(d);
-    const DEF_RTS = Number(state?.project?.rtsOffsetMin ?? 60);
-
-    // Controls
-    const top = document.createElement("div");
-    top.className = "callGroupBox";
-    top.innerHTML = `
-      <div class="callGroupRow">
-        <div class="lbl">Call Cast</div>
-        <input type="time" class="input timeInput" id="cast_call" value="${castBase}"/>
-        <button class="btn small ghost" id="cast_apply" title="Aplicar Call Cast a todo el Cast">Aplicar</button>
-        <button class="btn small ghost" id="cast_reset" title="Resetear todo el Cast a Call Cast">Reset</button>
-      </div>
-      <div class="callExtrasRow">
-        <div class="callExtraLine">
-          <span class="miniLbl">PU Cast</span>
-          <span class="chip toggle ${d.pickupCastEnabled ? "active" : ""}" id="tglPUCast">PU</span>
-          <span class="miniLbl">Offset</span>
-          <input type="number" class="input compact" id="puCastOffset" style="width:88px" value="${Math.round(Number(d.pickupCastOffsetMin ?? -30))}" ${d.pickupCastEnabled ? "" : "disabled"}/>
-          <button class="btn icon ghost small" id="puCastReset" title="Reset PU Cast a default">↺</button>
-        </div>
-
-        <div class="callExtraLine">
-          <span class="miniLbl">RTS</span>
-          <span class="chip toggle ${d.rtsEnabled ? "active" : ""}" id="tglRTS">RTS</span>
-          <span class="miniLbl">Offset</span>
-          <input type="number" class="input compact" id="rtsOffset" style="width:88px" value="${Math.round(Number(d.rtsOffsetMin ?? DEF_RTS))}" ${d.rtsEnabled ? "" : "disabled"}/>
-          <button class="btn icon ghost small" id="rtsReset" title="Reset RTS a default del proyecto">↺</button>
-        </div>
-      </div>
-    `;
-    wrap.appendChild(top);
-
-    function rerender(){
-      renderDayCast();
-      renderDayCrewPicker();
-      renderCallSheetDetail(el("callSheetDetail"), selectedDayId);
-    }
-
-    // Call Cast base
-    top.querySelector("#cast_call")?.addEventListener("change", (e)=>{
-      d.castCallTime = normalizeHHMM(e.target.value) || "";
-      touch();
-      rerender();
-    });
-
-    top.querySelector("#cast_apply")?.addEventListener("click", ()=>{
-      const base = baseCastCall(d);
-      for(const name of cast){
-        // solo seteo override si hoy no tiene uno
-        if(!normalizeHHMM(d.castCallTimes[name])) d.castCallTimes[name] = base;
-      }
-      cleanupDayCallTimes(d);
-      touch();
-      rerender();
-      toast("Aplicado ✅");
-    });
-
-    top.querySelector("#cast_reset")?.addEventListener("click", ()=>{
-      d.castCallTimes = {};
-      cleanupDayCallTimes(d);
-      cleanupDayExtras(d);
-      touch();
-      rerender();
-      toast("Reseteado ✅");
-    });
-
-    // PU Cast
-    top.querySelector("#tglPUCast")?.addEventListener("click", ()=>{
-      d.pickupCastEnabled = !d.pickupCastEnabled;
-      touch();
-      rerender();
-    });
-    top.querySelector("#puCastOffset")?.addEventListener("change", (e)=>{
-      const v = Math.round(Number(e.target.value));
-      d.pickupCastOffsetMin = Number.isFinite(v) ? v : -30;
-      cleanupDayExtras(d);
-      touch();
-      rerender();
-    });
-    top.querySelector("#puCastReset")?.addEventListener("click", ()=>{
-      d.pickupCastOffsetMin = -30;
-      d.castPickUpTimes = {};
-      cleanupDayExtras(d);
-      touch();
-      rerender();
-      toast("PU Cast: default ✅");
-    });
-
-    // RTS
-    top.querySelector("#tglRTS")?.addEventListener("click", ()=>{
-      d.rtsEnabled = !d.rtsEnabled;
-      touch();
-      rerender();
-    });
-    top.querySelector("#rtsOffset")?.addEventListener("change", (e)=>{
-      const v = Math.round(Number(e.target.value));
-      d.rtsOffsetMin = Number.isFinite(v) ? v : DEF_RTS;
-      cleanupDayExtras(d);
-      touch();
-      rerender();
-    });
-    top.querySelector("#rtsReset")?.addEventListener("click", ()=>{
-      d.rtsOffsetMin = DEF_RTS;
-      d.castRTSTimes = {};
-      cleanupDayExtras(d);
-      touch();
-      rerender();
-      toast("RTS: default ✅");
-    });
-
-    // List
-    const list = document.createElement("div");
-    list.className = "callPeopleList";
-
-    for(const name of cast){
-      const call = effectiveCastCall(d, name);
-      const callOv = normalizeHHMM(d?.castCallTimes?.[name]);
-      const callIsOv = !!callOv && callOv !== castBase;
-
-      const basePu = shiftHHMM(call, Number(d.pickupCastOffsetMin ?? -30));
-      const pu = d.pickupCastEnabled ? effectiveCastPU(d, name) : "";
-      const puOv = normalizeHHMM(d?.castPickUpTimes?.[name]);
-      const puIsOv = d.pickupCastEnabled && !!puOv && puOv !== basePu;
-
-      const baseRts = shiftHHMM(call, Number(d.rtsOffsetMin ?? DEF_RTS));
-      const rts = d.rtsEnabled ? effectiveCastRTS(d, name) : "";
-      const rtsOv = normalizeHHMM(d?.castRTSTimes?.[name]);
-      const rtsIsOv = d.rtsEnabled && !!rtsOv && rtsOv !== baseRts;
-
-      const diff = minutesFromHHMM(call) - minutesFromHHMM(castBase);
-      const dotStyle = diff === 0 ? "background: rgba(var(--ok-rgb),.9)" : "background: rgba(255, 208, 0, .9)";
-      const castRec = findCastCrewEntryByName(name);
-      const castMeta = [castRec?.role, castRec?.phone].filter(Boolean).join(" • ");
-
-
-      const card = document.createElement("div");
-      card.className = "callPersonCard";
-      card.innerHTML = `
-        <div class="nameRow">
-          <div class="left">
-            <div class="dot" style="${dotStyle}"></div>
-            <div class="txt">
-              <div class="title">${escapeHtml(name)}</div>
-              ${castMeta ? '<div class="meta">'+escapeHtml(castMeta)+'</div>' : ''}
-            </div>
-          </div>
-        </div>
-
-        <div class="timeStack">
-          <div class="timeLine">
-            <div class="k">CALL</div>
-            <div style="display:flex; gap:6px; align-items:center;">
-              <input type="time" class="input timeInput ${callIsOv ? "timeDiffDay" : ""}" value="${call}"/>
-              <button class="btn icon ghost small" title="Reset CALL">↺</button>
-            </div>
-          </div>
-
-          ${d.pickupCastEnabled ? `
-            <div class="timeLine">
-              <div class="k">PU</div>
-              <div style="display:flex; gap:6px; align-items:center;">
-                <input type="time" class="input timeInput ${puIsOv ? "timeDiffDay" : ""}" value="${pu}"/>
-                <button class="btn icon ghost small" title="Reset PU">↺</button>
-              </div>
-            </div>
-          ` : ""}
-
-          ${d.rtsEnabled ? `
-            <div class="timeLine">
-              <div class="k">RTS</div>
-              <div style="display:flex; gap:6px; align-items:center;">
-                <input type="time" class="input timeInput ${rtsIsOv ? "timeDiffDay" : ""}" value="${rts}"/>
-                <button class="btn icon ghost small" title="Reset RTS">↺</button>
-              </div>
-            </div>
-          ` : ""}
-        </div>
-      `;
-
-      const callInput = card.querySelectorAll("input[type=time]")[0];
-      const callReset = card.querySelectorAll("button")[0];
-
-      callInput.addEventListener("change", ()=>{
-        const v = normalizeHHMM(callInput.value);
-        if(!v || v === castBase) delete d.castCallTimes[name];
-        else d.castCallTimes[name] = v;
-
-        cleanupDayCallTimes(d);
-        cleanupDayExtras(d);
-        touch();
-        rerender();
-      });
-      callReset.addEventListener("click", ()=>{
-        delete d.castCallTimes[name];
-        cleanupDayCallTimes(d);
-        cleanupDayExtras(d);
-        touch();
-        rerender();
-      });
-
-      // PU
-      if(d.pickupCastEnabled){
-        const puInput = card.querySelectorAll("input[type=time]")[1];
-        const puReset = card.querySelectorAll("button")[1];
-
-        puInput.addEventListener("change", ()=>{
-          const v = normalizeHHMM(puInput.value);
-          const def = shiftHHMM(effectiveCastCall(d, name), Number(d.pickupCastOffsetMin ?? -30));
-          if(!v || v === def) delete d.castPickUpTimes[name];
-          else d.castPickUpTimes[name] = v;
-
-          cleanupDayExtras(d);
-          touch();
-          rerender();
-        });
-        puReset.addEventListener("click", ()=>{
-          delete d.castPickUpTimes[name];
-          cleanupDayExtras(d);
-          touch();
-          rerender();
-        });
-      }
-
-      // RTS
-      if(d.rtsEnabled){
-        const idxInput = d.pickupCastEnabled ? 2 : 1;
-        const idxBtn = d.pickupCastEnabled ? 2 : 1;
-        const rtsInput = card.querySelectorAll("input[type=time]")[idxInput];
-        const rtsReset = card.querySelectorAll("button")[idxBtn];
-
-        rtsInput.addEventListener("change", ()=>{
-          const v = normalizeHHMM(rtsInput.value);
-          const def = shiftHHMM(effectiveCastCall(d, name), Number(d.rtsOffsetMin ?? DEF_RTS));
-          if(!v || v === def) delete d.castRTSTimes[name];
-          else d.castRTSTimes[name] = v;
-
-          cleanupDayExtras(d);
-          touch();
-          rerender();
-        });
-        rtsReset.addEventListener("click", ()=>{
-          delete d.castRTSTimes[name];
-          cleanupDayExtras(d);
-          touch();
-          rerender();
-        });
-      }
-
-      list.appendChild(card);
-    }
-
-    wrap.appendChild(list);
-  }
 
   function groupCrewByArea(list){
     const map = new Map();
@@ -3164,7 +2733,9 @@ function renderDayScenesDetail(){
       });
     }
     return entries;
-  }  function renderDayCrewPicker(){
+  }
+
+  function renderDayCrewPicker(){
     const wrap = el("dayCrewPicker");
     if(!wrap) return;
     wrap.innerHTML = "";
@@ -4103,10 +3674,6 @@ function bindScheduleDnD(){
 
   schedDrag = null;
 
-  const cssEscape = (v)=>{
-    try{ return (window.CSS && CSS.escape) ? CSS.escape(v) : String(v).replace(/[^a-zA-Z0-9_-]/g, "_"); }
-    catch{ return String(v).replace(/[^a-zA-Z0-9_-]/g, "_"); }
-  };
 
   function getPxPerMin(){
     const zoom = Number(el("schedZoom")?.value || 90); // px por hora
@@ -6844,15 +6411,6 @@ function printShotlistByDayId(dayId){
   }
 
   // Settings JSONBin
-  function loadCfgToUI(){
-    const cfg = StorageLayer.loadCfg();
-    const bin = el("cfg_binId");
-    const key = el("cfg_accessKey");
-    const au  = el("cfg_autosync");
-    if(bin){ bin.value = cfg.binId || ""; bin.setAttribute("readonly","readonly"); }
-    if(key){ key.value = cfg.accessKey || ""; key.setAttribute("readonly","readonly"); }
-    if(au){ au.value = "on"; au.setAttribute("disabled","disabled"); }
-  }
   function saveCfgFromUI(){
     // Config fija (credenciales embebidas + autosync ON)
     StorageLayer.saveCfg(StorageLayer.loadCfg());
