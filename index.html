@@ -97,6 +97,10 @@
                   <input class="input" id="scene_number"/>
                 </div>
                 <div class="field">
+                  <label>Capítulo</label>
+                  <input class="input" id="scene_chapter" type="number" min="1" step="1"/>
+                </div>
+                <div class="field">
                   <label>Título</label>
                   <input class="input" id="scene_slugline"/>
                 </div>
@@ -617,35 +621,15 @@
     }catch(e){}
 
     // JS en orden (sin async)
-    const files = [
-      { src: "https://cdn.sheetjs.com/xlsx-0.18.5/package/dist/xlsx.full.min.js", fallback: "https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js" },
-      { src: "js/utils.js" },
-      { src: "js/storage.js" },
-      { src: "js/app.js" }
-    ];
+    const files = ["https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js","js/utils.js","js/storage.js","js/app.js"];
     function add(i){
       if(i >= files.length) return;
-      const item = files[i];
-      const src = (typeof item === "string") ? item : item.src;
-      const fb  = (typeof item === "string") ? null : (item.fallback || null);
-
-      function loadOne(url, onDone){
-        const s = document.createElement("script");
-        s.src = url + "?v=" + v;
-        s.async = false;
-        s.onload = onDone;
-        s.onerror = onDone;
-        document.body.appendChild(s);
-      }
-
-      loadOne(src, ()=>{
-        // Si la lib principal falla y hay fallback, lo intentamos una vez.
-        if(fb && !window.XLSX){
-          loadOne(fb, ()=> add(i+1));
-        }else{
-          add(i+1);
-        }
-      });
+      const s = document.createElement("script");
+      s.src = files[i] + "?v=" + v;
+      s.async = false;
+      s.onload = () => add(i+1);
+      s.onerror = () => add(i+1);
+      document.body.appendChild(s);
     }
     add(0);
   })();
