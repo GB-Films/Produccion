@@ -2765,6 +2765,290 @@ function renderDayScenesDetail(){
     return entries;
   }
 
+function renderDayCast(){
+      const wrap = el("dayCast");
+      if(!wrap) return;
+      wrap.innerHTML = "";
+
+      const d = selectedDayId ? getDay(selectedDayId) : null;
+      if(!d){ wrap.innerHTML = `<div class="muted">Seleccioná un día.</div>`; return; }
+
+      ensureProjectConfig();
+      ensureDayTimingMaps(d);
+      cleanupDayCallTimes(d);
+      cleanupDayExtras(d);
+
+      const scenes = (d.sceneIds||[]).map(getScene).filter(Boolean);
+      const cast = union((scenes||[]).map(sc=> (sc.elements?.cast||[])).flat());
+
+      if(!cast.length){
+        wrap.innerHTML = `<div class="muted">No hay Cast en las escenas del día.</div>`;
+        return;
+      }
+
+      const dayBase = baseDayCall(d);
+      const castBase = baseCastCall(d);
+      const DEF_RTS = Number(state?.project?.rtsOffsetMin ?? 60);
+
+      // Controls
+      const top = document.createElement("div");
+      top.className = "callGroupBox";
+      top.innerHTML = `
+        <div class="callGroupRow">
+          <div class="lbl">Call Cast</div>
+          <input type="time" class="input timeInput" id="cast_call" value="${castBase}"/>
+          <button class="btn small ghost" id="cast_apply" title="Aplicar Call Cast a todo el Cast">Aplicar</button>
+          <button class="btn small ghost" id="cast_reset" title="Resetear todo el Cast a Call Cast">Reset</button>
+        </div>
+        <div class="callExtrasRow">
+          <div class="callExtraLine">
+            <div class="left">
+              <span class="miniLbl">PU Cast</span>
+              <span class="chip toggle ${d.pickupCastEnabled ? "active" : ""}" id="tglPUCast">PU</span>
+            </div>
+            <div class="right">
+              <span class="miniLbl">Offset</span>
+              <input type="number" class="input compact" id="puCastOffset" style="width:88px" value="${Math.round(Number(d.pickupCastOffsetMin ?? -30))}" ${d.pickupCastEnabled ? "" : "disabled"}/>
+              <button class="btn icon ghost small" id="puCastReset" title="Reset PU Cast a default">↺</button>
+            </div>
+          </div>
+
+          <div class="callExtraLine">
+            <div class="left">
+              <span class="miniLbl">RTS</span>
+              <span class="chip toggle ${d.rtsEnabled ? "active" : ""}" id="tglRTS">RTS</span>
+            </div>
+            <div class="right">
+              <span class="miniLbl">Offset</span>
+              <input type="number" class="input compact" id="rtsOffset" style="width:88px" value="${Math.round(Number(d.rtsOffsetMin ?? DEF_RTS))}" ${d.rtsEnabled ? "" : "disabled"}/>
+              <button class="btn icon ghost small" id="rtsReset" title="Reset RTS a default del proyecto">↺</button>
+            </div>
+          </div>
+        </div>
+      `;
+      wrap.appendChild(top);
+
+      function rerender(){
+        renderDayCast();
+        renderDayCrewPicker();
+        renderCallSheetDetail(el("callSheetDetail"), selectedDayId);
+      }
+
+      // Call Cast base
+      top.querySelector("#cast_call")?.addEventListener("change", (e)=>{
+        d.castCallTime = normalizeHHMM(e.target.value) || "";
+        touch();
+        rerender();
+      });
+
+      top.querySelector("#cast_apply")?.addEventListener("click", ()=>{
+        const base = baseCastCall(d);
+        for(const name of cast){
+          // solo seteo override si hoy no tiene uno
+          if(!normalizeHHMM(d.castCallTimes[name])) d.castCallTimes[name] = base;
+        }
+        cleanupDayCallTimes(d);
+        touch();
+        rerender();
+        toast("Aplicado ✅");
+      });
+
+      top.querySelector("#cast_reset")?.addEventListener("click", ()=>{
+        d.castCallTimes = {};
+        cleanupDayCallTimes(d);
+        cleanupDayExtras(d);
+        touch();
+        rerender();
+        toast("Reseteado ✅");
+      });
+
+      // PU Cast
+      top.querySelector("#tglPUCast")?.addEventListener("click", ()=>{
+        d.pickupCastEnabled = !d.pickupCastEnabled;
+        touch();
+        rerender();
+      });
+      top.querySelector("#puCastOffset")?.addEventListener("change", (e)=>{
+        const v = Math.round(Number(e.target.value));
+        d.pickupCastOffsetMin = Number.isFinite(v) ? v : -30;
+        cleanupDayExtras(d);
+        touch();
+        rerender();
+      });
+      top.querySelector("#puCastReset")?.addEventListener("click", ()=>{
+        d.pickupCastOffsetMin = -30;
+        d.castPickUpTimes = {};
+        cleanupDayExtras(d);
+        touch();
+        rerender();
+        toast("PU Cast: default ✅");
+      });
+
+      // RTS
+      top.querySelector("#tglRTS")?.addEventListener("click", ()=>{
+        d.rtsEnabled = !d.rtsEnabled;
+        touch();
+        rerender();
+      });
+      top.querySelector("#rtsOffset")?.addEventListener("change", (e)=>{
+        const v = Math.round(Number(e.target.value));
+        d.rtsOffsetMin = Number.isFinite(v) ? v : DEF_RTS;
+        cleanupDayExtras(d);
+        touch();
+        rerender();
+      });
+      top.querySelector("#rtsReset")?.addEventListener("click", ()=>{
+        d.rtsOffsetMin = DEF_RTS;
+        d.castRTSTimes = {};
+        cleanupDayExtras(d);
+        touch();
+        rerender();
+        toast("RTS: default ✅");
+      });
+
+      // List
+      const list = document.createElement("div");
+      list.className = "callPeopleList";
+
+      for(const name of cast){
+        const call = effectiveCastCall(d, name);
+        const callOv = normalizeHHMM(d?.castCallTimes?.[name]);
+        const callIsOv = !!callOv && callOv !== castBase;
+
+        const basePu = shiftHHMM(call, Number(d.pickupCastOffsetMin ?? -30));
+        const pu = d.pickupCastEnabled ? effectiveCastPU(d, name) : "";
+        const puOv = normalizeHHMM(d?.castPickUpTimes?.[name]);
+        const puIsOv = d.pickupCastEnabled && !!puOv && puOv !== basePu;
+
+        const baseRts = shiftHHMM(call, Number(d.rtsOffsetMin ?? DEF_RTS));
+        const rts = d.rtsEnabled ? effectiveCastRTS(d, name) : "";
+        const rtsOv = normalizeHHMM(d?.castRTSTimes?.[name]);
+        const rtsIsOv = d.rtsEnabled && !!rtsOv && rtsOv !== baseRts;
+
+        const diff = minutesFromHHMM(call) - minutesFromHHMM(castBase);
+        const dotStyle = diff === 0 ? "background: rgba(var(--ok-rgb),.9)" : "background: rgba(255, 208, 0, .9)";
+        const castRec = findCastCrewEntryByName(name);
+        const castMeta = [castRec?.role, castRec?.phone].filter(Boolean).join(" • ");
+
+
+        const card = document.createElement("div");
+        card.className = "callPersonRow";
+        card.innerHTML = `
+          <div class="left">
+            <div class="dot" style="${dotStyle}"></div>
+            <div class="txt" style="min-width:0;">
+              <div class="title">${escapeHtml(name)}</div>
+              ${castMeta ? '<div class="meta">'+escapeHtml(castMeta)+'</div>' : ''}
+            </div>
+          </div>
+
+          <div class="right" style="min-width:0;">
+            <div class="crewTimeStack">
+              <div class="timeLine">
+                <div class="k">CALL</div>
+                <div style="display:flex; gap:6px; align-items:center; justify-content:flex-end;">
+                  <input type="time" class="input timeInput ${callIsOv ? "timeDiffDay" : ""}" value="${call}" data-kind="call"/>
+                  <button class="btn icon ghost small" title="Reset CALL" data-kind="callReset">↺</button>
+                </div>
+              </div>
+
+              ${d.pickupCastEnabled ? `
+                <div class="timeLine">
+                  <div class="k">PU</div>
+                  <div style="display:flex; gap:6px; align-items:center; justify-content:flex-end;">
+                    <input type="time" class="input timeInput ${puIsOv ? "timeDiffDay" : ""}" value="${pu}" data-kind="pu"/>
+                    <button class="btn icon ghost small" title="Reset PU" data-kind="puReset">↺</button>
+                  </div>
+                </div>
+              ` : ""}
+
+              ${d.rtsEnabled ? `
+                <div class="timeLine">
+                  <div class="k">RTS</div>
+                  <div style="display:flex; gap:6px; align-items:center; justify-content:flex-end;">
+                    <input type="time" class="input timeInput ${rtsIsOv ? "timeDiffDay" : ""}" value="${rts}" data-kind="rts"/>
+                    <button class="btn icon ghost small" title="Reset RTS" data-kind="rtsReset">↺</button>
+                  </div>
+                </div>
+              ` : ""}
+            </div>
+          </div>
+        `;
+
+        const callInput = card.querySelector('input[data-kind="call"]');
+        const callReset = card.querySelector('button[data-kind="callReset"]');
+
+        callInput.addEventListener("change", ()=>{
+          const v = normalizeHHMM(callInput.value);
+          if(!v || v === castBase) delete d.castCallTimes[name];
+          else d.castCallTimes[name] = v;
+
+          cleanupDayCallTimes(d);
+          cleanupDayExtras(d);
+          touch();
+          rerender();
+        });
+        callReset.addEventListener("click", ()=>{
+          delete d.castCallTimes[name];
+          cleanupDayCallTimes(d);
+          cleanupDayExtras(d);
+          touch();
+          rerender();
+        });
+
+        // PU
+        if(d.pickupCastEnabled){
+          const puInput = card.querySelector('input[data-kind="pu"]');
+          const puReset = card.querySelector('button[data-kind="puReset"]');
+
+          puInput.addEventListener("change", ()=>{
+            const v = normalizeHHMM(puInput.value);
+            const def = shiftHHMM(effectiveCastCall(d, name), Number(d.pickupCastOffsetMin ?? -30));
+            if(!v || v === def) delete d.castPickUpTimes[name];
+            else d.castPickUpTimes[name] = v;
+
+            cleanupDayExtras(d);
+            touch();
+            rerender();
+          });
+          puReset.addEventListener("click", ()=>{
+            delete d.castPickUpTimes[name];
+            cleanupDayExtras(d);
+            touch();
+            rerender();
+          });
+        }
+
+        // RTS
+        if(d.rtsEnabled){
+          const rtsInput = card.querySelector('input[data-kind="rts"]');
+          const rtsReset = card.querySelector('button[data-kind="rtsReset"]');
+
+          rtsInput.addEventListener("change", ()=>{
+            const v = normalizeHHMM(rtsInput.value);
+            const def = shiftHHMM(effectiveCastCall(d, name), Number(d.rtsOffsetMin ?? DEF_RTS));
+            if(!v || v === def) delete d.castRTSTimes[name];
+            else d.castRTSTimes[name] = v;
+
+            cleanupDayExtras(d);
+            touch();
+            rerender();
+          });
+          rtsReset.addEventListener("click", ()=>{
+            delete d.castRTSTimes[name];
+            cleanupDayExtras(d);
+            touch();
+            rerender();
+          });
+        }
+
+        list.appendChild(card);
+      }
+
+      wrap.appendChild(list);
+    }
+
+
   function renderDayCrewPicker(){
     const wrap = el("dayCrewPicker");
     if(!wrap) return;
@@ -6485,6 +6769,511 @@ function printShotlistByDayId(dayId){
     }
   }
 
+  // ===================== Breakdown Import (Excel/CSV) =====================
+  const BD_SCENE_NUM_ALIASES = ["scenenumber","scene","escena","nro","numero","nroescena","numescena","#"];
+  const BD_LONG_SCENE_ALIASES = BD_SCENE_NUM_ALIASES.concat(["scenenro","escenanro"]);
+  const BD_LONG_CAT_ALIASES = ["category","categoria","cat","depto","departamento"];
+  const BD_LONG_ITEM_ALIASES = ["item","elemento","nombre","name","value","valor"];
+
+  const BD_CAT_SYNONYMS = {
+    cast: ["reparto","personajes","personaje","actor","actores","talento"],
+    props: ["utileria","utileriaprops","objetos","objeto"],
+    wardrobe: ["ropa"],
+    art: ["escenografia","escenografiaarte","decorado","setdressing"],
+    makeup: ["mua","peinado","hair","hairmakeup"],
+    sound: [],
+    sfx: ["fx","efectosespeciales","efectoespecial"],
+    vfx: ["postvfx","cgi","efectosvisuales","efectovisual"],
+    vehicles: ["vehiculos","vehiculo","autos","auto"],
+    animals: ["animales","animal"],
+    extras: ["figuracion","figurantes","extra"]
+  };
+
+  function bdNormKey(k){
+    return String(k||"").trim().toLowerCase()
+      .normalize("NFD").replace(/[\u0300-\u036f]/g,"")
+      .replace(/[^a-z0-9]+/g,"");
+  }
+
+  const BD_CAT_LOOKUP = {};
+  function bdInitCatLookup(){
+    if(bdInitCatLookup._done) return;
+    bdInitCatLookup._done = true;
+    for(const cat of cats){
+      BD_CAT_LOOKUP[bdNormKey(cat)] = cat;
+      BD_CAT_LOOKUP[bdNormKey(catNames[cat]||cat)] = cat;
+      for(const a of (BD_CAT_SYNONYMS[cat]||[])) BD_CAT_LOOKUP[bdNormKey(a)] = cat;
+    }
+  }
+
+  function bdResolveCatKey(label){
+    bdInitCatLookup();
+    const k = bdNormKey(label);
+    return BD_CAT_LOOKUP[k] || "";
+  }
+
+  function bdNormRow(obj){
+    const row = {};
+    if(!obj) return row;
+    for(const k of Object.keys(obj)) row[bdNormKey(k)] = obj[k];
+    return row;
+  }
+
+  function bdGetCell(row, aliases){
+    for(const a of (aliases||[])){
+      const k = bdNormKey(a);
+      if(Object.prototype.hasOwnProperty.call(row, k)) return { present:true, value: row[k] };
+    }
+    return { present:false, value: "" };
+  }
+
+  function bdStr(v){
+    if(v==null) return "";
+    if(typeof v === "string") return v;
+    return String(v);
+  }
+
+  function bdSplitList(v){
+    const s = bdStr(v).trim();
+    if(!s) return [];
+    return s.split(/[\n\r,;|]+/g).map(x=>x.trim()).filter(Boolean);
+  }
+
+  function bdDedupe(list){
+    const seen = new Set();
+    const out = [];
+    for(const raw of (list||[])){
+      const it = String(raw||"").trim();
+      if(!it) continue;
+      const key = it.toLowerCase();
+      if(seen.has(key)) continue;
+      seen.add(key);
+      out.push(it);
+    }
+    return out;
+  }
+
+  function bdMergeLists(existing, add){
+    const base = Array.isArray(existing) ? existing.slice() : [];
+    const seen = new Set(base.map(x=>String(x||"").trim().toLowerCase()).filter(Boolean));
+    let added = 0;
+    for(const raw of (add||[])){
+      const it = String(raw||"").trim();
+      if(!it) continue;
+      const key = it.toLowerCase();
+      if(seen.has(key)) continue;
+      seen.add(key);
+      base.push(it);
+      added++;
+    }
+    return { list: base, added };
+  }
+
+  function bdDownloadText(filename, content, mime="text/plain"){
+    const blob = new Blob([content], { type: mime });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(()=>{ try{ URL.revokeObjectURL(url); }catch(_e){} a.remove(); }, 0);
+  }
+
+  function bdCsvEscape(v){
+    const s = String(v==null ? "" : v);
+    if(/[\",\n\r;]/.test(s)) return '"' + s.replace(/"/g,'""') + '"';
+    return s;
+  }
+
+  function bdDownloadTemplateWide(){
+    const headers = [
+      "SceneNumber",
+      "Cast","Props","Vestuario","Arte","Maquillaje","Sonido","SFX","VFX","Vehiculos","Animales","Extras"
+    ];
+    const sample = [
+      "1",
+      "JUAN; ANA",
+      "Llaves; Pistola",
+      "Traje gris",
+      "Silla rota",
+      "Herida en mejilla",
+      "",
+      "",
+      "",
+      "",
+      "",
+      ""
+    ];
+    const csv = [headers.join(","), sample.map(bdCsvEscape).join(",")].join("\n");
+    bdDownloadText("breakdown_template_por_escena.csv", csv, "text/csv;charset=utf-8");
+  }
+
+  function bdDownloadTemplateLong(){
+    const headers = ["SceneNumber","Category","Item"];
+    const rows = [
+      ["1","Cast","JUAN"],
+      ["1","Cast","ANA"],
+      ["1","Props","Llaves"],
+      ["1","Vestuario","Traje gris"]
+    ];
+    const csv = [headers.join(",")].concat(rows.map(r=>r.map(bdCsvEscape).join(","))).join("\n");
+    bdDownloadText("breakdown_template_por_item.csv", csv, "text/csv;charset=utf-8");
+  }
+
+  function bdDetectCsvDelimiter(line){
+    const c = (line.match(/,/g)||[]).length;
+    const s = (line.match(/;/g)||[]).length;
+    const t = (line.match(/\t/g)||[]).length;
+    if(s > c && s >= t) return ";";
+    if(t > c && t > s) return "\t";
+    return ",";
+  }
+
+  function bdParseCSV(text){
+    const firstLine = (String(text||"").split(/\r?\n/)[0]||"");
+    const delim = bdDetectCsvDelimiter(firstLine);
+    const rows = [];
+    let row = [];
+    let cur = "";
+    let inQ = false;
+
+    const str = String(text||"");
+    for(let i=0;i<str.length;i++){
+      const ch = str[i];
+      if(inQ){
+        if(ch === '"'){
+          if(str[i+1] === '"'){ cur += '"'; i++; }
+          else { inQ = false; }
+        }else{
+          cur += ch;
+        }
+      }else{
+        if(ch === '"'){ inQ = true; }
+        else if(ch === delim){ row.push(cur); cur = ""; }
+        else if(ch === "\n"){
+          row.push(cur); rows.push(row);
+          row = []; cur = "";
+        }else if(ch === "\r"){
+          // ignore
+        }else{
+          cur += ch;
+        }
+      }
+    }
+    row.push(cur); rows.push(row);
+
+    while(rows.length && rows[rows.length-1].every(c=>String(c||"").trim()==="")) rows.pop();
+    return rows;
+  }
+
+  function bdRowsToObjects(rows){
+    if(!rows || !rows.length) return [];
+    const headers = (rows[0]||[]).map(h=>String(h||"").trim());
+    const out = [];
+    for(let r=1;r<rows.length;r++){
+      const line = rows[r] || [];
+      const obj = {};
+      let empty = true;
+      for(let c=0;c<headers.length;c++){
+        const key = headers[c] || ("col"+(c+1));
+        const val = (c < line.length) ? line[c] : "";
+        if(String(val||"").trim()!=="") empty = false;
+        obj[key] = val;
+      }
+      if(!empty) out.push(obj);
+    }
+    return out;
+  }
+
+  function bdReadFileText(file){
+    return new Promise((res, rej)=>{
+      const fr = new FileReader();
+      fr.onload = ()=> res(String(fr.result||""));
+      fr.onerror = ()=> rej(fr.error || new Error("No pude leer el archivo"));
+      fr.readAsText(file);
+    });
+  }
+
+  function bdReadFileArrayBuffer(file){
+    return new Promise((res, rej)=>{
+      const fr = new FileReader();
+      fr.onload = ()=> res(fr.result);
+      fr.onerror = ()=> rej(fr.error || new Error("No pude leer el archivo"));
+      fr.readAsArrayBuffer(file);
+    });
+  }
+
+
+
+  function bdLoadScript(url){
+    return new Promise((res)=>{
+      try{
+        const s = document.createElement('script');
+        s.src = url;
+        s.async = true;
+        s.onload = ()=>res(true);
+        s.onerror = ()=>res(false);
+        document.body.appendChild(s);
+      }catch(_e){ res(false); }
+    });
+  }
+
+  async function bdEnsureXLSX(){
+    if(window.XLSX) return true;
+    // Fallbacks por si jsdelivr queda bloqueado en mobile
+    const urls = [
+      'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js',
+      'https://unpkg.com/xlsx@0.18.5/dist/xlsx.full.min.js'
+    ];
+    for(const u of urls){
+      await bdLoadScript(u);
+      if(window.XLSX) return true;
+    }
+    return !!window.XLSX;
+  }
+  async function bdParseFileToRowObjects(file){
+    const name = String(file?.name||"").toLowerCase();
+    if(name.endsWith(".csv")){
+      const t = await bdReadFileText(file);
+      return bdRowsToObjects(bdParseCSV(t));
+    }
+    if(!window.XLSX){
+      const ok = await bdEnsureXLSX();
+      if(!ok) throw new Error("No se pudo cargar window.XLSX. Tip: exportá el Excel a CSV.");
+    }
+    const buf = await bdReadFileArrayBuffer(file);
+    const wb = window.XLSX.read(buf, { type: "array" });
+    const sheetName = wb.SheetNames?.[0];
+    const sheet = wb.Sheets?.[sheetName];
+    if(!sheet) return [];
+    return window.XLSX.utils.sheet_to_json(sheet, { defval: "", raw: false });
+  }
+
+  function bdBuildSceneMap(){
+    const map = new Map();
+    for(const s of (state.scenes||[])){
+      const key = canonSceneNumber(s.number);
+      if(!key) continue;
+      if(!map.has(key)) map.set(key, s);
+    }
+    return map;
+  }
+
+  function bdIsLongRow(nrow){
+    const hasCat = BD_LONG_CAT_ALIASES.some(a=>Object.prototype.hasOwnProperty.call(nrow, bdNormKey(a)));
+    const hasItem = BD_LONG_ITEM_ALIASES.some(a=>Object.prototype.hasOwnProperty.call(nrow, bdNormKey(a)));
+    return hasCat && hasItem;
+  }
+
+  function bdAnalyzeImport(normRows, opts){
+    const sceneMap = bdBuildSceneMap();
+    const touched = new Set();
+    let missing = 0;
+    let unknownCats = 0;
+    let items = 0;
+    const isLong = normRows.some(bdIsLongRow);
+
+    for(const row of normRows){
+      const sn = bdGetCell(row, isLong ? BD_LONG_SCENE_ALIASES : BD_SCENE_NUM_ALIASES);
+      const num = canonSceneNumber(sn.value);
+      if(!num) continue;
+      if(!sceneMap.has(num)) missing++;
+      touched.add(num);
+
+      if(isLong){
+        const catLabel = bdGetCell(row, BD_LONG_CAT_ALIASES).value;
+        const ck = bdResolveCatKey(catLabel);
+        if(!ck){ unknownCats++; continue; }
+        const it = bdSplitList(bdGetCell(row, BD_LONG_ITEM_ALIASES).value);
+        items += it.length;
+      }else{
+        for(const cat of cats){
+          const aliases = [cat, catNames[cat]].concat(BD_CAT_SYNONYMS[cat]||[]);
+          const cell = bdGetCell(row, aliases);
+          if(!cell.present) continue;
+          const it = bdSplitList(cell.value);
+          items += it.length;
+        }
+      }
+    }
+
+    return {
+      format: isLong ? "por_item" : "por_escena",
+      rows: normRows.length,
+      scenesTouched: touched.size,
+      missing,
+      willCreate: opts.createMissing ? missing : 0,
+      unknownCats,
+      items
+    };
+  }
+
+  function bdApplyImport(normRows, opts){
+    const sceneMap = bdBuildSceneMap();
+    const isLong = normRows.some(bdIsLongRow);
+    let created = 0;
+    let touched = 0;
+    let missing = 0;
+    let unknownCats = 0;
+    let itemsAdded = 0;
+    let changed = false;
+    const touchedScenes = new Set();
+    const cleared = new Set();
+
+    function getOrCreate(numCanon){
+      let sc = sceneMap.get(numCanon);
+      if(sc) return sc;
+      missing++;
+      if(!opts.createMissing) return null;
+      const s = {
+        id: uid("scene"),
+        number: makeUniqueSceneNumber(numCanon, null) || numCanon,
+        slugline:"",
+        intExt:"",
+        location:"",
+        timeOfDay:"",
+        pages:0,
+        summary:"",
+        notes:"",
+        elements: Object.fromEntries(cats.map(c=>[c,[]])),
+        shots: []
+      };
+      state.scenes.push(s);
+      ensureSceneExtras(s);
+      // map by both: original key y el key final
+      sceneMap.set(numCanon, s);
+      sceneMap.set(canonSceneNumber(s.number), s);
+      created++;
+      changed = true;
+      return s;
+    }
+
+    for(const row of normRows){
+      const sn = bdGetCell(row, isLong ? BD_LONG_SCENE_ALIASES : BD_SCENE_NUM_ALIASES);
+      const numCanon = canonSceneNumber(sn.value);
+      if(!numCanon) continue;
+      const s = getOrCreate(numCanon);
+      if(!s) continue;
+      ensureSceneExtras(s);
+      touchedScenes.add(s.id);
+
+      if(isLong){
+        const catLabel = bdGetCell(row, BD_LONG_CAT_ALIASES).value;
+        const ck = bdResolveCatKey(catLabel);
+        if(!ck){ unknownCats++; continue; }
+        const items = bdDedupe(bdSplitList(bdGetCell(row, BD_LONG_ITEM_ALIASES).value));
+        if(opts.mode === "replace"){
+          const key = s.id + "|" + ck;
+          if(!cleared.has(key)){
+            s.elements[ck] = [];
+            cleared.add(key);
+            changed = true;
+          }
+        }
+        const merged = bdMergeLists(s.elements[ck], items);
+        if(merged.added){
+          s.elements[ck] = merged.list;
+          itemsAdded += merged.added;
+          changed = true;
+        }
+      }else{
+        for(const cat of cats){
+          const aliases = [cat, catNames[cat]].concat(BD_CAT_SYNONYMS[cat]||[]);
+          const cell = bdGetCell(row, aliases);
+          if(!cell.present) continue;
+          const parsed = bdDedupe(bdSplitList(cell.value));
+          if(opts.mode === "replace"){
+            // si está presente pero vacío, limpia
+            const before = (s.elements[cat]||[]).join("\u0000");
+            s.elements[cat] = parsed;
+            const after = (s.elements[cat]||[]).join("\u0000");
+            if(before !== after) changed = true;
+          }else{
+            const merged = bdMergeLists(s.elements[cat], parsed);
+            if(merged.added){
+              s.elements[cat] = merged.list;
+              itemsAdded += merged.added;
+              changed = true;
+            }
+          }
+        }
+      }
+    }
+
+    touched = touchedScenes.size;
+    if(changed){
+      sortScenesByNumberInPlace();
+      touch();
+    }
+
+    return { format: isLong ? "por_item" : "por_escena", touched, created, missing, unknownCats, itemsAdded, changed };
+  }
+
+  async function runBreakdownImportFromUI(){
+    const inp = el("bdFileInput");
+    const pill = el("bdImportStatus");
+    const modeSel = el("bdImportMode");
+    const createChk = el("bdImportCreateMissing");
+
+    const file = inp?.files?.[0];
+    if(!file) return toast("Elegí un .xlsx o .csv");
+
+    const opts = {
+      mode: (modeSel?.value === "replace") ? "replace" : "merge",
+      createMissing: !!createChk?.checked
+    };
+
+    try{
+      if(pill) pill.textContent = "Leyendo…";
+      const rows = await bdParseFileToRowObjects(file);
+      const normRows = rows.map(bdNormRow);
+      const a = bdAnalyzeImport(normRows, opts);
+
+      const msg = [
+        `Importar Breakdown (${a.format.replace('_',' ')})`,
+        `Filas: ${a.rows}`,
+        `Escenas referenciadas: ${a.scenesTouched}`,
+        `Faltantes: ${a.missing}${opts.createMissing ? ` (se crearán)` : ""}`,
+        `Ítems detectados: ${a.items}`,
+        a.unknownCats ? `Categorías desconocidas: ${a.unknownCats}` : "",
+        "\n¿Aplicar cambios?"
+      ].filter(Boolean).join("\n");
+
+      if(!confirm(msg)){
+        if(pill) pill.textContent = "Cancelado";
+        return;
+      }
+
+      const res = bdApplyImport(normRows, opts);
+
+      if(pill){
+        pill.textContent = res.changed
+          ? `OK: ${res.touched} escenas · +${res.itemsAdded} ítems${res.created ? ` · ${res.created} creadas` : ""}`
+          : "Sin cambios";
+      }
+
+      // refrescamos lo necesario
+      renderScenesTable();
+      renderSceneEditor();
+      renderScriptUI();
+      renderSceneBank();
+      renderDaysBoard();
+      renderDayDetail();
+      renderElementsExplorer();
+      renderReports();
+      renderScheduleBoard();
+      renderReportsDetail();
+      try{ renderShotList(); }catch(_e){}
+
+      toast("Breakdown importado ✅");
+    }catch(err){
+      console.error(err);
+      if(pill) pill.textContent = "Error";
+      toast(err?.message ? String(err.message) : "Error importando");
+    }
+  }
+
 
   // Bind events (igual que antes, pero llamamos setupScheduleTopScrollbar después de render schedule)
   function bindEvents(){
@@ -6500,6 +7289,18 @@ function printShotlistByDayId(dayId){
     el("btnDeleteScene")?.addEventListener("click", deleteScene);
     el("sceneSearch")?.addEventListener("input", renderScenesTable);
     el("sceneFilterTOD")?.addEventListener("change", renderScenesTable);
+
+
+// Breakdown: Importar (Excel/CSV)
+el("btnBDTemplateWide")?.addEventListener("click", bdDownloadTemplateWide);
+el("btnBDTemplateLong")?.addEventListener("click", bdDownloadTemplateLong);
+el("btnBDImport")?.addEventListener("click", runBreakdownImportFromUI);
+el("bdFileInput")?.addEventListener("change", ()=>{
+  const f = el("bdFileInput")?.files?.[0];
+  const pill = el("bdImportStatus");
+  if(pill) pill.textContent = f ? `Listo: ${f.name}` : "—";
+});
+
 
     el("schedSearch")?.addEventListener("input", renderScheduleBoard);
     el("reportsSearch")?.addEventListener("input", renderReports);
