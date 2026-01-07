@@ -98,7 +98,7 @@
   let selectedShotlistDayId = null;
   let selectedDayplanDayId = null;
   let dayDetailOpenSceneKeys = new Set();
-  let reportsTab = (localStorage.getItem("gb_reports_tab") || "callsheet");
+  let reportsTab = (()=>{ try{ return (localStorage.getItem("gb_reports_tab") || "callsheet"); }catch(_e){ return "callsheet"; } })();
 
   let navCollapsedKey = "gb_nav_collapsed_v1";
 
@@ -122,7 +122,8 @@
   let calCursor = { year: new Date().getFullYear(), month: new Date().getMonth() };
 
   function loadCallSheetCursor(){
-    const raw = localStorage.getItem("gb_callsheet_month");
+    let raw = null;
+    try{ raw = localStorage.getItem("gb_callsheet_month"); }catch(_e){ raw = null; }
     if(!raw) return;
     const m = String(raw).match(/^(\d{4})-(\d{2})$/);
     if(!m) return;
@@ -1280,7 +1281,8 @@ function ensureDayShotsDone(d){
     document.querySelectorAll(".collapsible").forEach(card=>{
       const key = card.dataset.collapseKey || "x";
       const storeKey = `gb_collapse_${key}`;
-      const saved = localStorage.getItem(storeKey);
+      let saved = null;
+      try{ saved = localStorage.getItem(storeKey); }catch(_e){ saved = null; }
       const collapsed = (saved === null)
         ? card.classList.contains("collapsed")
         : (saved === "1");
@@ -1294,7 +1296,7 @@ function ensureDayShotsDone(d){
           btn.addEventListener("click", ()=>{
             const now = !card.classList.contains("collapsed");
             card.classList.toggle("collapsed", now);
-            localStorage.setItem(storeKey, now ? "1" : "0");
+            try{ localStorage.setItem(storeKey, now ? "1" : "0"); }catch(_e){}
             btn.textContent = now ? "▸" : "▾";
           });
         }
@@ -2603,10 +2605,9 @@ function renderDayDetail(){
       <span class="metaPill"><b>Locación</b> ${locTxt}</span>
     `;
   }
-
   renderDayScenesDetail();
-  renderDayCast();
-  renderDayCrewPicker();
+  try{ if(typeof renderDayCast==="function") renderDayCast(); }catch(e){ console.error(e); }
+  try{ if(typeof renderDayCrewPicker==="function") renderDayCrewPicker(); }catch(e){ console.error(e); }
 }
 
 
@@ -2735,7 +2736,292 @@ function renderDayScenesDetail(){
     return entries;
   }
 
-  function renderDayCrewPicker(){
+  
+
+function renderDayCast(){
+      const wrap = el("dayCast");
+      if(!wrap) return;
+      wrap.innerHTML = "";
+
+      const d = selectedDayId ? getDay(selectedDayId) : null;
+      if(!d){ wrap.innerHTML = `<div class="muted">Seleccioná un día.</div>`; return; }
+
+      ensureProjectConfig();
+      ensureDayTimingMaps(d);
+      cleanupDayCallTimes(d);
+      cleanupDayExtras(d);
+
+      const scenes = (d.sceneIds||[]).map(getScene).filter(Boolean);
+      const cast = union((scenes||[]).map(sc=> (sc.elements?.cast||[])).flat());
+
+      if(!cast.length){
+        wrap.innerHTML = `<div class="muted">No hay Cast en las escenas del día.</div>`;
+        return;
+      }
+
+      const dayBase = baseDayCall(d);
+      const castBase = baseCastCall(d);
+      const DEF_RTS = Number(state?.project?.rtsOffsetMin ?? 60);
+
+      // Controls
+      const top = document.createElement("div");
+      top.className = "callGroupBox";
+      top.innerHTML = `
+        <div class="callGroupRow">
+          <div class="lbl">Call Cast</div>
+          <input type="time" class="input timeInput" id="cast_call" value="${castBase}"/>
+          <button class="btn small ghost" id="cast_apply" title="Aplicar Call Cast a todo el Cast">Aplicar</button>
+          <button class="btn small ghost" id="cast_reset" title="Resetear todo el Cast a Call Cast">Reset</button>
+        </div>
+        <div class="callExtrasRow">
+          <div class="callExtraLine">
+            <div class="left">
+              <span class="miniLbl">PU Cast</span>
+              <span class="chip toggle ${d.pickupCastEnabled ? "active" : ""}" id="tglPUCast">PU</span>
+            </div>
+            <div class="right">
+              <span class="miniLbl">Offset</span>
+              <input type="number" class="input compact" id="puCastOffset" style="width:88px" value="${Math.round(Number(d.pickupCastOffsetMin ?? -30))}" ${d.pickupCastEnabled ? "" : "disabled"}/>
+              <button class="btn icon ghost small" id="puCastReset" title="Reset PU Cast a default">↺</button>
+            </div>
+          </div>
+
+          <div class="callExtraLine">
+            <div class="left">
+              <span class="miniLbl">RTS</span>
+              <span class="chip toggle ${d.rtsEnabled ? "active" : ""}" id="tglRTS">RTS</span>
+            </div>
+            <div class="right">
+              <span class="miniLbl">Offset</span>
+              <input type="number" class="input compact" id="rtsOffset" style="width:88px" value="${Math.round(Number(d.rtsOffsetMin ?? DEF_RTS))}" ${d.rtsEnabled ? "" : "disabled"}/>
+              <button class="btn icon ghost small" id="rtsReset" title="Reset RTS a default del proyecto">↺</button>
+            </div>
+          </div>
+        </div>
+      `;
+      wrap.appendChild(top);
+
+      function rerender(){
+        renderDayCast();
+        renderDayCrewPicker();
+        renderCallSheetDetail(el("callSheetDetail"), selectedDayId);
+      }
+
+      // Call Cast base
+      top.querySelector("#cast_call")?.addEventListener("change", (e)=>{
+        d.castCallTime = normalizeHHMM(e.target.value) || "";
+        touch();
+        rerender();
+      });
+
+      top.querySelector("#cast_apply")?.addEventListener("click", ()=>{
+        const base = baseCastCall(d);
+        for(const name of cast){
+          // solo seteo override si hoy no tiene uno
+          if(!normalizeHHMM(d.castCallTimes[name])) d.castCallTimes[name] = base;
+        }
+        cleanupDayCallTimes(d);
+        touch();
+        rerender();
+        toast("Aplicado ✅");
+      });
+
+      top.querySelector("#cast_reset")?.addEventListener("click", ()=>{
+        d.castCallTimes = {};
+        cleanupDayCallTimes(d);
+        cleanupDayExtras(d);
+        touch();
+        rerender();
+        toast("Reseteado ✅");
+      });
+
+      // PU Cast
+      top.querySelector("#tglPUCast")?.addEventListener("click", ()=>{
+        d.pickupCastEnabled = !d.pickupCastEnabled;
+        touch();
+        rerender();
+      });
+      top.querySelector("#puCastOffset")?.addEventListener("change", (e)=>{
+        const v = Math.round(Number(e.target.value));
+        d.pickupCastOffsetMin = Number.isFinite(v) ? v : -30;
+        cleanupDayExtras(d);
+        touch();
+        rerender();
+      });
+      top.querySelector("#puCastReset")?.addEventListener("click", ()=>{
+        d.pickupCastOffsetMin = -30;
+        d.castPickUpTimes = {};
+        cleanupDayExtras(d);
+        touch();
+        rerender();
+        toast("PU Cast: default ✅");
+      });
+
+      // RTS
+      top.querySelector("#tglRTS")?.addEventListener("click", ()=>{
+        d.rtsEnabled = !d.rtsEnabled;
+        touch();
+        rerender();
+      });
+      top.querySelector("#rtsOffset")?.addEventListener("change", (e)=>{
+        const v = Math.round(Number(e.target.value));
+        d.rtsOffsetMin = Number.isFinite(v) ? v : DEF_RTS;
+        cleanupDayExtras(d);
+        touch();
+        rerender();
+      });
+      top.querySelector("#rtsReset")?.addEventListener("click", ()=>{
+        d.rtsOffsetMin = DEF_RTS;
+        d.castRTSTimes = {};
+        cleanupDayExtras(d);
+        touch();
+        rerender();
+        toast("RTS: default ✅");
+      });
+
+      // List
+      const list = document.createElement("div");
+      list.className = "callPeopleList";
+
+      for(const name of cast){
+        const call = effectiveCastCall(d, name);
+        const callOv = normalizeHHMM(d?.castCallTimes?.[name]);
+        const callIsOv = !!callOv && callOv !== castBase;
+
+        const basePu = shiftHHMM(call, Number(d.pickupCastOffsetMin ?? -30));
+        const pu = d.pickupCastEnabled ? effectiveCastPU(d, name) : "";
+        const puOv = normalizeHHMM(d?.castPickUpTimes?.[name]);
+        const puIsOv = d.pickupCastEnabled && !!puOv && puOv !== basePu;
+
+        const baseRts = shiftHHMM(call, Number(d.rtsOffsetMin ?? DEF_RTS));
+        const rts = d.rtsEnabled ? effectiveCastRTS(d, name) : "";
+        const rtsOv = normalizeHHMM(d?.castRTSTimes?.[name]);
+        const rtsIsOv = d.rtsEnabled && !!rtsOv && rtsOv !== baseRts;
+
+        const diff = minutesFromHHMM(call) - minutesFromHHMM(castBase);
+        const dotStyle = diff === 0 ? "background: rgba(var(--ok-rgb),.9)" : "background: rgba(255, 208, 0, .9)";
+        const castRec = findCastCrewEntryByName(name);
+        const castMeta = [castRec?.role, castRec?.phone].filter(Boolean).join(" • ");
+
+
+        const card = document.createElement("div");
+        card.className = "callPersonRow";
+        card.innerHTML = `
+          <div class="left">
+            <div class="dot" style="${dotStyle}"></div>
+            <div class="txt" style="min-width:0;">
+              <div class="title">${escapeHtml(name)}</div>
+              ${castMeta ? '<div class="meta">'+escapeHtml(castMeta)+'</div>' : ''}
+            </div>
+          </div>
+
+          <div class="right" style="min-width:0;">
+            <div class="crewTimeStack">
+              <div class="timeLine">
+                <div class="k">CALL</div>
+                <div style="display:flex; gap:6px; align-items:center; justify-content:flex-end;">
+                  <input type="time" class="input timeInput ${callIsOv ? "timeDiffDay" : ""}" value="${call}" data-kind="call"/>
+                  <button class="btn icon ghost small" title="Reset CALL" data-kind="callReset">↺</button>
+                </div>
+              </div>
+
+              ${d.pickupCastEnabled ? `
+                <div class="timeLine">
+                  <div class="k">PU</div>
+                  <div style="display:flex; gap:6px; align-items:center; justify-content:flex-end;">
+                    <input type="time" class="input timeInput ${puIsOv ? "timeDiffDay" : ""}" value="${pu}" data-kind="pu"/>
+                    <button class="btn icon ghost small" title="Reset PU" data-kind="puReset">↺</button>
+                  </div>
+                </div>
+              ` : ""}
+
+              ${d.rtsEnabled ? `
+                <div class="timeLine">
+                  <div class="k">RTS</div>
+                  <div style="display:flex; gap:6px; align-items:center; justify-content:flex-end;">
+                    <input type="time" class="input timeInput ${rtsIsOv ? "timeDiffDay" : ""}" value="${rts}" data-kind="rts"/>
+                    <button class="btn icon ghost small" title="Reset RTS" data-kind="rtsReset">↺</button>
+                  </div>
+                </div>
+              ` : ""}
+            </div>
+          </div>
+        `;
+
+        const callInput = card.querySelector('input[data-kind="call"]');
+        const callReset = card.querySelector('button[data-kind="callReset"]');
+
+        callInput.addEventListener("change", ()=>{
+          const v = normalizeHHMM(callInput.value);
+          if(!v || v === castBase) delete d.castCallTimes[name];
+          else d.castCallTimes[name] = v;
+
+          cleanupDayCallTimes(d);
+          cleanupDayExtras(d);
+          touch();
+          rerender();
+        });
+        callReset.addEventListener("click", ()=>{
+          delete d.castCallTimes[name];
+          cleanupDayCallTimes(d);
+          cleanupDayExtras(d);
+          touch();
+          rerender();
+        });
+
+        // PU
+        if(d.pickupCastEnabled){
+          const puInput = card.querySelector('input[data-kind="pu"]');
+          const puReset = card.querySelector('button[data-kind="puReset"]');
+
+          puInput.addEventListener("change", ()=>{
+            const v = normalizeHHMM(puInput.value);
+            const def = shiftHHMM(effectiveCastCall(d, name), Number(d.pickupCastOffsetMin ?? -30));
+            if(!v || v === def) delete d.castPickUpTimes[name];
+            else d.castPickUpTimes[name] = v;
+
+            cleanupDayExtras(d);
+            touch();
+            rerender();
+          });
+          puReset.addEventListener("click", ()=>{
+            delete d.castPickUpTimes[name];
+            cleanupDayExtras(d);
+            touch();
+            rerender();
+          });
+        }
+
+        // RTS
+        if(d.rtsEnabled){
+          const rtsInput = card.querySelector('input[data-kind="rts"]');
+          const rtsReset = card.querySelector('button[data-kind="rtsReset"]');
+
+          rtsInput.addEventListener("change", ()=>{
+            const v = normalizeHHMM(rtsInput.value);
+            const def = shiftHHMM(effectiveCastCall(d, name), Number(d.rtsOffsetMin ?? DEF_RTS));
+            if(!v || v === def) delete d.castRTSTimes[name];
+            else d.castRTSTimes[name] = v;
+
+            cleanupDayExtras(d);
+            touch();
+            rerender();
+          });
+          rtsReset.addEventListener("click", ()=>{
+            delete d.castRTSTimes[name];
+            cleanupDayExtras(d);
+            touch();
+            rerender();
+          });
+        }
+
+        list.appendChild(card);
+      }
+
+      wrap.appendChild(list);
+    }
+
+function renderDayCrewPicker(){
     const wrap = el("dayCrewPicker");
     if(!wrap) return;
     wrap.innerHTML = "";
@@ -6700,14 +6986,14 @@ function printShotlistByDayId(dayId){
       return bdRowsToObjects(bdParseCSV(t));
     }
     if(!window.XLSX){
-      throw new Error("No se pudo cargar XLSX. Tip: exportá el Excel a CSV.");
+      throw new Error("No se pudo cargar window.XLSX. Tip: exportá el Excel a CSV.");
     }
     const buf = await bdReadFileArrayBuffer(file);
-    const wb = XLSX.read(buf, { type: "array" });
+    const wb = window.XLSX.read(buf, { type: "array" });
     const sheetName = wb.SheetNames?.[0];
     const sheet = wb.Sheets?.[sheetName];
     if(!sheet) return [];
-    return XLSX.utils.sheet_to_json(sheet, { defval: "", raw: false });
+    return window.XLSX.utils.sheet_to_json(sheet, { defval: "", raw: false });
   }
 
   function bdBuildSceneMap(){
