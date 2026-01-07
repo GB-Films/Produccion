@@ -178,6 +178,47 @@
         <!-- ABAJO: importación (secundaria) + colapsable -->
         
           <div class="grid2">
+
+            <div class="card span2" id="bdImportCard">
+              <div class="cardHeader">
+                <div class="cardTitle">Importar Breakdown <span class="keepcase">(Excel/CSV)</span></div>
+                <div class="pill" id="bdImportStatus">—</div>
+              </div>
+              <div class="cardContent">
+                <div class="row gap" style="flex-wrap:wrap;">
+                  <button class="btn" id="btnBDTemplateWide" type="button">Descargar plantilla (por escena)</button>
+                  <button class="btn ghost" id="btnBDTemplateLong" type="button">Plantilla (por ítem)</button>
+                  <span class="muted small">Tip: en celdas podés separar con coma, punto y coma o salto de línea.</span>
+                </div>
+
+                <div class="row gap alignEnd" style="flex-wrap:wrap; margin-top:10px;">
+                  <div class="field grow" style="min-width:260px;">
+                    <label>Archivo</label>
+                    <input class="input" type="file" id="bdFileInput" accept=".xlsx,.xls,.csv" />
+                  </div>
+
+                  <div class="field" style="min-width:220px;">
+                    <label>Modo</label>
+                    <select class="input" id="bdImportMode">
+                      <option value="merge">Sumar (no borra)</option>
+                      <option value="replace" selected>Reemplazar (solo columnas presentes)</option>
+                    </select>
+                  </div>
+
+                  <label class="row gap" style="align-items:center; margin:0;">
+                    <input type="checkbox" id="bdImportCreateMissing" />
+                    <span class="small">Crear escenas faltantes</span>
+                  </label>
+
+                  <button class="btn primary" id="btnBDImport" type="button">Importar</button>
+                </div>
+
+                <div class="muted small" style="margin-top:8px;">
+                  Si una escena no existe: se ignora (o se crea si activás la opción). Las categorías soportadas: Cast, Props, Vestuario, Arte, Maquillaje, Sonido, SFX, VFX, Vehículos, Animales, Extras.
+                </div>
+              </div>
+            </div>
+
             <div class="card collapsible collapsed span2" data-collapse-key="bd_script">
               <div class="cardHeader">
                 <div class="cardTitle">GUION EN EL BREAKDOWN <span class="keepcase">(versión y planos)</span></div>
@@ -576,7 +617,7 @@
     }catch(e){}
 
     // JS en orden (sin async)
-    const files = ["js/utils.js","js/storage.js","js/app.js"];
+    const files = ["https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js","js/utils.js","js/storage.js","js/app.js"];
     function add(i){
       if(i >= files.length) return;
       const s = document.createElement("script");
