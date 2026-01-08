@@ -414,8 +414,24 @@
       lastRemoteStamp = pushStamp;
       StorageLayer.setRemoteStamp(cfg.binId, lastRemoteStamp);
       updateSyncPill("JSONBin");
-    }catch{
+    }catch(err){
       updateSyncPill("Local");
+      try{
+        const msg = String(err?.message || err || "");
+        // 403/404: no es conexión, es credenciales/bin
+        if(msg.includes("403")){
+          if(!autosyncRun._warn403){
+            autosyncRun._warn403 = true;
+            toast("JSONBin 403: la Access Key no puede actualizar (Update) o el bin no es tuyo.");
+          }
+        }
+        if(msg.includes("404")){
+          if(!autosyncRun._warn404){
+            autosyncRun._warn404 = true;
+            toast("JSONBin 404: bin no encontrado / no asociado a tu cuenta. Revisá BIN_ID y Access Key.");
+          }
+        }
+      }catch(_e){}
     }finally{
       autosyncInFlight = false;
       if(autosyncPending){
@@ -553,8 +569,13 @@
             sessionPulledRemote = true;
             lastRemoteStamp = String(state?.meta?.updatedAt || "");
             StorageLayer.setRemoteStamp(cfg.binId, lastRemoteStamp);
-          }catch{
+          }catch(err){
             updateSyncPill("Local");
+            try{
+              const msg = String(err?.message || err || "");
+              if(msg.includes("403")) toast("JSONBin 403: la Access Key no tiene permiso para inicializar/actualizar.");
+              if(msg.includes("404")) toast("JSONBin 404: no pude inicializar porque el bin no existe / no es tuyo.");
+            }catch(_e){}
           }
         }else{
           updateSyncPill("Local");
@@ -569,7 +590,12 @@
           // Solo avisamos una vez por sesión para no molestar.
           const isNarrow = (typeof window !== "undefined" && window.matchMedia) ? window.matchMedia("(max-width: 860px)").matches : false;
           const extra = isNarrow ? " (probá abrir en el navegador completo)" : "";
-          toast("No pude conectar con JSONBin, estoy en modo Local" + extra);
+          (function(){
+            const msg = String(err?.message || err || "");
+            if(msg.includes("404")) toast("JSONBin 404: bin no encontrado / no asociado a tu cuenta." + extra);
+            else if(msg.includes("403")) toast("JSONBin 403: la Access Key no tiene permiso (Read/Update) o el bin no es tuyo." + extra);
+            else toast("No pude conectar con JSONBin, estoy en modo Local" + extra);
+          })();
         }
       }catch(_e){}
     }finally{
