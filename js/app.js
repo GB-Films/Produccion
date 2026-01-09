@@ -58,7 +58,119 @@
     return found || s;
   }
 
-  const MAX_SCRIPT_VERSIONS = 3;
+  // Solo una versión (V1). Sin opciones extra.
+  const MAX_SCRIPT_VERSIONS = 1;
+
+  // ===================== Permisos (modo lector / editor) =====================
+  // ⚠️ Cambiá esta clave apenas puedas.
+  const DEFAULT_EDIT_PASSWORD = "1234";
+  const EDIT_UNLOCK_SS_PREFIX = "gb_edit_unlocked_v1__"; // sessionStorage
+  let isEditor = false;
+  let lastSavedSnapshot = null; // JSON string del último estado "confiable"
+
+  function getProjectKey(){
+    const cfg = StorageLayer.loadCfg();
+    return String(cfg?.scriptBinId || cfg?.binId || cfg?.projectId || "default");
+  }
+
+  function setSnapshotFromState(){
+    try{ lastSavedSnapshot = JSON.stringify(state); }catch(_e){ /* ignore */ }
+  }
+
+  function ensureModeBanner(){
+    if(document.getElementById("modeBanner")) return;
+    const b = document.createElement("div");
+    b.id = "modeBanner";
+    b.className = "modeBanner hidden";
+    b.textContent = "🔒 MODO LECTOR";
+    document.body.appendChild(b);
+  }
+
+  function updateModeBanner(){
+    const b = document.getElementById("modeBanner");
+    if(!b) return;
+    b.classList.toggle("hidden", !!isEditor);
+    b.textContent = isEditor ? "✏️ EDICIÓN" : "🔒 MODO LECTOR";
+  }
+
+  async function sha256B64(text){
+    try{
+      const enc = new TextEncoder().encode(String(text||""));
+      const buf = await crypto.subtle.digest("SHA-256", enc);
+      const bytes = new Uint8Array(buf);
+      let bin = "";
+      for(const b of bytes) bin += String.fromCharCode(b);
+      return btoa(bin);
+    }catch(_e){
+      // fallback extremadamente simple (no criptográfico) por si el browser no soporta subtle
+      return btoa(unescape(encodeURIComponent(String(text||""))));
+    }
+  }
+
+  async function getStoredPassHash(){
+    const h = String(state?.meta?.editPassHash || "").trim();
+    return h || "";
+  }
+
+  async function checkEditPassword(pw){
+    const tryHash = await sha256B64(pw);
+    const stored = await getStoredPassHash();
+    if(stored) return tryHash === stored;
+    // Si todavía no hay hash en el proyecto, habilitamos con la default (para bootstrap) 
+    const defHash = await sha256B64(DEFAULT_EDIT_PASSWORD);
+    return tryHash === defHash;
+  }
+
+  function setEditorMode(on){
+    isEditor = !!on;
+    try{
+      const key = EDIT_UNLOCK_SS_PREFIX + getProjectKey();
+      if(isEditor) sessionStorage.setItem(key, "1");
+      else sessionStorage.removeItem(key);
+    }catch(_e){}
+    document.body.classList.toggle("readOnly", !isEditor);
+    updateAuthUI();
+    applyReadOnlyUI();
+    updateModeBanner();
+  }
+
+  async function unlockEditorFlow(fromAction){
+    const label = fromAction ? `\n\n(Acción: ${fromAction})` : "";
+    const pw = prompt("Contraseña para habilitar edición:" + label);
+    if(pw == null) return;
+    const ok = await checkEditPassword(pw);
+    if(!ok) return toast("Contraseña incorrecta ❌");
+
+    setEditorMode(true);
+
+    // Si el proyecto todavía no tenía contraseña guardada, la inicializamos con la ingresada
+    if(!(state?.meta?.editPassHash)){
+      state.meta = state.meta || {};
+      state.meta.editPassHash = await sha256B64(pw);
+      touch();
+      toast("Edición habilitada ✅ (tip: cambiá la clave)");
+    }else{
+      toast("Edición habilitada ✅");
+    }
+  }
+
+  function lockEditor(){
+    setEditorMode(false);
+    toast("Modo lector 🔒");
+  }
+
+  async function changeEditPassword(){
+    if(!isEditor) return unlockEditorFlow("Cambiar clave");
+    const pw1 = prompt("Nueva contraseña (no se guarda en el BIN, solo su hash):");
+    if(pw1 == null) return;
+    const pw2 = prompt("Repetí la nueva contraseña:");
+    if(pw2 == null) return;
+    if(pw1 !== pw2) return toast("No coincide ❌");
+    state.meta = state.meta || {};
+    state.meta.editPassHash = await sha256B64(pw1);
+    touch();
+    toast("Clave actualizada ✅");
+  }
 
   const crewAreas = [
     "Direccion",
@@ -250,6 +362,58 @@
   }
 
 
+  // ===================== UI Permisos =====================
+  function updateAuthUI(){
+    try{ ensureModeBanner(); }catch{}
+    const st = el("authStatus");
+    const hint = el("authHint");
+    const bUn = el("btnUnlockEdit");
+    const bLo = el("btnLockEdit");
+    const bCh = el("btnChangeEditPass");
+
+    if(st) st.textContent = isEditor ? "✏️ Editor" : "🔒 Lector";
+    if(hint) hint.textContent = isEditor ? "Edición habilitada" : "Solo lectura";
+
+    if(bUn) bUn.classList.toggle("hidden", !!isEditor);
+    if(bLo) bLo.classList.toggle("hidden", !isEditor);
+    if(bCh) bCh.classList.toggle("hidden", !isEditor);
+
+    // Title editable solo en modo editor
+    const pt = el("projectTitle");
+    if(pt) pt.disabled = !isEditor;
+  }
+
+  function applyReadOnlyUI(){
+    const ro = !isEditor;
+    document.body.classList.toggle("readOnly", ro);
+
+    // Botones y controles que mutan data
+    const disableIds = [
+      "projectTitle",
+      "btnAddScene","btnDuplicateScene","btnDeleteScene",
+      "btnAddSceneElement","btnAddShot",
+      "btnBDImport",
+      "btnNewScriptVersion","btnToggleScriptImport","btnParseScript","btnScriptInsertAfter","btnScriptApply","btnScriptSaveScene",
+      "btnAddShootDay","btnDeleteShootDay","btnDayplanAddNote","btnDayplanAuto",
+      "btnAddCrew"
+    ];
+    for(const id of disableIds){
+      const n = el(id);
+      if(n && ("disabled" in n)) n.disabled = ro;
+    }
+
+    // Editor de escenas
+    document.querySelectorAll("#sceneEditorCard input, #sceneEditorCard textarea, #sceneEditorCard select").forEach(n=>{
+      if("disabled" in n) n.disabled = ro;
+    });
+    // Import de guion
+    document.querySelectorAll("#scriptImportPanel input, #scriptImportPanel textarea, #scriptImportPanel select").forEach(n=>{
+      if("disabled" in n) n.disabled = ro;
+    });
+    // Crew: dejar el buscador, pero bloquear agregado (botón ya está arriba)
+  }
+
+
 
   function saveConflictBackup(binId, snapshot){
     try{
@@ -326,8 +490,29 @@
     }
   }
   function touch(){
+    // Modo lector: NO permitimos mutar el estado. Revertimos al último snapshot.
+    if(!isEditor){
+      if(touch._reverting) return;
+      touch._reverting = true;
+      try{
+        if(lastSavedSnapshot){
+          try{
+            state = JSON.parse(lastSavedSnapshot);
+            hydrateAll();
+          }catch(_e){}
+        }
+        updateAuthUI();
+        applyReadOnlyUI();
+        toast("Modo lector 🔒 (desbloqueá para editar)");
+      }finally{
+        touch._reverting = false;
+      }
+      return;
+    }
+
     state.meta.updatedAt = new Date().toISOString();
     StorageLayer.saveLocal(state);
+    setSnapshotFromState();
     const saved = el("savedAtText");
     if(saved) saved.textContent = new Date(state.meta.updatedAt).toLocaleString("es-AR");
     const st = el("statusText");
@@ -1311,93 +1496,6 @@ function ensureDayShotsDone(d){
     }
 
     // Mantener escenas ordenadas por horario
-    d.sceneIds.sort((a,b)=> (d.times[a]??0) - (d.times[b]??0));
-  }
-
-  function _intervalsOverlap(aS,aE,bS,bE){ return (aS < bE) && (aE > bS); }
-  function _fullOverlap(aS,aE,bS,bE){ return (aS<=bS && aE>=bE) || (bS<=aS && bE>=aE); }
-
-  // Para movimientos (drag/drop):
-  // - Las tarjetas se arrastran libres.
-  // - Al solaparse, queda ARRIBA la que tenga inicio MÁS TEMPRANO (según el estado final del drag).
-  // - La que tenga inicio MÁS TARDÍO es la que hace snap debajo (al final de la anterior).
-  // Esto evita comportamientos raros de "me metí un poquito y te moví la otra".
-  function resolveOverlapsAfterMove(d, snapMin, _anchorKind, _anchorId){
-    ensureDayTimingMaps(d);
-
-    const blockById = new Map((d.blocks||[]).map(b=>[b.id, b]));
-    const items = [];
-
-    const sceneIds = (d.sceneIds||[]);
-    for(let i=0;i<sceneIds.length;i++){
-      const sid = sceneIds[i];
-      items.push({
-        kind:"scene",
-        id:sid,
-        start: d.times[sid] ?? 0,
-        dur:   d.durations[sid] ?? 60,
-        order: i
-      });
-    }
-    for(let i=0;i<(d.blocks||[]).length;i++){
-      const b = d.blocks[i];
-      items.push({
-        kind:"block",
-        id:b.id,
-        start: b.startMin ?? 0,
-        dur:   b.durMin ?? 30,
-        order: 100000 + i
-      });
-    }
-
-    // Normalizar start/dur
-    for(const it of items){
-      let du = Number(it.dur ?? snapMin);
-      let st = Number(it.start ?? 0);
-
-      du = clamp(du, snapMin, DAY_SPAN_MIN);
-      st = snap(st, snapMin);
-      st = clamp(st, 0, Math.max(0, DAY_SPAN_MIN - du));
-
-      it.dur = du;
-      it.start = st;
-    }
-
-    // Orden por inicio (estable). Si empatan, respetamos el orden previo.
-    items.sort((a,b)=>{
-      if((a.start??0) !== (b.start??0)) return (a.start??0) - (b.start??0);
-      return (a.order??0) - (b.order??0);
-    });
-
-    // Push-down: si un item cae sobre otro, el de inicio más tardío hace fila.
-    let cursor = 0;
-    for(const it of items){
-      let st = it.start ?? 0;
-      const du = it.dur ?? snapMin;
-
-      if(st < cursor){
-        st = snap(cursor, snapMin);
-      }
-      st = clamp(st, 0, Math.max(0, DAY_SPAN_MIN - du));
-
-      it.start = st;
-      cursor = clamp(st + du, 0, DAY_SPAN_MIN);
-    }
-
-    // writeback
-    for(const it of items){
-      if(it.kind === "scene"){
-        d.times[it.id] = it.start;
-        d.durations[it.id] = it.dur;
-      }else{
-        const bb = blockById.get(it.id);
-        if(bb){
-          bb.startMin = it.start;
-          bb.durMin = it.dur;
-        }
-      }
-    }
-
     d.sceneIds.sort((a,b)=> (d.times[a]??0) - (d.times[b]??0));
   }
 
@@ -4260,6 +4358,13 @@ function bindScheduleDnD(){
     const block = e.target.closest(".schedBlock");
     if(!block) return;
 
+    if(!isEditor){
+      e.preventDefault();
+      toast("Modo lector 🔒");
+      unlockEditorFlow("Arrastrar (Plan General)");
+      return;
+    }
+
     const isResize = !!e.target.closest(".resize");
 
     const dayId = block.dataset.dayId;
@@ -4441,7 +4546,7 @@ function bindScheduleDnD(){
         toDay.durations[sid] = keepDur;
 
         resolveOverlapsPushDown(fromDay, d0.snapMin);
-        resolveOverlapsAfterMove(toDay, d0.snapMin, d0.kind, d0.itemId);
+        resolveOverlapsPushDown(toDay, d0.snapMin);
       }else{
         const bid = d0.itemId;
         const idx = (fromDay.blocks||[]).findIndex(b=>b.id===bid);
@@ -4452,13 +4557,13 @@ function bindScheduleDnD(){
           toDay.blocks = (toDay.blocks||[]);
           toDay.blocks.push(moved);
           resolveOverlapsPushDown(fromDay, d0.snapMin);
-        resolveOverlapsAfterMove(toDay, d0.snapMin, d0.kind, d0.itemId);
+          resolveOverlapsPushDown(toDay, d0.snapMin);
         }
       }
     }else{
       const cur = getItem(fromDay, d0.kind, d0.itemId);
       setItem(fromDay, d0.kind, d0.itemId, newStart, cur.dur);
-      resolveOverlapsAfterMove(fromDay, d0.snapMin, d0.kind, d0.itemId);
+      resolveOverlapsPushDown(fromDay, d0.snapMin);
     }
 
     touch();
@@ -5227,7 +5332,7 @@ ${
         d0.times[sid] = offset;
         d0.durations[sid] = d0.durations[sid] ?? 60;
 
-        resolveOverlapsAfterMove(d0, snapMin0, "scene", sid);
+        resolveOverlapsPushDown(d0, snapMin0);
 
         selectedDayId = d0.id; // sincroniza con Call Diario
         selectedDayplanDayId = d0.id;
@@ -5523,13 +5628,10 @@ dayplanPointer = {
 
       function endPointer(){
         if(!dayplanPointer) return;
-        const p0 = dayplanPointer;
-        const dayId = p0.dayId;
+        const dayId = dayplanPointer.dayId;
         const d2 = dayId ? getDay(dayId) : null;
         if(!d2) { dayplanPointer = null; return; }
-        const snap0 = getDayplanSnap();
-        if(p0.mode === "drag") resolveOverlapsAfterMove(d2, snap0, p0.kind, p0.id);
-        else resolveOverlapsPushDown(d2, snap0);
+        resolveOverlapsPushDown(d2, getDayplanSnap());
         touch();
         dayplanPointer = null;
         renderDayPlan();
@@ -5675,7 +5777,7 @@ dayplanPointer = {
           offset = clamp(offset, 0, DAY_SPAN_MIN - snap0);
           offset = snap(offset, snap0);
           setDayplanStart(d0, it0.kind, it0.id, offset);
-          resolveOverlapsAfterMove(d0, snap0, it0.kind, it0.id);
+          resolveOverlapsPushDown(d0, snap0);
           touch();
           renderDayPlan();
           renderScheduleBoard();
@@ -7552,6 +7654,11 @@ function printShotlistByDayId(dayId){
       });
     });
 
+    // Permisos
+    el("btnUnlockEdit")?.addEventListener("click", ()=> unlockEditorFlow("Desbloquear"));
+    el("btnLockEdit")?.addEventListener("click", lockEditor);
+    el("btnChangeEditPass")?.addEventListener("click", changeEditPassword);
+
     el("btnAddScene")?.addEventListener("click", addScene);
     el("btnDuplicateScene")?.addEventListener("click", duplicateScene);
     el("btnDeleteScene")?.addEventListener("click", deleteScene);
@@ -8227,6 +8334,12 @@ if(!state.scenes.length){
     renderReportsDetail();
     applyBankCollapsedUI();
     initCollapsibles();
+
+    // Mantener snapshot y UI de permisos consistentes
+    setSnapshotFromState();
+    updateAuthUI();
+    applyReadOnlyUI();
+    updateModeBanner();
   }
 
   function init(){
@@ -8276,6 +8389,16 @@ if(!state.scenes.length){
     callSheetDayId = selectedDayId;
     selectedShotlistDayId = selectedDayId;
     selectedDayplanDayId = selectedDayId;
+
+    // Permisos: por defecto modo lector. Si ya desbloqueaste en esta pestaña, se recuerda.
+    try{
+      ensureModeBanner();
+      const k = EDIT_UNLOCK_SS_PREFIX + getProjectKey();
+      const unlocked = sessionStorage.getItem(k) === "1";
+      setEditorMode(!!unlocked);
+    }catch(_e){
+      setEditorMode(false);
+    }
 
     bindEvents();
     ensureMobileChrome();

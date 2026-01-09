@@ -19,6 +19,19 @@
 
         <input class="titleInput" id="projectTitle" placeholder="Proyecto"/>
         <select class="input projectSwitch" id="projectSwitch" title="Proyecto"></select>
+
+        <!-- Permisos: por defecto modo lector (imprimir sigue disponible) -->
+        <div class="authBar" id="authBar">
+          <div class="authRow">
+            <span class="authStatus" id="authStatus">🔒 Lector</span>
+            <span class="pill muted small" id="authHint">Solo lectura</span>
+          </div>
+          <div class="row gap">
+            <button class="btn ghost small" id="btnUnlockEdit" type="button">Desbloquear</button>
+            <button class="btn ghost small hidden" id="btnLockEdit" type="button">Bloquear</button>
+            <button class="btn ghost small hidden" id="btnChangeEditPass" type="button" title="Cambiar contraseña">Clave</button>
+          </div>
+        </div>
       </div>
 
       <nav class="nav">
