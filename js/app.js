@@ -58,7 +58,93 @@
     return found || s;
   }
 
-  const MAX_SCRIPT_VERSIONS = 3;
+  const MAX_SCRIPT_VERSIONS = 1; // Solo V1 (un único guion)
+
+// Guion: el texto crudo NO se guarda en JSONBin (solo local)
+const SCRIPT_RAW_LOCAL_PREFIX = "gb_script_raw_local_v1__";
+function getScriptRawLocalKey(){
+  try{
+    const cfg = (typeof StorageLayer!=="undefined" && StorageLayer.loadCfg) ? StorageLayer.loadCfg() : null;
+    const k = cfg?.scriptBinId || cfg?.binId || cfg?.projectId || "default";
+    return SCRIPT_RAW_LOCAL_PREFIX + String(k);
+  }catch(_e){
+    return SCRIPT_RAW_LOCAL_PREFIX + "default";
+  }
+}
+function loadScriptRawLocal(){
+  try{ return localStorage.getItem(getScriptRawLocalKey()) || ""; }catch(_e){ return ""; }
+}
+function saveScriptRawLocal(txt){
+  try{ localStorage.setItem(getScriptRawLocalKey(), String(txt||"")); }catch(_e){}
+}
+
+function sanitizeScriptState(opts={}){
+  const migrateRawToLocal = !!opts.migrateRawToLocal;
+  ensureScriptState();
+
+  let changed = false;
+
+  // Si hay varias versiones viejas, nos quedamos con la más nueva (solo V1)
+  try{
+    if(Array.isArray(state.script.versions) && state.script.versions.length > MAX_SCRIPT_VERSIONS){
+      state.script.versions = state.script.versions
+        .slice()
+        .sort((a,b)=>{
+          const ta = Date.parse(a?.updatedAt || a?.createdAt || "") || 0;
+          const tb = Date.parse(b?.updatedAt || b?.createdAt || "") || 0;
+          return ta - tb;
+        })
+        .slice(-MAX_SCRIPT_VERSIONS);
+      changed = true;
+    }
+  }catch(_e){}
+
+  // Asegurar que exista una versión
+  if(!Array.isArray(state.script.versions) || !state.script.versions.length){
+    const now = new Date().toISOString();
+    state.script.versions = [{
+      id: uid("scrVer"),
+      name: "V1",
+      createdAt: now,
+      updatedAt: now,
+      keywords: "",
+      scenes: [],
+      draft: true
+    }];
+    changed = true;
+  }
+
+  // Forzar V1 y versión activa única
+  const v0 = state.script.versions[0];
+  if(v0 && v0.name !== "V1"){ v0.name = "V1"; changed = true; }
+  if(state.script.activeVersionId !== (v0?.id || null)){
+    state.script.activeVersionId = v0?.id || null;
+    changed = true;
+  }
+
+  // Nunca guardar rawText en el estado (lo migramos a local si hace falta)
+  for(const v of (state.script.versions||[])){
+    if(v && Object.prototype.hasOwnProperty.call(v,"rawText")){
+      if(migrateRawToLocal){
+        const cur = loadScriptRawLocal();
+        if(!cur && v.rawText) saveScriptRawLocal(v.rawText);
+      }
+      try{ delete v.rawText; }catch(_e){}
+      changed = true;
+    }
+  }
+
+  // Si migramos algo, lo empujamos una sola vez para limpiar el BIN (sin texto crudo)
+  if(changed && !sanitizeScriptState._autoTouched){
+    sanitizeScriptState._autoTouched = true;
+    try{ state.meta.updatedAt = new Date().toISOString(); }catch(_e){}
+    try{
+      if(!syncReady) sanitizeScriptState._needsRemoteClean = true;
+      touch();
+    }catch(_e){}
+  }
+}
+
 
   const crewAreas = [
     "Direccion",
@@ -550,6 +636,28 @@
     const pack = makeEmptyScriptPack(snap?.meta?.title, snap?.meta?.updatedAt);
     pack.scenes = Array.isArray(snap.scenes) ? snap.scenes : [];
     pack.script = (snap.script && Array.isArray(snap.script.versions)) ? snap.script : { versions: [], activeVersionId: null };
+    // Sanitizar guion: NO guardar texto crudo y permitir solo V1
+    try{
+      pack.script = JSON.parse(JSON.stringify(pack.script));
+      if(Array.isArray(pack.script.versions)){
+        // quitar rawText si viene de versiones viejas
+        for(const v of pack.script.versions){
+          if(v && Object.prototype.hasOwnProperty.call(v,"rawText")){ try{ delete v.rawText; }catch(_e){} }
+          if(v) v.name = "V1";
+        }
+        if(pack.script.versions.length>1){
+          pack.script.versions = pack.script.versions
+            .slice()
+            .sort((a,b)=>{
+              const ta = Date.parse(a?.updatedAt || a?.createdAt || "") || 0;
+              const tb = Date.parse(b?.updatedAt || b?.createdAt || "") || 0;
+              return ta - tb;
+            })
+            .slice(-1);
+        }
+        pack.script.activeVersionId = pack.script.versions[0]?.id || null;
+      }
+    }catch(_e){}
     // Mantener el mismo updatedAt que el core (sirve como "stamp" consistente entre bins)
     pack.meta.updatedAt = String(snap?.meta?.updatedAt || pack.meta.updatedAt);
 
@@ -566,6 +674,12 @@
 
     out.scenes = Array.isArray(scenes) ? scenes : [];
     out.script = (script && Array.isArray(script.versions)) ? script : { versions: [], activeVersionId: null };
+    // Limpieza por compat: no persistir rawText en el estado
+    try{
+      if(Array.isArray(out.script.versions)){
+        for(const v of out.script.versions){ if(v && Object.prototype.hasOwnProperty.call(v,"rawText")){ try{ delete v.rawText; }catch(_e){} } }
+      }
+    }catch(_e){}
 
     // safety
     if(!out.meta) out.meta = { version: 14, title: "Proyecto", updatedAt: new Date().toISOString() };
@@ -721,6 +835,13 @@
       syncReady = true;
       initRemoteSync._running = false;
     }
+      try{
+        if(sanitizeScriptState._needsRemoteClean){
+          sanitizeScriptState._needsRemoteClean = false;
+          autosyncDebounced();
+        }
+      }catch(_e){}
+
   }
 
 
@@ -1920,8 +2041,7 @@ function setupScheduleWheelScroll(){
 
 
   function getActiveScriptVersion(){
-    ensureScriptState();
-    enforceScriptVersionsLimit(true);
+    sanitizeScriptState({ migrateRawToLocal:true });
     const id = state.script.activeVersionId;
     return state.script.versions.find(v=>v.id===id) || state.script.versions[0] || null;
   }
@@ -1930,19 +2050,19 @@ function setupScheduleWheelScroll(){
   function renderScriptVersionSelect(){
     const sel = el("scriptVerSelect");
     if(!sel) return;
-    ensureScriptState();
-    if(!state.script.versions.length){
-      sel.innerHTML = `<option value="">(sin versiones)</option>`;
+    sanitizeScriptState();
+    const v = state.script.versions[0];
+    if(!v){
+      sel.innerHTML = `<option value="">(sin versión)</option>`;
       sel.value = "";
+      sel.disabled = true;
       return;
     }
-    sel.innerHTML = state.script.versions
-      .slice()
-      .sort((a,b)=> (a.createdAt||"").localeCompare(b.createdAt||""))
-      .map(v=>`<option value="${esc(v.id)}">${esc(v.name||"Versión")}</option>`)
-      .join("");
-    if(!state.script.activeVersionId) state.script.activeVersionId = state.script.versions[state.script.versions.length-1].id;
-    sel.value = state.script.activeVersionId;
+    sel.innerHTML = `<option value="${esc(v.id)}">V1</option>`;
+    sel.value = v.id;
+    sel.disabled = true;
+    // Si el HTML viejo todavía trae el select, lo escondemos (ya no hay 3 opciones)
+    try{ sel.style.display = "none"; }catch(_e){}
   }
 
   // ======= Cast roster (desde Crew área Cast) =======
@@ -2201,7 +2321,7 @@ function setupScheduleWheelScroll(){
 
   function renderScriptUI(){
     const wrap = el("scriptVersionUI");
-    ensureScriptState();
+    sanitizeScriptState({ migrateRawToLocal:true });
 
     renderScriptVersionSelect();
     const v = getActiveScriptVersion();
@@ -2220,19 +2340,18 @@ function setupScheduleWheelScroll(){
 
     renderScriptSceneList(v);
     renderScriptSceneEditor(v);
-
     const btnNew = el("btnNewScriptVersion");
     if(btnNew){
-      const atLimit = (state.script.versions||[]).length >= MAX_SCRIPT_VERSIONS;
-      btnNew.disabled = atLimit;
-      btnNew.title = atLimit ? `Máximo ${MAX_SCRIPT_VERSIONS} versiones` : "";
+      btnNew.disabled = true;
+      btnNew.style.display = "none";
     }
 
     // Mantener el guion (raw) visible y persistente por versión
     const panel = el("scriptImportPanel");
     if(panel) panel.classList.remove("hidden");
     const ta = el("scriptImportText");
-    if(ta && ta.value !== (v.rawText||"")) ta.value = v.rawText || "";
+    const localRaw = loadScriptRawLocal();
+    if(ta && ta.value !== localRaw) ta.value = localRaw;
     const ki = el("scriptKeywords");
     if(ki && ki.value !== (v.keywords||"")) ki.value = v.keywords || "";
     const meta = el("scriptVerMeta");
@@ -7655,11 +7774,7 @@ el("btnDayplanAddNote")?.addEventListener("click", addDayplanNote);
     el("btnCancelScriptImport")?.addEventListener("click", ()=> toggleScriptImportPanel(false));
 
     el("btnToggleScriptImport")?.addEventListener("click", ()=>{
-      ensureScriptState();
-      if(!state.script.versions.length){
-        el("btnNewScriptVersion")?.click();
-        return;
-      }
+      sanitizeScriptState({ migrateRawToLocal:true });
       const panel = el("scriptImportPanel");
       const open = panel ? panel.classList.contains("hidden") : true;
       toggleScriptImportPanel(open);
@@ -7667,41 +7782,15 @@ el("btnDayplanAddNote")?.addEventListener("click", addDayplanNote);
 
     // Nueva versión: crea una versión editable (y opcionalmente pegás el guion para procesarla)
     el("btnNewScriptVersion")?.addEventListener("click", ()=>{
-      ensureScriptState();
-      enforceScriptVersionsLimit(false);
-      if(state.script.versions.length >= MAX_SCRIPT_VERSIONS){
-        return toast(`Máximo ${MAX_SCRIPT_VERSIONS} versiones por ahora.`);
-      }
-      const now = new Date().toISOString();
-      const base = getActiveScriptVersion();
-      const v = {
-        id: uid("scrVer"),
-        name: `V${state.script.versions.length + 1}`,
-        createdAt: now,
-        updatedAt: now,
-        keywords: base?.keywords || "",
-        rawText: base?.rawText || "",
-        scenes: [],
-        draft: true
-      };
-      state.script.versions.push(v);
-      state.script.activeVersionId = v.id;
-      selectedScriptSceneId = v.scenes?.[0]?.id || null;
-
-      // Prefill textarea con el último guion (si lo había)
-      const ta = el("scriptImportText");
-      if(ta) ta.value = base?.rawText || "";
-      const ki = el("scriptKeywords");
-      if(ki) ki.value = base?.keywords || "";
-
-      touch();
-      toast(`Nueva versión creada → ${v.name}`);
-      renderScriptUI();
-      toggleScriptImportPanel(true);
+      toast("Solo existe V1. Reemplazá el guion desde “Pegar / Procesar”.");
+      const panel = el("scriptImportPanel");
+      if(panel) panel.classList.remove("hidden");
+      requestAnimationFrame(()=> el("scriptImportText")?.focus());
     });
 el("btnParseScript")?.addEventListener("click", ()=>{
       const txt = el("scriptImportText")?.value || "";
       const keys = el("scriptKeywords")?.value || "";
+      saveScriptRawLocal(txt);
       const scenes = parseScreenplayToScriptScenes(txt, keys);
       if(!scenes.length) return toast("No detecté escenas (revisá INT./EXT. por línea).");
       // Aviso: si repetís números de escena (p.ej. reiniciás en cada capítulo) el merge por número puede confundirse.
@@ -7725,7 +7814,6 @@ el("btnParseScript")?.addEventListener("click", ()=>{
       // Si venís de 'Nueva versión' (draft) y está vacía, completamos ESA versión
       if(v && v.draft && !(v.scenes||[]).length){
         v.keywords = keys;
-        v.rawText = txt;
         v.scenes = scenes;
         v.updatedAt = now;
         v.draft = false;
@@ -7733,7 +7821,6 @@ el("btnParseScript")?.addEventListener("click", ()=>{
   // Si ya llegamos al límite, re-procesamos la versión activa en lugar de crear otra.
   if(state.script.versions.length >= MAX_SCRIPT_VERSIONS){
     v.keywords = keys;
-    v.rawText = txt;
     v.scenes = scenes;
     v.updatedAt = now;
     v.draft = false;
@@ -7744,7 +7831,6 @@ el("btnParseScript")?.addEventListener("click", ()=>{
       createdAt: now,
       updatedAt: now,
       keywords: keys,
-      rawText: txt,
       scenes
     };
     state.script.versions.push(v);
@@ -7765,11 +7851,7 @@ el("btnParseScript")?.addEventListener("click", ()=>{
     if(taImport && !taImport._bound){
       taImport._bound = true;
       taImport.addEventListener("input", ()=>{
-        const v = getActiveScriptVersion();
-        if(!v) return;
-        v.rawText = taImport.value || "";
-        v.updatedAt = new Date().toISOString();
-        touch();
+        saveScriptRawLocal(taImport.value || "");
       });
     }
     const kw = el("scriptKeywords");
@@ -7793,11 +7875,10 @@ el("btnParseScript")?.addEventListener("click", ()=>{
       toast("Cambios guardados ✅");
     });
 el("scriptVerSelect")?.addEventListener("change", ()=>{
-      const id = el("scriptVerSelect").value;
-      ensureScriptState();
-      state.script.activeVersionId = id || null;
+      sanitizeScriptState();
+      const v = state.script.versions[0];
+      state.script.activeVersionId = v?.id || null;
       selectedScriptSceneId = null;
-      touch();
       renderScriptUI();
     });
 
@@ -8054,6 +8135,7 @@ el("scriptVerSelect")?.addEventListener("change", ()=>{
 
   function hydrateAll(){
     ensureScriptState();
+    sanitizeScriptState({ migrateRawToLocal:true });
     ensureProjectConfig();
     state.scenes.forEach(ensureSceneExtras);
 // Backfill automático para escenas existentes (INT/EXT, Lugar, Momento) a partir del Título/slugline
