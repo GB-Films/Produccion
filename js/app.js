@@ -115,6 +115,7 @@
   let bootAppliedRemote = false;
   let sessionPulledRemote = false;
   let lastRemoteStamp = "";
+  let lastScriptRemoteStamp = "";
 
   // Crew table: which rows are expanded to show assigned shoot days
   let expandedCrewIds = new Set();
@@ -366,20 +367,40 @@
     }
 
     try{
-      const remote = await StorageLayer.jsonbinGet(cfg.binId, cfg.accessKey);
-      const remoteOK = isValidState(remote);
+      const [remoteCore, remotePackRaw] = await Promise.all([
+        StorageLayer.jsonbinGet(cfg.binId, cfg.accessKey),
+        cfg.scriptBinId ? StorageLayer.jsonbinGet(cfg.scriptBinId, cfg.accessKey).catch(()=>null) : Promise.resolve(null)
+      ]);
 
-      if(remoteOK){
-        const remoteStamp = String(remote?.meta?.updatedAt || "");
-        const storedStamp = StorageLayer.getRemoteStamp(cfg.binId) || lastRemoteStamp || "";
+      const coreOK = isValidState(remoteCore);
+      const packOK = isValidScriptPack(remotePackRaw);
+      const remoteCombined = coreOK ? mergeStateFromBins(remoteCore, packOK ? remotePackRaw : null) : null;
+
+      if(coreOK){
+        const coreStamp = String(remoteCore?.meta?.updatedAt || "");
+        const storedCoreStamp = StorageLayer.getRemoteStamp(cfg.binId) || lastRemoteStamp || "";
+
+        const packStamp = cfg.scriptBinId ? String(remotePackRaw?.meta?.updatedAt || "") : "";
+        const storedPackStamp = cfg.scriptBinId ? (StorageLayer.getRemoteStamp(cfg.scriptBinId) || lastScriptRemoteStamp || "") : "";
+
+        const changedByStamp =
+          (storedCoreStamp && coreStamp && coreStamp !== storedCoreStamp) ||
+          (cfg.scriptBinId && storedPackStamp && packStamp && packStamp !== storedPackStamp);
 
         // Si el remoto cambió desde la última vez que lo vimos, NO empujamos: primero absorbemos remoto.
-        if(storedStamp && remoteStamp && remoteStamp !== storedStamp){
+        if(changedByStamp){
           saveConflictBackup(cfg.binId, state); // copia local por si hay conflicto
-          state = remote;
+          state = remoteCombined;
           StorageLayer.saveLocal(state);
-          lastRemoteStamp = remoteStamp;
+
+          lastRemoteStamp = coreStamp;
           StorageLayer.setRemoteStamp(cfg.binId, lastRemoteStamp);
+
+          if(cfg.scriptBinId){
+            lastScriptRemoteStamp = packStamp;
+            StorageLayer.setRemoteStamp(cfg.scriptBinId, lastScriptRemoteStamp);
+          }
+
           hydrateAll();
           toast("Actualicé remoto ✅");
           updateSyncPill("JSONBin");
@@ -387,12 +408,19 @@
         }
 
         // Si el remoto es más nuevo que lo local (por updatedAt), absorbemos remoto y listo.
-        if(tsUpdatedAt(remote) > tsUpdatedAt(state)){
+        if(tsUpdatedAt(remoteCombined) > tsUpdatedAt(state)){
           saveConflictBackup(cfg.binId, state);
-          state = remote;
+          state = remoteCombined;
           StorageLayer.saveLocal(state);
-          lastRemoteStamp = remoteStamp || String(state?.meta?.updatedAt || "");
+
+          lastRemoteStamp = coreStamp || String(state?.meta?.updatedAt || "");
           StorageLayer.setRemoteStamp(cfg.binId, lastRemoteStamp);
+
+          if(cfg.scriptBinId){
+            lastScriptRemoteStamp = packStamp || String(state?.meta?.updatedAt || "");
+            StorageLayer.setRemoteStamp(cfg.scriptBinId, lastScriptRemoteStamp);
+          }
+
           hydrateAll();
           toast("Actualicé remoto ✅");
           updateSyncPill("JSONBin");
@@ -400,7 +428,7 @@
         }
       }else{
         // Remoto inválido: solo empujar si parece "sin inicializar".
-        if(!isUninitializedRemote(remote)){
+        if(!isUninitializedRemote(remoteCore)){
           updateSyncPill("Local");
           return;
         }
@@ -410,9 +438,19 @@
       // no el de "lo que sea" que quedó en state cuando la request vuelve.
       const snapshot = JSON.parse(JSON.stringify(state));
       const pushStamp = String(snapshot?.meta?.updatedAt || "");
-      await StorageLayer.jsonbinPut(cfg.binId, cfg.accessKey, snapshot);
+
+      const { core, pack } = splitStateForBins(snapshot);
+
+      await StorageLayer.jsonbinPut(cfg.binId, cfg.accessKey, core);
       lastRemoteStamp = pushStamp;
       StorageLayer.setRemoteStamp(cfg.binId, lastRemoteStamp);
+
+      if(cfg.scriptBinId){
+        await StorageLayer.jsonbinPut(cfg.scriptBinId, cfg.accessKey, pack);
+        lastScriptRemoteStamp = pushStamp;
+        StorageLayer.setRemoteStamp(cfg.scriptBinId, lastScriptRemoteStamp);
+      }
+
       updateSyncPill("JSONBin");
     }catch(err){
       updateSyncPill("Local");
@@ -440,6 +478,7 @@
       }
     }
   }
+
 
   const autosyncDebounced = window.U.debounce(autosyncRun, 900);
 
@@ -488,6 +527,56 @@
     return Number.isFinite(t) ? t : 0;
   }
 
+  function isValidScriptPack(p){
+    return !!(p && typeof p === "object" && !Array.isArray(p) && p.meta && Array.isArray(p.scenes) && p.script && Array.isArray(p.script.versions));
+  }
+  function makeEmptyScriptPack(title, updatedAt){
+    return {
+      meta: {
+        part: "script",
+        title: title || "Proyecto",
+        updatedAt: updatedAt || new Date().toISOString()
+      },
+      scenes: [],
+      script: { versions: [], activeVersionId: null }
+    };
+  }
+  function splitStateForBins(full){
+    const snap = JSON.parse(JSON.stringify(full || {}));
+    const core = JSON.parse(JSON.stringify(snap));
+    core.scenes = [];
+    core.script = { versions: [], activeVersionId: null };
+
+    const pack = makeEmptyScriptPack(snap?.meta?.title, snap?.meta?.updatedAt);
+    pack.scenes = Array.isArray(snap.scenes) ? snap.scenes : [];
+    pack.script = (snap.script && Array.isArray(snap.script.versions)) ? snap.script : { versions: [], activeVersionId: null };
+    // Mantener el mismo updatedAt que el core (sirve como "stamp" consistente entre bins)
+    pack.meta.updatedAt = String(snap?.meta?.updatedAt || pack.meta.updatedAt);
+
+    return { core, pack };
+  }
+  function mergeStateFromBins(core, pack){
+    const out = JSON.parse(JSON.stringify(core || {}));
+
+    // Preferimos el BIN de guion/escenas si es válido; si no, caemos al legacy del core.
+    const scenes = isValidScriptPack(pack) ? pack.scenes : (Array.isArray(core?.scenes) ? core.scenes : []);
+    const script = isValidScriptPack(pack)
+      ? pack.script
+      : ((core?.script && Array.isArray(core.script.versions)) ? core.script : { versions: [], activeVersionId: null });
+
+    out.scenes = Array.isArray(scenes) ? scenes : [];
+    out.script = (script && Array.isArray(script.versions)) ? script : { versions: [], activeVersionId: null };
+
+    // safety
+    if(!out.meta) out.meta = { version: 14, title: "Proyecto", updatedAt: new Date().toISOString() };
+    if(!Array.isArray(out.shootDays)) out.shootDays = [];
+    if(!Array.isArray(out.crew)) out.crew = [];
+    if(!Array.isArray(out.scenes)) out.scenes = [];
+    if(!out.script || !Array.isArray(out.script.versions)) out.script = { versions: [], activeVersionId: null };
+
+    return out;
+  }
+
 
   function isUninitializedRemote(remote){
     if(remote == null) return true;
@@ -515,14 +604,30 @@
     }
 
     try{
-      const remote = await StorageLayer.jsonbinGet(cfg.binId, cfg.accessKey);
-      sessionPulledRemote = true;
-      lastRemoteStamp = String(remote?.meta?.updatedAt || "");
-      StorageLayer.setRemoteStamp(cfg.binId, lastRemoteStamp);
-      const remoteOK = isValidState(remote);
+      const [remoteCore, remotePackRaw] = await Promise.all([
+        StorageLayer.jsonbinGet(cfg.binId, cfg.accessKey),
+        cfg.scriptBinId ? StorageLayer.jsonbinGet(cfg.scriptBinId, cfg.accessKey).catch(()=>null) : Promise.resolve(null)
+      ]);
 
-      if(remoteOK){
-        const remoteHasData = !isEmptyState(remote);
+      sessionPulledRemote = true;
+
+      // stamps (por bin)
+      lastRemoteStamp = String(remoteCore?.meta?.updatedAt || "");
+      StorageLayer.setRemoteStamp(cfg.binId, lastRemoteStamp);
+
+      const packStamp = cfg.scriptBinId ? String(remotePackRaw?.meta?.updatedAt || "") : "";
+      if(cfg.scriptBinId){
+        lastScriptRemoteStamp = packStamp;
+        StorageLayer.setRemoteStamp(cfg.scriptBinId, lastScriptRemoteStamp);
+      }
+
+      const coreOK = isValidState(remoteCore);
+      const packOK = isValidScriptPack(remotePackRaw);
+
+      const remoteCombined = coreOK ? mergeStateFromBins(remoteCore, packOK ? remotePackRaw : null) : null;
+
+      if(coreOK){
+        const remoteHasData = !isEmptyState(remoteCombined);
         const localHasData  = !isEmptyState(state);
 
         let shouldAdoptRemote = false;
@@ -534,22 +639,27 @@
         if(!localHasData && remoteHasData) shouldAdoptRemote = true;
 
         // Otherwise adopt the newest by updatedAt
-        if(!shouldAdoptRemote && tsUpdatedAt(remote) > tsUpdatedAt(state)) shouldAdoptRemote = true;
+        if(!shouldAdoptRemote && tsUpdatedAt(remoteCombined) > tsUpdatedAt(state)) shouldAdoptRemote = true;
 
         // Mobile safety: si el remoto tiene claramente más contenido que el local, preferimos remoto
-        // (evita quedar pegado a un local viejo en celulares con cache agresivo).
         if(!shouldAdoptRemote && remoteHasData){
-          const remoteScore = (remote.scenes?.length||0) + (remote.shootDays?.length||0) + (remote.crew?.length||0);
-          const localScore  = (state.scenes?.length||0)  + (state.shootDays?.length||0)  + (state.crew?.length||0);
+          const remoteScore = (remoteCombined.scenes?.length||0) + (remoteCombined.shootDays?.length||0) + (remoteCombined.crew?.length||0);
+          const localScore  = (state.scenes?.length||0) + (state.shootDays?.length||0) + (state.crew?.length||0);
           if(isMobileUI() && remoteScore > localScore) shouldAdoptRemote = true;
         }
 
         if(shouldAdoptRemote){
-          state = remote;
+          state = remoteCombined;
           bootAppliedRemote = true;
           StorageLayer.saveLocal(state);
-          lastRemoteStamp = String(state?.meta?.updatedAt || lastRemoteStamp || "");
+          lastRemoteStamp = String(remoteCore?.meta?.updatedAt || lastRemoteStamp || "");
           StorageLayer.setRemoteStamp(cfg.binId, lastRemoteStamp);
+
+          if(cfg.scriptBinId){
+            lastScriptRemoteStamp = String((packOK ? remotePackRaw : null)?.meta?.updatedAt || lastScriptRemoteStamp || "");
+            StorageLayer.setRemoteStamp(cfg.scriptBinId, lastScriptRemoteStamp);
+          }
+
           selectedSceneId = null;
           selectedDayId = null;
           callSheetDayId = null;
@@ -561,14 +671,23 @@
       }else{
         // Remote exists but is not a valid state. If it looks uninitialized (e.g. {extras:[]})
         // and this project has no local data yet, bootstrap the remote with our default state.
-        if(!bootHadLocal && isUninitializedRemote(remote)){
+        if(!bootHadLocal && isUninitializedRemote(remoteCore)){
           try{
-            await StorageLayer.jsonbinPut(cfg.binId, cfg.accessKey, state);
+            const { core, pack } = splitStateForBins(state);
+            await StorageLayer.jsonbinPut(cfg.binId, cfg.accessKey, core);
+            if(cfg.scriptBinId) await StorageLayer.jsonbinPut(cfg.scriptBinId, cfg.accessKey, pack);
+
             updateSyncPill("JSONBin");
             toast("Inicialicé remoto ✅");
             sessionPulledRemote = true;
-            lastRemoteStamp = String(state?.meta?.updatedAt || "");
+
+            lastRemoteStamp = String(core?.meta?.updatedAt || "");
             StorageLayer.setRemoteStamp(cfg.binId, lastRemoteStamp);
+
+            if(cfg.scriptBinId){
+              lastScriptRemoteStamp = String(pack?.meta?.updatedAt || "");
+              StorageLayer.setRemoteStamp(cfg.scriptBinId, lastScriptRemoteStamp);
+            }
           }catch(err){
             updateSyncPill("Local");
             try{
@@ -6761,6 +6880,7 @@ function printShotlistByDayId(dayId){
     if(!cfg.binId || !cfg.accessKey) return toast("Falta Bin ID o Access Key");
     try{
       await StorageLayer.jsonbinGet(cfg.binId, cfg.accessKey);
+      if(cfg.scriptBinId) await StorageLayer.jsonbinGet(cfg.scriptBinId, cfg.accessKey);
       toast("Conexión JSONBin OK ✅");
     }catch(err){
       console.error(err);
@@ -6771,12 +6891,30 @@ function printShotlistByDayId(dayId){
     const cfg = StorageLayer.loadCfg();
     if(!cfg.binId || !cfg.accessKey) return toast("Falta Bin ID o Access Key");
     try{
-      const rec = await StorageLayer.jsonbinGet(cfg.binId, cfg.accessKey);
-      if(!rec || !rec.meta) return toast("Remoto vacío o inválido");
-      state = rec;
-      touch();
+      const [core, packRaw] = await Promise.all([
+        StorageLayer.jsonbinGet(cfg.binId, cfg.accessKey),
+        cfg.scriptBinId ? StorageLayer.jsonbinGet(cfg.scriptBinId, cfg.accessKey).catch(()=>null) : Promise.resolve(null)
+      ]);
+
+      if(!core || !core.meta) return toast("Remoto vacío o inválido");
+      if(!isValidState(core)) return toast("Remoto inválido");
+
+      const pack = isValidScriptPack(packRaw) ? packRaw : null;
+      state = mergeStateFromBins(core, pack);
+
+      StorageLayer.saveLocal(state);
+
+      lastRemoteStamp = String(core?.meta?.updatedAt || "");
+      StorageLayer.setRemoteStamp(cfg.binId, lastRemoteStamp);
+
+      if(cfg.scriptBinId){
+        lastScriptRemoteStamp = String(packRaw?.meta?.updatedAt || "");
+        StorageLayer.setRemoteStamp(cfg.scriptBinId, lastScriptRemoteStamp);
+      }
+
       toast("Remoto cargado ✅");
       hydrateAll();
+      updateSyncPill("JSONBin");
     }catch(err){
       console.error(err);
       toast("No pude traer remoto ❌");
@@ -6786,7 +6924,20 @@ function printShotlistByDayId(dayId){
     const cfg = StorageLayer.loadCfg();
     if(!cfg.binId || !cfg.accessKey) return toast("Falta Bin ID o Access Key");
     try{
-      await StorageLayer.jsonbinPut(cfg.binId, cfg.accessKey, state);
+      const snapshot = JSON.parse(JSON.stringify(state));
+      const pushStamp = String(snapshot?.meta?.updatedAt || "");
+      const { core, pack } = splitStateForBins(snapshot);
+
+      await StorageLayer.jsonbinPut(cfg.binId, cfg.accessKey, core);
+      lastRemoteStamp = pushStamp;
+      StorageLayer.setRemoteStamp(cfg.binId, lastRemoteStamp);
+
+      if(cfg.scriptBinId){
+        await StorageLayer.jsonbinPut(cfg.scriptBinId, cfg.accessKey, pack);
+        lastScriptRemoteStamp = pushStamp;
+        StorageLayer.setRemoteStamp(cfg.scriptBinId, lastScriptRemoteStamp);
+      }
+
       toast("Estado subido ✅");
       updateSyncPill("JSONBin");
     }catch(err){
@@ -6794,6 +6945,7 @@ function printShotlistByDayId(dayId){
       toast("No pude subir ❌");
     }
   }
+
 
   // ===================== Breakdown Import (Excel/CSV) =====================
   const BD_SCENE_NUM_ALIASES = ["scenenumber","scene","escena","nro","numero","nroescena","numescena","#"];
