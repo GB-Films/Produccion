@@ -1317,10 +1317,12 @@ function ensureDayShotsDone(d){
   function _intervalsOverlap(aS,aE,bS,bE){ return (aS < bE) && (aE > bS); }
   function _fullOverlap(aS,aE,bS,bE){ return (aS<=bS && aE>=bE) || (bS<=aS && bE>=aE); }
 
-  // Para movimientos (drag/drop) queremos un comportamiento más "humano":
-  // - Si el item movido se solapa SOLO UN POCO con otro, NO reordenamos: el movido "hace fila" y se acomoda después.
-  // - Si el solape es TOTAL (uno contiene al otro), ahí sí permitimos reordenar: el movido "gana" y el otro se empuja.
-  function resolveOverlapsAfterMove(d, snapMin, anchorKind, anchorId){
+  // Para movimientos (drag/drop):
+  // - Las tarjetas se arrastran libres.
+  // - Al solaparse, queda ARRIBA la que tenga inicio MÁS TEMPRANO (según el estado final del drag).
+  // - La que tenga inicio MÁS TARDÍO es la que hace snap debajo (al final de la anterior).
+  // Esto evita comportamientos raros de "me metí un poquito y te moví la otra".
+  function resolveOverlapsAfterMove(d, snapMin, _anchorKind, _anchorId){
     ensureDayTimingMaps(d);
 
     const blockById = new Map((d.blocks||[]).map(b=>[b.id, b]));
@@ -1348,13 +1350,7 @@ function ensureDayShotsDone(d){
       });
     }
 
-    const anchor = items.find(it=>it.kind===anchorKind && String(it.id)===String(anchorId));
-    if(!anchor){
-      resolveOverlapsPushDown(d, snapMin);
-      return;
-    }
-
-    // Normalizar start/dur de todos
+    // Normalizar start/dur
     for(const it of items){
       let du = Number(it.dur ?? snapMin);
       let st = Number(it.start ?? 0);
@@ -1367,61 +1363,17 @@ function ensureDayShotsDone(d){
       it.start = st;
     }
 
-    // 1) Si el anchor tiene solapes parciales, lo movemos DESPUÉS del item que termina más tarde.
-    //    Esto evita el comportamiento feo de "me metí un poquito y te pateé para abajo".
-    let guard = 0;
-    while(guard++ < 40){
-      const aS = anchor.start;
-      const aE = clamp(aS + anchor.dur, 0, DAY_SPAN_MIN);
-
-      let maxEnd = null;
-
-      for(const it of items){
-        if(it === anchor) continue;
-        const s = it.start;
-        const e = clamp(s + it.dur, 0, DAY_SPAN_MIN);
-
-        if(!_intervalsOverlap(aS,aE,s,e)) continue;
-
-        // Si es solape total, permitimos reordenar (no movemos el anchor acá).
-        if(_fullOverlap(aS,aE,s,e)) continue;
-
-        // Solape parcial → anchor se acomoda después
-        if(maxEnd == null || e > maxEnd) maxEnd = e;
-      }
-
-      if(maxEnd == null) break;
-
-      const ns = clamp(snap(maxEnd, snapMin), 0, Math.max(0, DAY_SPAN_MIN - anchor.dur));
-      if(ns === anchor.start) break;
-      anchor.start = ns;
-    }
-
-    // 2) Layout final: cronológico, pero si hay SOLAPE TOTAL con el anchor, el anchor va primero (para empujar al otro).
-    const aS0 = anchor.start;
-    const aE0 = clamp(aS0 + anchor.dur, 0, DAY_SPAN_MIN);
-
-    const fullWithAnchor = (it)=>{
-      if(it === anchor) return false;
-      const s = it.start;
-      const e = clamp(s + it.dur, 0, DAY_SPAN_MIN);
-      return _intervalsOverlap(aS0,aE0,s,e) && _fullOverlap(aS0,aE0,s,e);
-    };
-
+    // Orden por inicio (estable). Si empatan, respetamos el orden previo.
     items.sort((a,b)=>{
-      if(a === anchor && fullWithAnchor(b)) return -1;
-      if(b === anchor && fullWithAnchor(a)) return 1;
       if((a.start??0) !== (b.start??0)) return (a.start??0) - (b.start??0);
       return (a.order??0) - (b.order??0);
     });
 
+    // Push-down: si un item cae sobre otro, el de inicio más tardío hace fila.
     let cursor = 0;
     for(const it of items){
       let st = it.start ?? 0;
-      let du = it.dur ?? snapMin;
-
-      du = clamp(du, snapMin, DAY_SPAN_MIN);
-      st = clamp(st, 0, DAY_SPAN_MIN - snapMin);
+      const du = it.dur ?? snapMin;
 
       if(st < cursor){
         st = snap(cursor, snapMin);
@@ -1429,7 +1381,6 @@ function ensureDayShotsDone(d){
       st = clamp(st, 0, Math.max(0, DAY_SPAN_MIN - du));
 
       it.start = st;
-      it.dur = du;
       cursor = clamp(st + du, 0, DAY_SPAN_MIN);
     }
 
