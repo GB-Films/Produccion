@@ -1435,6 +1435,126 @@ function ensureDayShotsDone(d){
     d.sceneIds.sort((a,b)=> (d.times[a]??0) - (d.times[b]??0));
   }
 
+  // Variante "anclada": mantiene el item que el usuario acaba de mover/editar,
+  // y empuja los demás para resolver solapes (en lugar de mover el ancla hacia abajo).
+  // Esto evita el "snap" raro (ej: querés 08:00 y te lo manda a 09:15/09:30).
+  function resolveOverlapsWithAnchor(d, snapMin, anchorKind, anchorId){
+    ensureDayTimingMaps(d);
+
+    const kindA = String(anchorKind||"");
+    const idA = String(anchorId||"");
+    if(!kindA || !idA){
+      resolveOverlapsPushDown(d, snapMin);
+      return;
+    }
+
+    const blockById = new Map((d.blocks||[]).map(b=>[String(b.id), b]));
+    const items = [];
+
+    for(const sid of (d.sceneIds||[])){
+      items.push({
+        kind:"scene",
+        id:String(sid),
+        start: Number(d.times?.[sid] ?? 0) || 0,
+        dur:   Number(d.durations?.[sid] ?? 60) || 0
+      });
+    }
+    for(const b of (d.blocks||[])){
+      items.push({
+        kind:"block",
+        id:String(b.id),
+        start: Number(b.startMin ?? 0) || 0,
+        dur:   Number(b.durMin ?? 30) || 0
+      });
+    }
+
+    const idxA = items.findIndex(it=> it.kind===kindA && it.id===idA);
+    if(idxA < 0){
+      resolveOverlapsPushDown(d, snapMin);
+      return;
+    }
+
+    // Normalizar
+    for(const it of items){
+      let du = Number(it.dur)||0;
+      du = clamp(du, snapMin, DAY_SPAN_MIN);
+      du = snap(du, snapMin);
+      du = clamp(du, snapMin, DAY_SPAN_MIN);
+      let st = Number(it.start)||0;
+      st = snap(st, snapMin);
+      st = clamp(st, 0, Math.max(0, DAY_SPAN_MIN - du));
+      it.start = st;
+      it.dur = du;
+    }
+
+    const anchor = items[idxA];
+    const anchorStart = anchor.start;
+    const anchorEnd = clamp(anchorStart + anchor.dur, 0, DAY_SPAN_MIN);
+
+    // Separar: lo que entra 100% antes del ancla se intenta dejar antes; lo que solapa pasa después.
+    const before = [];
+    const after = [];
+    for(let i=0;i<items.length;i++){
+      if(i===idxA) continue;
+      const it = items[i];
+      const end = it.start + it.dur;
+      if(end <= anchorStart) before.push(it);
+      else after.push(it);
+    }
+
+    before.sort((a,b)=> (a.start||0) - (b.start||0));
+    after.sort((a,b)=> (a.start||0) - (b.start||0));
+
+    // Colocar BEFORE (si alguno se estira y pisa el ancla, se manda a AFTER)
+    let cursor = 0;
+    const afterExtra = [];
+    for(const it of before){
+      let st = clamp(it.start, 0, Math.max(0, DAY_SPAN_MIN - it.dur));
+      if(st < cursor) st = snap(cursor, snapMin);
+      // Si aún así se mete en el ancla, lo pateamos después.
+      if(st + it.dur > anchorStart){
+        it.start = st;
+        afterExtra.push(it);
+        continue;
+      }
+      it.start = st;
+      cursor = clamp(st + it.dur, 0, DAY_SPAN_MIN);
+    }
+
+    // Colocar AFTER
+    cursor = Math.max(cursor, anchorEnd);
+    const afterAll = after.concat(afterExtra);
+    afterAll.sort((a,b)=> (a.start||0) - (b.start||0));
+    for(const it of afterAll){
+      let st = clamp(it.start, 0, Math.max(0, DAY_SPAN_MIN - it.dur));
+      if(st < cursor) st = snap(cursor, snapMin);
+      st = clamp(st, 0, Math.max(0, DAY_SPAN_MIN - it.dur));
+      it.start = st;
+      cursor = clamp(st + it.dur, 0, DAY_SPAN_MIN);
+    }
+
+    // Escribir de vuelta
+    const write = (it)=>{
+      if(it.kind === "scene"){
+        d.times[it.id] = it.start;
+        d.durations[it.id] = it.dur;
+        return;
+      }
+      const bb = blockById.get(it.id);
+      if(bb){
+        bb.startMin = it.start;
+        bb.durMin = it.dur;
+      }
+    };
+
+    write(anchor);
+    for(const it of before) if(!afterExtra.includes(it)) write(it);
+    for(const it of afterAll) write(it);
+
+    // Mantener escenas ordenadas por horario
+    d.sceneIds.sort((a,b)=> (d.times[a]??0) - (d.times[b]??0));
+  }
+
   function sceneCatsWithItems(scene){
     const list = [];
     for(const cat of cats){
@@ -5259,7 +5379,8 @@ ${
         d0.times[sid] = offset;
         d0.durations[sid] = d0.durations[sid] ?? 60;
 
-        resolveOverlapsPushDown(d0, snapMin0);
+        // Mantener la escena donde la soltaste; empujar lo demás si solapa
+        resolveOverlapsWithAnchor(d0, snapMin0, "scene", sid);
 
         selectedDayId = d0.id; // sincroniza con Call Diario
         selectedDayplanDayId = d0.id;
@@ -5556,9 +5677,12 @@ dayplanPointer = {
       function endPointer(){
         if(!dayplanPointer) return;
         const dayId = dayplanPointer.dayId;
+        const aKind = dayplanPointer.kind;
+        const aId = dayplanPointer.id;
         const d2 = dayId ? getDay(dayId) : null;
         if(!d2) { dayplanPointer = null; return; }
-        resolveOverlapsPushDown(d2, getDayplanSnap());
+        // Mantener el item que el usuario movió/redimensionó; empujar el resto
+        resolveOverlapsWithAnchor(d2, getDayplanSnap(), aKind, aId);
         touch();
         dayplanPointer = null;
         renderDayPlan();
@@ -5704,7 +5828,7 @@ dayplanPointer = {
           offset = clamp(offset, 0, DAY_SPAN_MIN - snap0);
           offset = snap(offset, snap0);
           setDayplanStart(d0, it0.kind, it0.id, offset);
-          resolveOverlapsPushDown(d0, snap0);
+          resolveOverlapsWithAnchor(d0, snap0, it0.kind, it0.id);
           touch();
           renderDayPlan();
           renderScheduleBoard();
@@ -5720,7 +5844,7 @@ dayplanPointer = {
           dur = snap(dur, snap0);
           dur = clamp(dur, snap0, DAY_SPAN_MIN);
           setDayplanDur(d0, it0.kind, it0.id, dur);
-          resolveOverlapsPushDown(d0, snap0);
+          resolveOverlapsWithAnchor(d0, snap0, it0.kind, it0.id);
           touch();
           renderDayPlan();
           renderScheduleBoard();
