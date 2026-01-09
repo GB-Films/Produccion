@@ -58,93 +58,7 @@
     return found || s;
   }
 
-  const MAX_SCRIPT_VERSIONS = 1; // Solo V1 (un único guion)
-
-// Guion: el texto crudo NO se guarda en JSONBin (solo local)
-const SCRIPT_RAW_LOCAL_PREFIX = "gb_script_raw_local_v1__";
-function getScriptRawLocalKey(){
-  try{
-    const cfg = (typeof StorageLayer!=="undefined" && StorageLayer.loadCfg) ? StorageLayer.loadCfg() : null;
-    const k = cfg?.scriptBinId || cfg?.binId || cfg?.projectId || "default";
-    return SCRIPT_RAW_LOCAL_PREFIX + String(k);
-  }catch(_e){
-    return SCRIPT_RAW_LOCAL_PREFIX + "default";
-  }
-}
-function loadScriptRawLocal(){
-  try{ return localStorage.getItem(getScriptRawLocalKey()) || ""; }catch(_e){ return ""; }
-}
-function saveScriptRawLocal(txt){
-  try{ localStorage.setItem(getScriptRawLocalKey(), String(txt||"")); }catch(_e){}
-}
-
-function sanitizeScriptState(opts={}){
-  const migrateRawToLocal = !!opts.migrateRawToLocal;
-  ensureScriptState();
-
-  let changed = false;
-
-  // Si hay varias versiones viejas, nos quedamos con la más nueva (solo V1)
-  try{
-    if(Array.isArray(state.script.versions) && state.script.versions.length > MAX_SCRIPT_VERSIONS){
-      state.script.versions = state.script.versions
-        .slice()
-        .sort((a,b)=>{
-          const ta = Date.parse(a?.updatedAt || a?.createdAt || "") || 0;
-          const tb = Date.parse(b?.updatedAt || b?.createdAt || "") || 0;
-          return ta - tb;
-        })
-        .slice(-MAX_SCRIPT_VERSIONS);
-      changed = true;
-    }
-  }catch(_e){}
-
-  // Asegurar que exista una versión
-  if(!Array.isArray(state.script.versions) || !state.script.versions.length){
-    const now = new Date().toISOString();
-    state.script.versions = [{
-      id: uid("scrVer"),
-      name: "V1",
-      createdAt: now,
-      updatedAt: now,
-      keywords: "",
-      scenes: [],
-      draft: true
-    }];
-    changed = true;
-  }
-
-  // Forzar V1 y versión activa única
-  const v0 = state.script.versions[0];
-  if(v0 && v0.name !== "V1"){ v0.name = "V1"; changed = true; }
-  if(state.script.activeVersionId !== (v0?.id || null)){
-    state.script.activeVersionId = v0?.id || null;
-    changed = true;
-  }
-
-  // Nunca guardar rawText en el estado (lo migramos a local si hace falta)
-  for(const v of (state.script.versions||[])){
-    if(v && Object.prototype.hasOwnProperty.call(v,"rawText")){
-      if(migrateRawToLocal){
-        const cur = loadScriptRawLocal();
-        if(!cur && v.rawText) saveScriptRawLocal(v.rawText);
-      }
-      try{ delete v.rawText; }catch(_e){}
-      changed = true;
-    }
-  }
-
-  // Si migramos algo, lo empujamos una sola vez para limpiar el BIN (sin texto crudo)
-  if(changed && !sanitizeScriptState._autoTouched){
-    sanitizeScriptState._autoTouched = true;
-    try{ state.meta.updatedAt = new Date().toISOString(); }catch(_e){}
-    try{
-      if(!syncReady) sanitizeScriptState._needsRemoteClean = true;
-      touch();
-    }catch(_e){}
-  }
-}
-
+  const MAX_SCRIPT_VERSIONS = 3;
 
   const crewAreas = [
     "Direccion",
@@ -636,28 +550,6 @@ function sanitizeScriptState(opts={}){
     const pack = makeEmptyScriptPack(snap?.meta?.title, snap?.meta?.updatedAt);
     pack.scenes = Array.isArray(snap.scenes) ? snap.scenes : [];
     pack.script = (snap.script && Array.isArray(snap.script.versions)) ? snap.script : { versions: [], activeVersionId: null };
-    // Sanitizar guion: NO guardar texto crudo y permitir solo V1
-    try{
-      pack.script = JSON.parse(JSON.stringify(pack.script));
-      if(Array.isArray(pack.script.versions)){
-        // quitar rawText si viene de versiones viejas
-        for(const v of pack.script.versions){
-          if(v && Object.prototype.hasOwnProperty.call(v,"rawText")){ try{ delete v.rawText; }catch(_e){} }
-          if(v) v.name = "V1";
-        }
-        if(pack.script.versions.length>1){
-          pack.script.versions = pack.script.versions
-            .slice()
-            .sort((a,b)=>{
-              const ta = Date.parse(a?.updatedAt || a?.createdAt || "") || 0;
-              const tb = Date.parse(b?.updatedAt || b?.createdAt || "") || 0;
-              return ta - tb;
-            })
-            .slice(-1);
-        }
-        pack.script.activeVersionId = pack.script.versions[0]?.id || null;
-      }
-    }catch(_e){}
     // Mantener el mismo updatedAt que el core (sirve como "stamp" consistente entre bins)
     pack.meta.updatedAt = String(snap?.meta?.updatedAt || pack.meta.updatedAt);
 
@@ -674,12 +566,6 @@ function sanitizeScriptState(opts={}){
 
     out.scenes = Array.isArray(scenes) ? scenes : [];
     out.script = (script && Array.isArray(script.versions)) ? script : { versions: [], activeVersionId: null };
-    // Limpieza por compat: no persistir rawText en el estado
-    try{
-      if(Array.isArray(out.script.versions)){
-        for(const v of out.script.versions){ if(v && Object.prototype.hasOwnProperty.call(v,"rawText")){ try{ delete v.rawText; }catch(_e){} } }
-      }
-    }catch(_e){}
 
     // safety
     if(!out.meta) out.meta = { version: 14, title: "Proyecto", updatedAt: new Date().toISOString() };
@@ -835,13 +721,6 @@ function sanitizeScriptState(opts={}){
       syncReady = true;
       initRemoteSync._running = false;
     }
-      try{
-        if(sanitizeScriptState._needsRemoteClean){
-          sanitizeScriptState._needsRemoteClean = false;
-          autosyncDebounced();
-        }
-      }catch(_e){}
-
   }
 
 
@@ -1435,123 +1314,139 @@ function ensureDayShotsDone(d){
     d.sceneIds.sort((a,b)=> (d.times[a]??0) - (d.times[b]??0));
   }
 
-  // Variante "anclada": mantiene el item que el usuario acaba de mover/editar,
-  // y empuja los demás para resolver solapes (en lugar de mover el ancla hacia abajo).
-  // Esto evita el "snap" raro (ej: querés 08:00 y te lo manda a 09:15/09:30).
-  function resolveOverlapsWithAnchor(d, snapMin, anchorKind, anchorId){
+  function _intervalsOverlap(aS,aE,bS,bE){ return (aS < bE) && (aE > bS); }
+  function _fullOverlap(aS,aE,bS,bE){ return (aS<=bS && aE>=bE) || (bS<=aS && bE>=aE); }
+
+  // Para movimientos (drag/drop) queremos un comportamiento más "humano":
+  // - Si el item movido se solapa SOLO UN POCO con otro, NO reordenamos: el movido "hace fila" y se acomoda después.
+  // - Si el solape es TOTAL (uno contiene al otro), ahí sí permitimos reordenar: el movido "gana" y el otro se empuja.
+  function resolveOverlapsAfterMove(d, snapMin, anchorKind, anchorId){
     ensureDayTimingMaps(d);
 
-    const kindA = String(anchorKind||"");
-    const idA = String(anchorId||"");
-    if(!kindA || !idA){
-      resolveOverlapsPushDown(d, snapMin);
-      return;
-    }
-
-    const blockById = new Map((d.blocks||[]).map(b=>[String(b.id), b]));
+    const blockById = new Map((d.blocks||[]).map(b=>[b.id, b]));
     const items = [];
 
-    for(const sid of (d.sceneIds||[])){
+    const sceneIds = (d.sceneIds||[]);
+    for(let i=0;i<sceneIds.length;i++){
+      const sid = sceneIds[i];
       items.push({
         kind:"scene",
-        id:String(sid),
-        start: Number(d.times?.[sid] ?? 0) || 0,
-        dur:   Number(d.durations?.[sid] ?? 60) || 0
+        id:sid,
+        start: d.times[sid] ?? 0,
+        dur:   d.durations[sid] ?? 60,
+        order: i
       });
     }
-    for(const b of (d.blocks||[])){
+    for(let i=0;i<(d.blocks||[]).length;i++){
+      const b = d.blocks[i];
       items.push({
         kind:"block",
-        id:String(b.id),
-        start: Number(b.startMin ?? 0) || 0,
-        dur:   Number(b.durMin ?? 30) || 0
+        id:b.id,
+        start: b.startMin ?? 0,
+        dur:   b.durMin ?? 30,
+        order: 100000 + i
       });
     }
 
-    const idxA = items.findIndex(it=> it.kind===kindA && it.id===idA);
-    if(idxA < 0){
+    const anchor = items.find(it=>it.kind===anchorKind && String(it.id)===String(anchorId));
+    if(!anchor){
       resolveOverlapsPushDown(d, snapMin);
       return;
     }
 
-    // Normalizar
+    // Normalizar start/dur de todos
     for(const it of items){
-      let du = Number(it.dur)||0;
+      let du = Number(it.dur ?? snapMin);
+      let st = Number(it.start ?? 0);
+
       du = clamp(du, snapMin, DAY_SPAN_MIN);
-      du = snap(du, snapMin);
-      du = clamp(du, snapMin, DAY_SPAN_MIN);
-      let st = Number(it.start)||0;
       st = snap(st, snapMin);
       st = clamp(st, 0, Math.max(0, DAY_SPAN_MIN - du));
+
+      it.dur = du;
+      it.start = st;
+    }
+
+    // 1) Si el anchor tiene solapes parciales, lo movemos DESPUÉS del item que termina más tarde.
+    //    Esto evita el comportamiento feo de "me metí un poquito y te pateé para abajo".
+    let guard = 0;
+    while(guard++ < 40){
+      const aS = anchor.start;
+      const aE = clamp(aS + anchor.dur, 0, DAY_SPAN_MIN);
+
+      let maxEnd = null;
+
+      for(const it of items){
+        if(it === anchor) continue;
+        const s = it.start;
+        const e = clamp(s + it.dur, 0, DAY_SPAN_MIN);
+
+        if(!_intervalsOverlap(aS,aE,s,e)) continue;
+
+        // Si es solape total, permitimos reordenar (no movemos el anchor acá).
+        if(_fullOverlap(aS,aE,s,e)) continue;
+
+        // Solape parcial → anchor se acomoda después
+        if(maxEnd == null || e > maxEnd) maxEnd = e;
+      }
+
+      if(maxEnd == null) break;
+
+      const ns = clamp(snap(maxEnd, snapMin), 0, Math.max(0, DAY_SPAN_MIN - anchor.dur));
+      if(ns === anchor.start) break;
+      anchor.start = ns;
+    }
+
+    // 2) Layout final: cronológico, pero si hay SOLAPE TOTAL con el anchor, el anchor va primero (para empujar al otro).
+    const aS0 = anchor.start;
+    const aE0 = clamp(aS0 + anchor.dur, 0, DAY_SPAN_MIN);
+
+    const fullWithAnchor = (it)=>{
+      if(it === anchor) return false;
+      const s = it.start;
+      const e = clamp(s + it.dur, 0, DAY_SPAN_MIN);
+      return _intervalsOverlap(aS0,aE0,s,e) && _fullOverlap(aS0,aE0,s,e);
+    };
+
+    items.sort((a,b)=>{
+      if(a === anchor && fullWithAnchor(b)) return -1;
+      if(b === anchor && fullWithAnchor(a)) return 1;
+      if((a.start??0) !== (b.start??0)) return (a.start??0) - (b.start??0);
+      return (a.order??0) - (b.order??0);
+    });
+
+    let cursor = 0;
+    for(const it of items){
+      let st = it.start ?? 0;
+      let du = it.dur ?? snapMin;
+
+      du = clamp(du, snapMin, DAY_SPAN_MIN);
+      st = clamp(st, 0, DAY_SPAN_MIN - snapMin);
+
+      if(st < cursor){
+        st = snap(cursor, snapMin);
+      }
+      st = clamp(st, 0, Math.max(0, DAY_SPAN_MIN - du));
+
       it.start = st;
       it.dur = du;
+      cursor = clamp(st + du, 0, DAY_SPAN_MIN);
     }
 
-    const anchor = items[idxA];
-    const anchorStart = anchor.start;
-    const anchorEnd = clamp(anchorStart + anchor.dur, 0, DAY_SPAN_MIN);
-
-    // Separar: lo que entra 100% antes del ancla se intenta dejar antes; lo que solapa pasa después.
-    const before = [];
-    const after = [];
-    for(let i=0;i<items.length;i++){
-      if(i===idxA) continue;
-      const it = items[i];
-      const end = it.start + it.dur;
-      if(end <= anchorStart) before.push(it);
-      else after.push(it);
-    }
-
-    before.sort((a,b)=> (a.start||0) - (b.start||0));
-    after.sort((a,b)=> (a.start||0) - (b.start||0));
-
-    // Colocar BEFORE (si alguno se estira y pisa el ancla, se manda a AFTER)
-    let cursor = 0;
-    const afterExtra = [];
-    for(const it of before){
-      let st = clamp(it.start, 0, Math.max(0, DAY_SPAN_MIN - it.dur));
-      if(st < cursor) st = snap(cursor, snapMin);
-      // Si aún así se mete en el ancla, lo pateamos después.
-      if(st + it.dur > anchorStart){
-        it.start = st;
-        afterExtra.push(it);
-        continue;
-      }
-      it.start = st;
-      cursor = clamp(st + it.dur, 0, DAY_SPAN_MIN);
-    }
-
-    // Colocar AFTER
-    cursor = Math.max(cursor, anchorEnd);
-    const afterAll = after.concat(afterExtra);
-    afterAll.sort((a,b)=> (a.start||0) - (b.start||0));
-    for(const it of afterAll){
-      let st = clamp(it.start, 0, Math.max(0, DAY_SPAN_MIN - it.dur));
-      if(st < cursor) st = snap(cursor, snapMin);
-      st = clamp(st, 0, Math.max(0, DAY_SPAN_MIN - it.dur));
-      it.start = st;
-      cursor = clamp(st + it.dur, 0, DAY_SPAN_MIN);
-    }
-
-    // Escribir de vuelta
-    const write = (it)=>{
+    // writeback
+    for(const it of items){
       if(it.kind === "scene"){
         d.times[it.id] = it.start;
         d.durations[it.id] = it.dur;
-        return;
+      }else{
+        const bb = blockById.get(it.id);
+        if(bb){
+          bb.startMin = it.start;
+          bb.durMin = it.dur;
+        }
       }
-      const bb = blockById.get(it.id);
-      if(bb){
-        bb.startMin = it.start;
-        bb.durMin = it.dur;
-      }
-    };
+    }
 
-    write(anchor);
-    for(const it of before) if(!afterExtra.includes(it)) write(it);
-    for(const it of afterAll) write(it);
-
-    // Mantener escenas ordenadas por horario
     d.sceneIds.sort((a,b)=> (d.times[a]??0) - (d.times[b]??0));
   }
 
@@ -2161,7 +2056,8 @@ function setupScheduleWheelScroll(){
 
 
   function getActiveScriptVersion(){
-    sanitizeScriptState({ migrateRawToLocal:true });
+    ensureScriptState();
+    enforceScriptVersionsLimit(true);
     const id = state.script.activeVersionId;
     return state.script.versions.find(v=>v.id===id) || state.script.versions[0] || null;
   }
@@ -2170,19 +2066,19 @@ function setupScheduleWheelScroll(){
   function renderScriptVersionSelect(){
     const sel = el("scriptVerSelect");
     if(!sel) return;
-    sanitizeScriptState();
-    const v = state.script.versions[0];
-    if(!v){
-      sel.innerHTML = `<option value="">(sin versión)</option>`;
+    ensureScriptState();
+    if(!state.script.versions.length){
+      sel.innerHTML = `<option value="">(sin versiones)</option>`;
       sel.value = "";
-      sel.disabled = true;
       return;
     }
-    sel.innerHTML = `<option value="${esc(v.id)}">V1</option>`;
-    sel.value = v.id;
-    sel.disabled = true;
-    // Si el HTML viejo todavía trae el select, lo escondemos (ya no hay 3 opciones)
-    try{ sel.style.display = "none"; }catch(_e){}
+    sel.innerHTML = state.script.versions
+      .slice()
+      .sort((a,b)=> (a.createdAt||"").localeCompare(b.createdAt||""))
+      .map(v=>`<option value="${esc(v.id)}">${esc(v.name||"Versión")}</option>`)
+      .join("");
+    if(!state.script.activeVersionId) state.script.activeVersionId = state.script.versions[state.script.versions.length-1].id;
+    sel.value = state.script.activeVersionId;
   }
 
   // ======= Cast roster (desde Crew área Cast) =======
@@ -2441,7 +2337,7 @@ function setupScheduleWheelScroll(){
 
   function renderScriptUI(){
     const wrap = el("scriptVersionUI");
-    sanitizeScriptState({ migrateRawToLocal:true });
+    ensureScriptState();
 
     renderScriptVersionSelect();
     const v = getActiveScriptVersion();
@@ -2460,18 +2356,19 @@ function setupScheduleWheelScroll(){
 
     renderScriptSceneList(v);
     renderScriptSceneEditor(v);
+
     const btnNew = el("btnNewScriptVersion");
     if(btnNew){
-      btnNew.disabled = true;
-      btnNew.style.display = "none";
+      const atLimit = (state.script.versions||[]).length >= MAX_SCRIPT_VERSIONS;
+      btnNew.disabled = atLimit;
+      btnNew.title = atLimit ? `Máximo ${MAX_SCRIPT_VERSIONS} versiones` : "";
     }
 
     // Mantener el guion (raw) visible y persistente por versión
     const panel = el("scriptImportPanel");
     if(panel) panel.classList.remove("hidden");
     const ta = el("scriptImportText");
-    const localRaw = loadScriptRawLocal();
-    if(ta && ta.value !== localRaw) ta.value = localRaw;
+    if(ta && ta.value !== (v.rawText||"")) ta.value = v.rawText || "";
     const ki = el("scriptKeywords");
     if(ki && ki.value !== (v.keywords||"")) ki.value = v.keywords || "";
     const meta = el("scriptVerMeta");
@@ -4593,7 +4490,7 @@ function bindScheduleDnD(){
         toDay.durations[sid] = keepDur;
 
         resolveOverlapsPushDown(fromDay, d0.snapMin);
-        resolveOverlapsPushDown(toDay, d0.snapMin);
+        resolveOverlapsAfterMove(toDay, d0.snapMin, d0.kind, d0.itemId);
       }else{
         const bid = d0.itemId;
         const idx = (fromDay.blocks||[]).findIndex(b=>b.id===bid);
@@ -4604,13 +4501,13 @@ function bindScheduleDnD(){
           toDay.blocks = (toDay.blocks||[]);
           toDay.blocks.push(moved);
           resolveOverlapsPushDown(fromDay, d0.snapMin);
-          resolveOverlapsPushDown(toDay, d0.snapMin);
+        resolveOverlapsAfterMove(toDay, d0.snapMin, d0.kind, d0.itemId);
         }
       }
     }else{
       const cur = getItem(fromDay, d0.kind, d0.itemId);
       setItem(fromDay, d0.kind, d0.itemId, newStart, cur.dur);
-      resolveOverlapsPushDown(fromDay, d0.snapMin);
+      resolveOverlapsAfterMove(fromDay, d0.snapMin, d0.kind, d0.itemId);
     }
 
     touch();
@@ -5379,8 +5276,7 @@ ${
         d0.times[sid] = offset;
         d0.durations[sid] = d0.durations[sid] ?? 60;
 
-        // Mantener la escena donde la soltaste; empujar lo demás si solapa
-        resolveOverlapsWithAnchor(d0, snapMin0, "scene", sid);
+        resolveOverlapsAfterMove(d0, snapMin0, "scene", sid);
 
         selectedDayId = d0.id; // sincroniza con Call Diario
         selectedDayplanDayId = d0.id;
@@ -5676,13 +5572,13 @@ dayplanPointer = {
 
       function endPointer(){
         if(!dayplanPointer) return;
-        const dayId = dayplanPointer.dayId;
-        const aKind = dayplanPointer.kind;
-        const aId = dayplanPointer.id;
+        const p0 = dayplanPointer;
+        const dayId = p0.dayId;
         const d2 = dayId ? getDay(dayId) : null;
         if(!d2) { dayplanPointer = null; return; }
-        // Mantener el item que el usuario movió/redimensionó; empujar el resto
-        resolveOverlapsWithAnchor(d2, getDayplanSnap(), aKind, aId);
+        const snap0 = getDayplanSnap();
+        if(p0.mode === "drag") resolveOverlapsAfterMove(d2, snap0, p0.kind, p0.id);
+        else resolveOverlapsPushDown(d2, snap0);
         touch();
         dayplanPointer = null;
         renderDayPlan();
@@ -5828,7 +5724,7 @@ dayplanPointer = {
           offset = clamp(offset, 0, DAY_SPAN_MIN - snap0);
           offset = snap(offset, snap0);
           setDayplanStart(d0, it0.kind, it0.id, offset);
-          resolveOverlapsWithAnchor(d0, snap0, it0.kind, it0.id);
+          resolveOverlapsAfterMove(d0, snap0, it0.kind, it0.id);
           touch();
           renderDayPlan();
           renderScheduleBoard();
@@ -5844,7 +5740,7 @@ dayplanPointer = {
           dur = snap(dur, snap0);
           dur = clamp(dur, snap0, DAY_SPAN_MIN);
           setDayplanDur(d0, it0.kind, it0.id, dur);
-          resolveOverlapsWithAnchor(d0, snap0, it0.kind, it0.id);
+          resolveOverlapsPushDown(d0, snap0);
           touch();
           renderDayPlan();
           renderScheduleBoard();
@@ -7898,7 +7794,11 @@ el("btnDayplanAddNote")?.addEventListener("click", addDayplanNote);
     el("btnCancelScriptImport")?.addEventListener("click", ()=> toggleScriptImportPanel(false));
 
     el("btnToggleScriptImport")?.addEventListener("click", ()=>{
-      sanitizeScriptState({ migrateRawToLocal:true });
+      ensureScriptState();
+      if(!state.script.versions.length){
+        el("btnNewScriptVersion")?.click();
+        return;
+      }
       const panel = el("scriptImportPanel");
       const open = panel ? panel.classList.contains("hidden") : true;
       toggleScriptImportPanel(open);
@@ -7906,15 +7806,41 @@ el("btnDayplanAddNote")?.addEventListener("click", addDayplanNote);
 
     // Nueva versión: crea una versión editable (y opcionalmente pegás el guion para procesarla)
     el("btnNewScriptVersion")?.addEventListener("click", ()=>{
-      toast("Solo existe V1. Reemplazá el guion desde “Pegar / Procesar”.");
-      const panel = el("scriptImportPanel");
-      if(panel) panel.classList.remove("hidden");
-      requestAnimationFrame(()=> el("scriptImportText")?.focus());
+      ensureScriptState();
+      enforceScriptVersionsLimit(false);
+      if(state.script.versions.length >= MAX_SCRIPT_VERSIONS){
+        return toast(`Máximo ${MAX_SCRIPT_VERSIONS} versiones por ahora.`);
+      }
+      const now = new Date().toISOString();
+      const base = getActiveScriptVersion();
+      const v = {
+        id: uid("scrVer"),
+        name: `V${state.script.versions.length + 1}`,
+        createdAt: now,
+        updatedAt: now,
+        keywords: base?.keywords || "",
+        rawText: base?.rawText || "",
+        scenes: [],
+        draft: true
+      };
+      state.script.versions.push(v);
+      state.script.activeVersionId = v.id;
+      selectedScriptSceneId = v.scenes?.[0]?.id || null;
+
+      // Prefill textarea con el último guion (si lo había)
+      const ta = el("scriptImportText");
+      if(ta) ta.value = base?.rawText || "";
+      const ki = el("scriptKeywords");
+      if(ki) ki.value = base?.keywords || "";
+
+      touch();
+      toast(`Nueva versión creada → ${v.name}`);
+      renderScriptUI();
+      toggleScriptImportPanel(true);
     });
 el("btnParseScript")?.addEventListener("click", ()=>{
       const txt = el("scriptImportText")?.value || "";
       const keys = el("scriptKeywords")?.value || "";
-      saveScriptRawLocal(txt);
       const scenes = parseScreenplayToScriptScenes(txt, keys);
       if(!scenes.length) return toast("No detecté escenas (revisá INT./EXT. por línea).");
       // Aviso: si repetís números de escena (p.ej. reiniciás en cada capítulo) el merge por número puede confundirse.
@@ -7938,6 +7864,7 @@ el("btnParseScript")?.addEventListener("click", ()=>{
       // Si venís de 'Nueva versión' (draft) y está vacía, completamos ESA versión
       if(v && v.draft && !(v.scenes||[]).length){
         v.keywords = keys;
+        v.rawText = txt;
         v.scenes = scenes;
         v.updatedAt = now;
         v.draft = false;
@@ -7945,6 +7872,7 @@ el("btnParseScript")?.addEventListener("click", ()=>{
   // Si ya llegamos al límite, re-procesamos la versión activa en lugar de crear otra.
   if(state.script.versions.length >= MAX_SCRIPT_VERSIONS){
     v.keywords = keys;
+    v.rawText = txt;
     v.scenes = scenes;
     v.updatedAt = now;
     v.draft = false;
@@ -7955,6 +7883,7 @@ el("btnParseScript")?.addEventListener("click", ()=>{
       createdAt: now,
       updatedAt: now,
       keywords: keys,
+      rawText: txt,
       scenes
     };
     state.script.versions.push(v);
@@ -7975,7 +7904,11 @@ el("btnParseScript")?.addEventListener("click", ()=>{
     if(taImport && !taImport._bound){
       taImport._bound = true;
       taImport.addEventListener("input", ()=>{
-        saveScriptRawLocal(taImport.value || "");
+        const v = getActiveScriptVersion();
+        if(!v) return;
+        v.rawText = taImport.value || "";
+        v.updatedAt = new Date().toISOString();
+        touch();
       });
     }
     const kw = el("scriptKeywords");
@@ -7999,10 +7932,11 @@ el("btnParseScript")?.addEventListener("click", ()=>{
       toast("Cambios guardados ✅");
     });
 el("scriptVerSelect")?.addEventListener("change", ()=>{
-      sanitizeScriptState();
-      const v = state.script.versions[0];
-      state.script.activeVersionId = v?.id || null;
+      const id = el("scriptVerSelect").value;
+      ensureScriptState();
+      state.script.activeVersionId = id || null;
       selectedScriptSceneId = null;
+      touch();
       renderScriptUI();
     });
 
@@ -8259,7 +8193,6 @@ el("scriptVerSelect")?.addEventListener("change", ()=>{
 
   function hydrateAll(){
     ensureScriptState();
-    sanitizeScriptState({ migrateRawToLocal:true });
     ensureProjectConfig();
     state.scenes.forEach(ensureSceneExtras);
 // Backfill automático para escenas existentes (INT/EXT, Lugar, Momento) a partir del Título/slugline

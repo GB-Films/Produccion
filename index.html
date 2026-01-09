@@ -225,12 +225,13 @@
 
             <div class="card collapsible collapsed span2" data-collapse-key="bd_script">
               <div class="cardHeader">
-                <div class="cardTitle">GUION EN EL BREAKDOWN <span class="keepcase">(V1 · escenas y planos)</span></div>
+                <div class="cardTitle">GUION EN EL BREAKDOWN <span class="keepcase">(versión y planos)</span></div>
                 <div class="collapseToggle" title="Expandir/Colapsar">▸</div>
               </div>
               <div class="cardContent">
                 <div class="row gap">
-                  <span class="pill">V1</span>
+                  <select class="input" id="scriptVerSelect" style="max-width:240px"></select>
+                  <button class="btn" id="btnNewScriptVersion">Nueva versión</button>
                   <button class="btn ghost" id="btnToggleScriptImport">Pegar / Procesar</button>
                   <span class="pill" id="scriptVerMeta">—</span>
                 </div>
@@ -295,7 +296,7 @@
                 <div class="divider"></div>
                 <div class="muted small">Cómo usarlo</div>
                 <ol class="small">
-                  <li>Pegá el guion completo y tocá “Procesar” (reemplaza V1).</li>
+                  <li>Creá una versión nueva, pegá el guion (o editá las escenas acá).</li>
                   <li>Insertá escenas intermedias: 6 → 6A → 6B…</li>
                   <li>Cuando esté OK, incorporá al proyecto (se sincroniza).</li>
                 </ol>
