@@ -140,7 +140,7 @@ function sanitizeScriptState(opts={}){
     try{ state.meta.updatedAt = new Date().toISOString(); }catch(_e){}
     try{
       if(!syncReady) sanitizeScriptState._needsRemoteClean = true;
-      touch();
+      touch({system:true});
     }catch(_e){}
   }
 }
@@ -245,6 +245,76 @@ function sanitizeScriptState(opts={}){
     t.style.display="block";
     clearTimeout(toast._t);
     toast._t = setTimeout(()=>t.style.display="none", 2200);
+  }
+
+  // ======= Permisos de edición (password fijo) =======
+  // Modo lector por defecto. Para editar: contraseña 6868.
+  const EDIT_PASSWORD = "6868";
+  const EDIT_UNLOCK_SS_PREFIX = "gb_edit_unlocked_v1__"; // sessionStorage (por proyecto)
+  let isEditor = false;
+  let lastCommittedStateJSON = ""; // snapshot del último estado guardado (para revertir si estás en lector)
+
+  function getEditSessionKey(){
+    try{
+      const cfg = (typeof StorageLayer!=="undefined" && StorageLayer.loadCfg) ? StorageLayer.loadCfg() : null;
+      const k = cfg?.binId || cfg?.projectId || "default";
+      return EDIT_UNLOCK_SS_PREFIX + String(k);
+    }catch(_e){
+      return EDIT_UNLOCK_SS_PREFIX + "default";
+    }
+  }
+
+  function updateEditBanner(){
+    let b = document.getElementById("modeBanner");
+    if(!b){
+      b = document.createElement("div");
+      b.id = "modeBanner";
+      b.className = "modeBanner";
+      document.body.appendChild(b);
+      b.addEventListener("click", ()=>{
+        if(isEditor){
+          setEditorMode(false);
+          toast("Modo lector 🔒");
+        }else{
+          ensureEditor("Desbloquear");
+        }
+      });
+    }
+    b.textContent = isEditor ? "✏️ Edición (click para bloquear)" : "🔒 Lector (click para editar)";
+  }
+
+  function setEditorMode(on){
+    isEditor = !!on;
+    try{
+      const key = getEditSessionKey();
+      if(isEditor) sessionStorage.setItem(key, "1");
+      else sessionStorage.removeItem(key);
+    }catch(_e){}
+    document.body.classList.toggle("readOnly", !isEditor);
+    updateEditBanner();
+  }
+
+  function ensureEditor(fromAction){
+    if(isEditor) return true;
+    const pw = prompt(`Contraseña para editar${fromAction ? " ("+fromAction+")" : ""}:`);
+    if(pw === null) return false;
+    if(String(pw).trim() === EDIT_PASSWORD){
+      setEditorMode(true);
+      toast("Edición habilitada ✏️");
+      return true;
+    }
+    toast("Contraseña incorrecta 🔒");
+    return false;
+  }
+
+  function commitLocalState(){
+    try{ StorageLayer.saveLocal(state); }catch(_e){}
+    try{ lastCommittedStateJSON = JSON.stringify(state); }catch(_e){}
+  }
+
+  function revertToLastCommit(){
+    if(!lastCommittedStateJSON) return;
+    try{ state = JSON.parse(lastCommittedStateJSON); }catch(_e){}
   }
 
 
@@ -411,9 +481,20 @@ function sanitizeScriptState(opts={}){
       wrap.appendChild(chip);
     }
   }
-  function touch(){
+  function touch(opts){
+    const system = !!(opts && opts.system);
+
+    // Solo se puede editar con contraseña (6868). En modo lector, revertimos.
+    if(!system && !ensureEditor("Editar")){
+      revertToLastCommit();
+      try{ hydrateAll(); }catch(_e){}
+      const st = el("statusText");
+      if(st) st.textContent = "Solo lectura";
+      return;
+    }
+
     state.meta.updatedAt = new Date().toISOString();
-    StorageLayer.saveLocal(state);
+    commitLocalState();
     const saved = el("savedAtText");
     if(saved) saved.textContent = new Date(state.meta.updatedAt).toLocaleString("es-AR");
     const st = el("statusText");
@@ -477,7 +558,7 @@ function sanitizeScriptState(opts={}){
         if(changedByStamp){
           saveConflictBackup(cfg.binId, state); // copia local por si hay conflicto
           state = remoteCombined;
-          StorageLayer.saveLocal(state);
+          commitLocalState();
 
           lastRemoteStamp = coreStamp;
           StorageLayer.setRemoteStamp(cfg.binId, lastRemoteStamp);
@@ -497,7 +578,7 @@ function sanitizeScriptState(opts={}){
         if(tsUpdatedAt(remoteCombined) > tsUpdatedAt(state)){
           saveConflictBackup(cfg.binId, state);
           state = remoteCombined;
-          StorageLayer.saveLocal(state);
+          commitLocalState();
 
           lastRemoteStamp = coreStamp || String(state?.meta?.updatedAt || "");
           StorageLayer.setRemoteStamp(cfg.binId, lastRemoteStamp);
@@ -765,7 +846,7 @@ function sanitizeScriptState(opts={}){
         if(shouldAdoptRemote){
           state = remoteCombined;
           bootAppliedRemote = true;
-          StorageLayer.saveLocal(state);
+          commitLocalState();
           lastRemoteStamp = String(remoteCore?.meta?.updatedAt || lastRemoteStamp || "");
           StorageLayer.setRemoteStamp(cfg.binId, lastRemoteStamp);
 
@@ -1479,11 +1560,7 @@ function ensureDayShotsDone(d){
     const parts = [];
     parts.push(`<div class="t">#${esc(scene.number||"")} — ${esc(scene.slugline||"")}</div>`);
     parts.push(`<div class="m">${esc(scene.location||"")} · ${esc(scene.timeOfDay||"")} · Pág ${esc(scene.pages||"")}</div>`);
-    // Mostrar NOTAS (antes: Resumen)
-    {
-      const notesTxt = String(scene.notes||"").trim();
-      if(notesTxt) parts.push(`<div class="m" style="margin-top:8px;">${esc(notesTxt)}</div>`);
-    }
+    if(scene.summary) parts.push(`<div class="m" style="margin-top:8px;">${esc(scene.summary)}</div>`);
 
     for(const cat of cats){
       const items = scene.elements?.[cat] || [];
@@ -4733,8 +4810,7 @@ items.push({
   location: sc.location || "",
   timeOfDay: sc.timeOfDay || "",
   pages: pagesNum,
-  // En Plan de Rodaje imprimimos NOTAS (antes: Resumen)
-  notes: sc.notes || "",
+  summary: sc.summary || "",
 
   title: `#${sc.number||""} ${sc.slugline||""}`.trim(),
   detail: [
@@ -5169,7 +5245,7 @@ ${
         <div class="dpMetaItem"><div class="k">Momento</div><div class="v">${esc(it.timeOfDay||"—")}</div></div>
         <div class="dpMetaItem"><div class="k">Pág</div><div class="v">${esc((Number(it.pages)||0) > 0 ? fmtPages(it.pages) : "—")}</div></div>
       </div>
-      ${it.notes ? `<div class="dpBlockSummary">${esc(it.notes)}</div>` : ``}
+      ${it.summary ? `<div class="dpBlockSummary">${esc(it.summary)}</div>` : ``}
     `
     : (it.detail ? `<div class="dpBlockDetail">${esc(it.detail)}</div>` : ``)
 }
@@ -5300,7 +5376,7 @@ const ie = isNote ? "" : (it.intExt||"");
 const locTxt = isNote ? "" : (it.location||"");
 const todTxt = isNote ? "" : (it.timeOfDay||"");
 const pagesTxt = isNote ? "" : ((Number(it.pages)||0) > 0 ? fmtPages(it.pages) : "");
-const sumTxt = isNote ? (it.detail||"") : (it.notes||"");
+const sumTxt = isNote ? (it.detail||"") : (it.summary||"");
 return `
   <tr class="${isNote ? "dpPrintNote" : ""}" style="background:${eattr(bg)};border-left:8px solid ${eattr(col)};">
     <td class="cHour">${clockHTML}</td>
@@ -5330,7 +5406,7 @@ return `
               <col class="colIE"><col class="colLoc"><col class="colTod"><col class="colPag"><col class="colSum">
             </colgroup>
             <thead>
-              <tr><th>Hora</th><th>Dur</th><th>Nro</th><th>Título</th><th>Int/Ext</th><th>Lugar</th><th>Momento</th><th>Largo (Pág)</th><th>Notas</th></tr>
+              <tr><th>Hora</th><th>Dur</th><th>Nro</th><th>Título</th><th>Int/Ext</th><th>Lugar</th><th>Momento</th><th>Largo (Pág)</th><th>Resumen</th></tr>
             </thead>
             <tbody>${rows || `<tr><td colspan="9" class="muted">—</td></tr>`}</tbody>
           </table>
@@ -5653,8 +5729,8 @@ dayplanPointer = {
             </div>
           </div>
           <div class="field" style="grid-column:1/-1">
-            <label>Notas</label>
-            <div class="muted dpSceneResText">${esc(it.notes||"—")}</div>
+            <label>Resumen</label>
+            <div class="muted dpSceneResText">${esc(it.summary||"—")}</div>
           </div>
         `}
 </div>
@@ -6562,7 +6638,7 @@ function renderReportDayplanDetail(d){
       const locTxt = isNote ? "" : (it.location||"");
       const todTxt = isNote ? "" : (it.timeOfDay||"");
       const pagesTxt = isNote ? "" : ((Number(it.pages)||0) > 0 ? fmtPages(it.pages) : "");
-      const sumTxt = isNote ? (it.detail||"") : (it.notes||"");
+      const sumTxt = isNote ? (it.detail||"") : (it.summary||"");
 
       const col = safeHexColor(it.color || (it.kind==="scene" ? "#BFDBFE" : "#E5E7EB"));
       const bg = hexToRgba(col, isNote ? 0.10 : 0.12);
@@ -6622,7 +6698,7 @@ function renderReportDayplanDetail(d){
       const locTxt = isNote ? "" : (it.location||"");
       const todTxt = isNote ? "" : (it.timeOfDay||"");
       const pagesTxt = isNote ? "" : ((Number(it.pages)||0) > 0 ? fmtPages(it.pages) : "");
-      const sumTxt = isNote ? (it.detail||"") : (it.notes||"");
+      const sumTxt = isNote ? (it.detail||"") : (it.summary||"");
       const col = safeHexColor(it.color || (it.kind==="scene" ? "#BFDBFE" : "#E5E7EB"));
       const bg = hexToRgba(col, isNote ? 0.10 : 0.12);
       const tA = hhmmFromMinutes(absStart);
@@ -6652,7 +6728,7 @@ function renderReportDayplanDetail(d){
             <col class="colHour"><col class="colDur"><col class="colNro"><col class="colTitle">
             <col class="colIE"><col class="colLoc"><col class="colTod"><col class="colPag"><col class="colSum">
           </colgroup>
-          <thead><tr><th>Hora</th><th>Dur</th><th>Nro</th><th>Título</th><th>I/E</th><th>Locación</th><th>Momento</th><th>Largo (Pág)</th><th>Notas</th></tr></thead>
+          <thead><tr><th>Hora</th><th>Dur</th><th>Nro</th><th>Título</th><th>I/E</th><th>Locación</th><th>Momento</th><th>Largo (Pág)</th><th>Resumen</th></tr></thead>
           <tbody>${rows || `<tr><td colspan="9" class="muted">—</td></tr>`}</tbody>
         </table>
       </div>
@@ -7026,7 +7102,7 @@ function printShotlistByDayId(dayId){
       const pack = isValidScriptPack(packRaw) ? packRaw : null;
       state = mergeStateFromBins(core, pack);
 
-      StorageLayer.saveLocal(state);
+      commitLocalState();
 
       lastRemoteStamp = String(core?.meta?.updatedAt || "");
       StorageLayer.setRemoteStamp(cfg.binId, lastRemoteStamp);
@@ -8259,13 +8335,22 @@ if(!state.scenes.length){
 
     initSidebarUI(cfg);
 
+	// Permisos: por defecto lector. Si ya desbloqueaste en esta sesión para este proyecto, mantenemos.
+	try{
+	  const unlocked = sessionStorage.getItem(getEditSessionKey()) === "1";
+	  setEditorMode(!!unlocked);
+	}catch(_e){
+	  setEditorMode(false);
+	}
+
     const local = StorageLayer.loadLocal();
     bootHadLocal = !!(local && local.meta);
     state = bootHadLocal ? local : defaultState(cfg && cfg.projectName);
+	try{ lastCommittedStateJSON = JSON.stringify(state); }catch(_e){}
 
     if(!bootHadLocal){
       // Persist initial state locally for this project
-      StorageLayer.saveLocal(state);
+      commitLocalState();
     }
 
     selectedSceneId = state.scenes?.[0]?.id || null;
