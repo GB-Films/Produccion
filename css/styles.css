@@ -75,8 +75,6 @@ body{
               radial-gradient(900px 600px at 85% 85%, rgba(191,167,255,.10), transparent 60%),
               var(--bg);
   color:var(--text);
-  cursor:pointer;
-  user-select:none;
 }
 
 .shell{
@@ -196,13 +194,8 @@ body:not(.readOnly) .authStatus{ opacity:.95; }
   font-size:12px;
   font-weight:900;
   color:var(--text);
-  cursor:pointer;
-  user-select:none;
 }
 .modeBanner.hidden{ display:none !important; }
-@media print{
-  .modeBanner{ display:none !important; }
-}
 .titleInput{
   width:100%;
   border:none;
@@ -365,8 +358,6 @@ label{ font-size:12px; color:var(--muted); }
 select option{
   background:var(--panel);
   color:var(--text);
-  cursor:pointer;
-  user-select:none;
 }
 
 /* Compact selects */
@@ -1042,8 +1033,6 @@ tr.groupRow td{
   gap:10px;
   font-size:12px;
   color:var(--text);
-  cursor:pointer;
-  user-select:none;
 }
 .chip button{
   border:none;
@@ -2267,8 +2256,6 @@ body.gbPrintingElements .muted{ color:#333 !important; }
   background: rgba(var(--panel-rgb), .35);
   font-size:12px;
   color:var(--text);
-  cursor:pointer;
-  user-select:none;
 }
 
 .dayplanPretty{ margin-top:10px; }
@@ -3340,4 +3327,25 @@ body.gbPrintingElements .muted{ color:#333 !important; }
 
 @media screen and screen and (max-width: 420px){
   .mDayBtn{ font-size:11px; padding:9px 0; }
+}
+
+
+/* Call Diario - Notas */
+.callNotesBox{
+  margin: 10px 0 14px;
+}
+.callNotesBox .miniLbl{
+  font-size:12px;
+  color: var(--muted);
+  font-weight:900;
+  letter-spacing:.02em;
+  margin-bottom:6px;
+}
+#callDayNotes{
+  width:100%;
+  min-height:72px;
+}
+body.readOnly #callDayNotes{
+  opacity:.75;
+  cursor:not-allowed;
 }

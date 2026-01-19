@@ -140,7 +140,7 @@ function sanitizeScriptState(opts={}){
     try{ state.meta.updatedAt = new Date().toISOString(); }catch(_e){}
     try{
       if(!syncReady) sanitizeScriptState._needsRemoteClean = true;
-      touch({system:true});
+      touch();
     }catch(_e){}
   }
 }
@@ -161,6 +161,53 @@ function sanitizeScriptState(opts={}){
   ];
 
   let state = null;
+
+
+  // ======= Permisos de edición (password 6868) =======
+  const EDIT_PASSWORD = "6868";
+  let editUnlocked = false;
+  try{ editUnlocked = sessionStorage.getItem("gb_edit_unlocked") === "1"; }catch(_e){ editUnlocked = false; }
+
+  function isReadOnly(){ return !editUnlocked; }
+
+  function updateModeBanner(){
+    const pill = document.getElementById("modeBanner");
+    if(!pill) return;
+    pill.innerHTML = editUnlocked ? "✏️ Edición (click para bloquear)" : "🔒 Lector (click para editar)";
+  }
+
+  function setEditUnlocked(v){
+    editUnlocked = !!v;
+    try{ sessionStorage.setItem("gb_edit_unlocked", editUnlocked ? "1" : "0"); }catch(_e){}
+    try{ document.body.classList.toggle("readOnly", !editUnlocked); }catch(_e){}
+    updateModeBanner();
+  }
+
+  function mountModeBanner(){
+    let pill = document.getElementById("modeBanner");
+    if(pill) { updateModeBanner(); return pill; }
+    pill = document.createElement("div");
+    pill.id = "modeBanner";
+    pill.className = "modeBanner";
+    pill.title = "Click para alternar edición";
+    pill.addEventListener("click", ()=>{
+      if(editUnlocked){
+        const ok = confirm("¿Volver a modo lector?");
+        if(ok) setEditUnlocked(false);
+        return;
+      }
+      const pass = prompt("Contraseña para editar:");
+      if(pass === EDIT_PASSWORD){
+        setEditUnlocked(true);
+        toast("Edición habilitada ✏️");
+      }else if(pass !== null){
+        toast("Contraseña incorrecta 🔒");
+      }
+    });
+    document.body.appendChild(pill);
+    updateModeBanner();
+    return pill;
+  }
   let selectedSceneId = null;
   let selectedDayId = null;
   let callSheetDayId = null;
@@ -238,6 +285,20 @@ function sanitizeScriptState(opts={}){
   // Compat: algunas partes usan escapeHtml() en vez de esc()
   function escapeHtml(s){ return esc(s); }
 
+  function firstWords(txt, maxWords){
+    const s = String(txt||"").trim();
+    if(!s) return "";
+    const words = s.split(/\s+/).filter(Boolean);
+    if(words.length <= maxWords) return words.join(" " );
+    return words.slice(0, maxWords).join(" " ) + "…";
+  }
+
+  function notesOrShortSummary(notes, summary){
+    const n = String(notes||"").trim();
+    if(n) return n;
+    return firstWords(summary, 80);
+  }
+
   function toast(msg){
     const t = el("toast");
     if(!t) return;
@@ -245,97 +306,6 @@ function sanitizeScriptState(opts={}){
     t.style.display="block";
     clearTimeout(toast._t);
     toast._t = setTimeout(()=>t.style.display="none", 2200);
-  }
-
-  // ======= Permisos de edición (password fijo) =======
-  // Modo lector por defecto. Para editar: contraseña 6868.
-  const EDIT_PASSWORD = "6868";
-  const EDIT_UNLOCK_SS_PREFIX = "gb_edit_unlocked_v1__"; // sessionStorage (por proyecto)
-  let isEditor = false;
-  let lastCommittedStateJSON = ""; // snapshot del último estado guardado (para revertir si estás en lector)
-
-  function getEditSessionKey(){
-    try{
-      const cfg = (typeof StorageLayer!=="undefined" && StorageLayer.loadCfg) ? StorageLayer.loadCfg() : null;
-      const k = cfg?.binId || cfg?.projectId || "default";
-      return EDIT_UNLOCK_SS_PREFIX + String(k);
-    }catch(_e){
-      return EDIT_UNLOCK_SS_PREFIX + "default";
-    }
-  }
-
-  function updateEditBanner(){
-    let b = document.getElementById("modeBanner");
-    if(!b){
-      b = document.createElement("div");
-      b.id = "modeBanner";
-      b.className = "modeBanner";
-      document.body.appendChild(b);
-      // Fallback: si no cargó CSS, forzamos estilo básico para que se vea igual.
-      try{
-        const cs = getComputedStyle(b);
-        if(cs.position !== "fixed"){
-          b.style.position = "fixed";
-          b.style.right = "12px";
-          b.style.bottom = "12px";
-          b.style.zIndex = "9999";
-          b.style.padding = "10px 12px";
-          b.style.borderRadius = "999px";
-          b.style.border = "1px solid rgba(255,255,255,.18)";
-          b.style.background = "rgba(15,26,44,.88)";
-          b.style.backdropFilter = "blur(8px)";
-          b.style.fontSize = "12px";
-          b.style.fontWeight = "900";
-          b.style.color = "#fff";
-          b.style.cursor = "pointer";
-          b.style.userSelect = "none";
-        }
-      }catch(_e){}
-      b.addEventListener("click", ()=>{
-        if(isEditor){
-          setEditorMode(false);
-          toast("Modo lector 🔒");
-        }else{
-          ensureEditor("Desbloquear");
-        }
-      });
-
-    }
-    b.textContent = isEditor ? "✏️ Edición (click para bloquear)" : "🔒 Lector (click para editar)";
-  }
-
-  function setEditorMode(on){
-    isEditor = !!on;
-    try{
-      const key = getEditSessionKey();
-      if(isEditor) sessionStorage.setItem(key, "1");
-      else sessionStorage.removeItem(key);
-    }catch(_e){}
-    document.body.classList.toggle("readOnly", !isEditor);
-    updateEditBanner();
-  }
-
-  function ensureEditor(fromAction){
-    if(isEditor) return true;
-    const pw = prompt(`Contraseña para editar${fromAction ? " ("+fromAction+")" : ""}:`);
-    if(pw === null) return false;
-    if(String(pw).trim() === EDIT_PASSWORD){
-      setEditorMode(true);
-      toast("Edición habilitada ✏️");
-      return true;
-    }
-    toast("Contraseña incorrecta 🔒");
-    return false;
-  }
-
-  function commitLocalState(){
-    try{ StorageLayer.saveLocal(state); }catch(_e){}
-    try{ lastCommittedStateJSON = JSON.stringify(state); }catch(_e){}
-  }
-
-  function revertToLastCommit(){
-    if(!lastCommittedStateJSON) return;
-    try{ state = JSON.parse(lastCommittedStateJSON); }catch(_e){}
   }
 
 
@@ -502,20 +472,14 @@ function sanitizeScriptState(opts={}){
       wrap.appendChild(chip);
     }
   }
-  function touch(opts){
-    const system = !!(opts && opts.system);
-
-    // Solo se puede editar con contraseña (6868). En modo lector, revertimos.
-    if(!system && !ensureEditor("Editar")){
-      revertToLastCommit();
-      try{ hydrateAll(); }catch(_e){}
+  function touch(){
+    if(isReadOnly()){
       const st = el("statusText");
-      if(st) st.textContent = "Solo lectura";
+      if(st) st.textContent = "Lector";
       return;
     }
-
     state.meta.updatedAt = new Date().toISOString();
-    commitLocalState();
+    StorageLayer.saveLocal(state);
     const saved = el("savedAtText");
     if(saved) saved.textContent = new Date(state.meta.updatedAt).toLocaleString("es-AR");
     const st = el("statusText");
@@ -579,7 +543,7 @@ function sanitizeScriptState(opts={}){
         if(changedByStamp){
           saveConflictBackup(cfg.binId, state); // copia local por si hay conflicto
           state = remoteCombined;
-          commitLocalState();
+          StorageLayer.saveLocal(state);
 
           lastRemoteStamp = coreStamp;
           StorageLayer.setRemoteStamp(cfg.binId, lastRemoteStamp);
@@ -599,7 +563,7 @@ function sanitizeScriptState(opts={}){
         if(tsUpdatedAt(remoteCombined) > tsUpdatedAt(state)){
           saveConflictBackup(cfg.binId, state);
           state = remoteCombined;
-          commitLocalState();
+          StorageLayer.saveLocal(state);
 
           lastRemoteStamp = coreStamp || String(state?.meta?.updatedAt || "");
           StorageLayer.setRemoteStamp(cfg.binId, lastRemoteStamp);
@@ -867,7 +831,7 @@ function sanitizeScriptState(opts={}){
         if(shouldAdoptRemote){
           state = remoteCombined;
           bootAppliedRemote = true;
-          commitLocalState();
+          StorageLayer.saveLocal(state);
           lastRemoteStamp = String(remoteCore?.meta?.updatedAt || lastRemoteStamp || "");
           StorageLayer.setRemoteStamp(cfg.binId, lastRemoteStamp);
 
@@ -1581,8 +1545,8 @@ function ensureDayShotsDone(d){
     const parts = [];
     parts.push(`<div class="t">#${esc(scene.number||"")} — ${esc(scene.slugline||"")}</div>`);
     parts.push(`<div class="m">${esc(scene.location||"")} · ${esc(scene.timeOfDay||"")} · Pág ${esc(scene.pages||"")}</div>`);
-    const _noteTxt = String((scene.notes||"")).trim() || String((scene.summary||"")).trim();
-    if(_noteTxt) parts.push(`<div class="m" style="margin-top:8px;">${esc(_noteTxt)}</div>`);
+    const tipBody = notesOrShortSummary(scene.notes, scene.summary);
+    if(tipBody) parts.push(`<div class="m" style="margin-top:8px;">${esc(tipBody)}</div>`);
 
     for(const cat of cats){
       const items = scene.elements?.[cat] || [];
@@ -3001,7 +2965,27 @@ function renderDayDetail(){
     `;
   }
 
+
+
+  const notesBox = el("callDayNotes");
+  if(notesBox){
+    notesBox.value = d.notes || "";
+    notesBox.disabled = isReadOnly();
+    notesBox.placeholder = isReadOnly() ? "🔒 Desbloqueá para editar" : "Notas del día…";
+    if(notesBox.dataset.bound !== "1"){
+      notesBox.dataset.bound = "1";
+      notesBox.addEventListener("input", ()=>{
+        const d1 = selectedDayId ? getDay(selectedDayId) : null;
+        if(!d1) return;
+        d1.notes = notesBox.value;
+        touch();
+        try{ renderCallSheetDetail(el("callSheetDetail"), selectedDayId); }catch(_e){}
+      });
+    }
+  }
+
   renderDayScenesDetail();
+
   renderDayCast();
   renderDayCrewPicker();
 }
@@ -4252,7 +4236,7 @@ function renderDayCast(){
         const s = getScene(sid);
         if(!s) continue;
         if(q){
-          const hay = `${s.number||""} ${s.slugline||""} ${s.location||""} ${s.notes||""} ${s.summary||""}`.toLowerCase();
+          const hay = `${s.number||""} ${s.slugline||""} ${s.location||""} ${s.summary||""}`.toLowerCase();
           if(!hay.includes(q)) continue;
         }
 
@@ -4833,7 +4817,6 @@ items.push({
   timeOfDay: sc.timeOfDay || "",
   pages: pagesNum,
   summary: sc.summary || "",
-  notes: sc.notes || "",
 
   title: `#${sc.number||""} ${sc.slugline||""}`.trim(),
   detail: [
@@ -5268,7 +5251,7 @@ ${
         <div class="dpMetaItem"><div class="k">Momento</div><div class="v">${esc(it.timeOfDay||"—")}</div></div>
         <div class="dpMetaItem"><div class="k">Pág</div><div class="v">${esc((Number(it.pages)||0) > 0 ? fmtPages(it.pages) : "—")}</div></div>
       </div>
-      ${(it.notes||it.summary) ? `<div class="dpBlockSummary">${esc((it.notes||it.summary))}</div>` : ``}
+      ${(()=>{ const t = notesOrShortSummary(it.notes, it.summary); return t ? `<div class="dpBlockSummary">${esc(t)}</div>` : ``; })()}
     `
     : (it.detail ? `<div class="dpBlockDetail">${esc(it.detail)}</div>` : ``)
 }
@@ -5399,7 +5382,7 @@ const ie = isNote ? "" : (it.intExt||"");
 const locTxt = isNote ? "" : (it.location||"");
 const todTxt = isNote ? "" : (it.timeOfDay||"");
 const pagesTxt = isNote ? "" : ((Number(it.pages)||0) > 0 ? fmtPages(it.pages) : "");
-const sumTxt = isNote ? (it.detail||"") : (it.notes||it.summary||"");
+const sumTxt = isNote ? (it.detail||"") : (notesOrShortSummary(it.notes, it.summary) || "");
 return `
   <tr class="${isNote ? "dpPrintNote" : ""}" style="background:${eattr(bg)};border-left:8px solid ${eattr(col)};">
     <td class="cHour">${clockHTML}</td>
@@ -5753,7 +5736,7 @@ dayplanPointer = {
           </div>
           <div class="field" style="grid-column:1/-1">
             <label>Notas</label>
-            <div class="muted dpSceneResText">${esc((it.notes||it.summary)||"—")}</div>
+            <div class="muted dpSceneResText">${esc(notesOrShortSummary(it.notes, it.summary) || "—")}</div>
           </div>
         `}
 </div>
@@ -6661,7 +6644,7 @@ function renderReportDayplanDetail(d){
       const locTxt = isNote ? "" : (it.location||"");
       const todTxt = isNote ? "" : (it.timeOfDay||"");
       const pagesTxt = isNote ? "" : ((Number(it.pages)||0) > 0 ? fmtPages(it.pages) : "");
-      const sumTxt = isNote ? (it.detail||"") : (it.notes||it.summary||"");
+      const sumTxt = isNote ? (it.detail||"") : (notesOrShortSummary(it.notes, it.summary) || "");
 
       const col = safeHexColor(it.color || (it.kind==="scene" ? "#BFDBFE" : "#E5E7EB"));
       const bg = hexToRgba(col, isNote ? 0.10 : 0.12);
@@ -6721,7 +6704,7 @@ function renderReportDayplanDetail(d){
       const locTxt = isNote ? "" : (it.location||"");
       const todTxt = isNote ? "" : (it.timeOfDay||"");
       const pagesTxt = isNote ? "" : ((Number(it.pages)||0) > 0 ? fmtPages(it.pages) : "");
-      const sumTxt = isNote ? (it.detail||"") : (it.notes||it.summary||"");
+      const sumTxt = isNote ? (it.detail||"") : (notesOrShortSummary(it.notes, it.summary) || "");
       const col = safeHexColor(it.color || (it.kind==="scene" ? "#BFDBFE" : "#E5E7EB"));
       const bg = hexToRgba(col, isNote ? 0.10 : 0.12);
       const tA = hhmmFromMinutes(absStart);
@@ -7125,7 +7108,7 @@ function printShotlistByDayId(dayId){
       const pack = isValidScriptPack(packRaw) ? packRaw : null;
       state = mergeStateFromBins(core, pack);
 
-      commitLocalState();
+      StorageLayer.saveLocal(state);
 
       lastRemoteStamp = String(core?.meta?.updatedAt || "");
       StorageLayer.setRemoteStamp(cfg.binId, lastRemoteStamp);
@@ -8358,22 +8341,13 @@ if(!state.scenes.length){
 
     initSidebarUI(cfg);
 
-	// Permisos: por defecto lector. Si ya desbloqueaste en esta sesión para este proyecto, mantenemos.
-	try{
-	  const unlocked = sessionStorage.getItem(getEditSessionKey()) === "1";
-	  setEditorMode(!!unlocked);
-	}catch(_e){
-	  setEditorMode(false);
-	}
-
     const local = StorageLayer.loadLocal();
     bootHadLocal = !!(local && local.meta);
     state = bootHadLocal ? local : defaultState(cfg && cfg.projectName);
-	try{ lastCommittedStateJSON = JSON.stringify(state); }catch(_e){}
 
     if(!bootHadLocal){
       // Persist initial state locally for this project
-      commitLocalState();
+      StorageLayer.saveLocal(state);
     }
 
     selectedSceneId = state.scenes?.[0]?.id || null;
@@ -8385,6 +8359,9 @@ if(!state.scenes.length){
     bindEvents();
     ensureMobileChrome();
     applyMobileDayFocus();
+    // Permisos de edición
+    setEditUnlocked(editUnlocked);
+    mountModeBanner();
     setupScheduleWheelScroll();
     hydrateAll();
     showView(isMobileUI() ? "dayplan" : "breakdown");
