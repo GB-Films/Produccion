@@ -990,30 +990,17 @@ function enforceScriptVersionsLimit(notify=false){
         .replace(/^\s*(INTERIOR|EXTERIOR)\s*[.\-–—:]?\s*/i,"")
         .trim();
     };
-    function extractTOD(part){
-      const up = String(part||"").toUpperCase();
-      // Permite cosas tipo "NOCHE (CONT.)" o "DÍA 1".
-      const m = up.match(/\b(DIA|DÍA|NOCHE|AMANECER|ATARDECER)\b/);
-      if(!m) return "";
-      return normalizeTOD(m[1]);
-    }
-
-    if(parts.length){
-      // Buscamos el TOD de derecha a izquierda (más común al final, pero no siempre)
-      let todIdx = -1;
-      for(let i=parts.length-1; i>=0; i--){
-        const t2 = extractTOD(parts[i]);
-        if(t2 && todSet.has(t2)){
-          tod = t2;
-          todIdx = i;
-          break;
-        }
-      }
-      if(todIdx >= 0){
-        location = stripPrefix(parts.slice(0, todIdx).join(" - "));
-      }else{
+    if(parts.length >= 2){
+      const maybeTOD = normalizeTOD(parts[parts.length-1]);
+      if(todSet.has(maybeTOD)) tod = maybeTOD;
+      const mid = parts.slice(0, parts.length-1).join(" - ");
+      location = stripPrefix(mid);
+      if(!tod){
+        // si el último no era TOD real, entonces todo es lugar
         location = stripPrefix(parts.join(" - "));
       }
+    }else{
+      location = stripPrefix(s);
     }
     return { location, timeOfDay: tod };
   }
@@ -1492,7 +1479,11 @@ function ensureDayShotsDone(d){
     const parts = [];
     parts.push(`<div class="t">#${esc(scene.number||"")} — ${esc(scene.slugline||"")}</div>`);
     parts.push(`<div class="m">${esc(scene.location||"")} · ${esc(scene.timeOfDay||"")} · Pág ${esc(scene.pages||"")}</div>`);
-    if(scene.summary) parts.push(`<div class="m" style="margin-top:8px;">${esc(scene.summary)}</div>`);
+    // Mostrar NOTAS (antes: Resumen)
+    {
+      const notesTxt = String(scene.notes||"").trim();
+      if(notesTxt) parts.push(`<div class="m" style="margin-top:8px;">${esc(notesTxt)}</div>`);
+    }
 
     for(const cat of cats){
       const items = scene.elements?.[cat] || [];
@@ -1967,32 +1958,6 @@ function setupScheduleWheelScroll(){
         .replace(/^\s*\(?\s*\d+[A-Za-z]*\s*\)?\s+/, "");
     }
 
-    function escRe(s){
-      return String(s||"").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    }
-
-    // Algunos guiones vienen como tabla/TSV: "48\tINT. CASA - NOCHE\t48".
-    // Queremos quedarnos con la columna que contiene la slugline (INT/EXT...).
-    function pickHeadingColumn(line){
-      const cols = String(line||"").split("\t").map(c=>String(c||"").trim()).filter(Boolean);
-      if(cols.length <= 1) return String(line||"").trim();
-      const re = /^(?:\d+\s*)?(?:INT\/EXT|INT\.?\/EXT\.?|I\/E|EXT\/INT|EXT\.?\/INT\.?|E\/I|INT|EXT|INTERIOR|EXTERIOR)\b/i;
-      // Preferimos una col que arranque con INT/EXT...
-      const cand = cols.find(c=>re.test(c));
-      // Si no, suele ser la col 2 (index 1)
-      return (cand || cols[1] || cols[0] || "").trim();
-    }
-
-    function removeTrailingRepeatSceneNumber(slugline, num){
-      let s = String(slugline||"").replace(/\t+/g, " ").trim();
-      const n = String(num||"").trim();
-      if(!n) return s;
-      // Elimina si termina con el mismo número de escena (ej: "... - NOCHE 48" o "...\t48")
-      const re = new RegExp("(?:\\s|[()\[\]{}])+" + escRe(n) + "\\s*$", "i");
-      s = s.replace(re, "").trim();
-      return s;
-    }
-
     function detectChapterMarker(line){
       const t = String(line||"").trim();
       if(!t) return null;
@@ -2055,7 +2020,6 @@ function setupScheduleWheelScroll(){
       number: canonSceneNumber(String(s.number)),
       chapter: s.chapter ?? "",
       slugline: s.slugline,
-      intExt: s.intExt || "",
       location: s.location,
       timeOfDay: s.timeOfDay,
       body: s.body.join("\n").trim(),
@@ -2069,22 +2033,12 @@ function setupScheduleWheelScroll(){
       const mNum = heading.match(/^\s*(\d+)([A-Za-z]*)\b/);
       if(mNum) num = canonSceneNumber(mNum[1] + (mNum[2]||""));
 
-      // TSV/tabla: a veces el número está en la primera columna, aunque el heading real esté en la segunda
-      try{
-        const cols = String(heading||"").split("\t").map(c=>String(c||"").trim()).filter(Boolean);
-        const m0 = cols?.[0]?.match(/^(\d+)([A-Za-z]*)$/);
-        if(m0) num = canonSceneNumber(m0[1] + (m0[2]||""));
-      }catch(_e){}
-
-      let slugline = stripSceneNumber(pickHeadingColumn(heading)).trim();
-      slugline = removeTrailingRepeatSceneNumber(slugline, num);
-      const intExt = sluglineToIntExt(slugline);
+      const slugline = stripSceneNumber(heading).trim();
       const { location, timeOfDay } = sluglineToLocTOD(slugline);
 
-      const bodyText = (s.body||[]).join("\n").trim();
-      // Queremos que lo que se aplica al Breakdown no pierda info: guardamos bastante más que 220 chars.
-      const summary = bodyText.length > 8000 ? bodyText.slice(0, 8000) : bodyText;
-      return { number:num, chapter: s.chapter ?? "", slugline, intExt, location, timeOfDay, body: s.body||[], summary };
+      const bodyText = (s.body||[]).join(" ").trim();
+      const summary = bodyText.slice(0, 220);
+      return { number:num, chapter: s.chapter ?? "", slugline, location, timeOfDay, body: s.body||[], summary };
     }
   }
 
@@ -2388,43 +2342,6 @@ function setupScheduleWheelScroll(){
       selectedScriptSceneId = v.scenes?.[0]?.id || null;
     }
 
-    // Sanitizar escenas ya procesadas (para guiones pegados como tabla/TSV o con nro duplicado al final)
-    try{
-      if(v && Array.isArray(v.scenes) && v.scenes.length){
-        const escRe = (s)=>String(s||"").replace(/[.*+?^${}()|[\]\\]/g,"\\$&");
-        let changed = false;
-        for(const sc of v.scenes){
-          const n = canonSceneNumber(sc.number);
-          if(sc.number !== n){ sc.number = n; changed = true; }
-          // Normalizar tabs + borrar nro repetido al final del slugline
-          let slug = String(sc.slugline||"").replace(/\t+/g," ").trim();
-          if(n){
-            const re = new RegExp("(?:\\s|[()\\[\\]{}])+" + escRe(n) + "\\s*$","i");
-            const slug2 = slug.replace(re,"").trim();
-            if(slug2 !== slug){ slug = slug2; changed = true; }
-          }
-          if(sc.slugline !== slug){ sc.slugline = slug; changed = true; }
-
-          const ie = sc.intExt || sluglineToIntExt(slug);
-          if(!sc.intExt && ie){ sc.intExt = ie; changed = true; }
-          const { location, timeOfDay } = sluglineToLocTOD(slug);
-          if(!sc.location && location){ sc.location = location; changed = true; }
-          if(!sc.timeOfDay && timeOfDay){ sc.timeOfDay = timeOfDay; changed = true; }
-
-          const bodyTxt = String(sc.body||"").trim();
-          const sumTxt = String(sc.summary||"").trim();
-          if(bodyTxt && bodyTxt.length > sumTxt.length){
-            sc.summary = bodyTxt.length>8000 ? bodyTxt.slice(0,8000) : bodyTxt;
-            changed = true;
-          }
-        }
-        if(changed){
-          v.updatedAt = new Date().toISOString();
-          touch();
-        }
-      }
-    }catch(_e){}
-
     renderScriptSceneList(v);
     renderScriptSceneEditor(v);
     const btnNew = el("btnNewScriptVersion");
@@ -2562,10 +2479,7 @@ function setupScheduleWheelScroll(){
         const scc = (v.scenes||[]).find(s=>s.id===selectedScriptSceneId);
         if(!scc) return;
         scc.body = inBody.value;
-        // Guardamos un "resumen" largo para que al aplicar al Breakdown no se pierda info.
-        // (el campo corto se puede armar después si hace falta)
-        const bodyTxt = String(scc.body||"").trim();
-        scc.summary = bodyTxt.length > 8000 ? bodyTxt.slice(0,8000) : bodyTxt;
+        scc.summary = String(scc.body||"").replace(/\s+/g," ").trim().slice(0,220);
         v.updatedAt = new Date().toISOString();
         touch();
         // nothing else to re-render on every key
@@ -4819,7 +4733,8 @@ items.push({
   location: sc.location || "",
   timeOfDay: sc.timeOfDay || "",
   pages: pagesNum,
-  summary: sc.summary || "",
+  // En Plan de Rodaje imprimimos NOTAS (antes: Resumen)
+  notes: sc.notes || "",
 
   title: `#${sc.number||""} ${sc.slugline||""}`.trim(),
   detail: [
@@ -5254,7 +5169,7 @@ ${
         <div class="dpMetaItem"><div class="k">Momento</div><div class="v">${esc(it.timeOfDay||"—")}</div></div>
         <div class="dpMetaItem"><div class="k">Pág</div><div class="v">${esc((Number(it.pages)||0) > 0 ? fmtPages(it.pages) : "—")}</div></div>
       </div>
-      ${it.summary ? `<div class="dpBlockSummary">${esc(it.summary)}</div>` : ``}
+      ${it.notes ? `<div class="dpBlockSummary">${esc(it.notes)}</div>` : ``}
     `
     : (it.detail ? `<div class="dpBlockDetail">${esc(it.detail)}</div>` : ``)
 }
@@ -5385,7 +5300,7 @@ const ie = isNote ? "" : (it.intExt||"");
 const locTxt = isNote ? "" : (it.location||"");
 const todTxt = isNote ? "" : (it.timeOfDay||"");
 const pagesTxt = isNote ? "" : ((Number(it.pages)||0) > 0 ? fmtPages(it.pages) : "");
-const sumTxt = isNote ? (it.detail||"") : (it.summary||"");
+const sumTxt = isNote ? (it.detail||"") : (it.notes||"");
 return `
   <tr class="${isNote ? "dpPrintNote" : ""}" style="background:${eattr(bg)};border-left:8px solid ${eattr(col)};">
     <td class="cHour">${clockHTML}</td>
@@ -5415,7 +5330,7 @@ return `
               <col class="colIE"><col class="colLoc"><col class="colTod"><col class="colPag"><col class="colSum">
             </colgroup>
             <thead>
-              <tr><th>Hora</th><th>Dur</th><th>Nro</th><th>Título</th><th>Int/Ext</th><th>Lugar</th><th>Momento</th><th>Largo (Pág)</th><th>Resumen</th></tr>
+              <tr><th>Hora</th><th>Dur</th><th>Nro</th><th>Título</th><th>Int/Ext</th><th>Lugar</th><th>Momento</th><th>Largo (Pág)</th><th>Notas</th></tr>
             </thead>
             <tbody>${rows || `<tr><td colspan="9" class="muted">—</td></tr>`}</tbody>
           </table>
@@ -5738,8 +5653,8 @@ dayplanPointer = {
             </div>
           </div>
           <div class="field" style="grid-column:1/-1">
-            <label>Resumen</label>
-            <div class="muted dpSceneResText">${esc(it.summary||"—")}</div>
+            <label>Notas</label>
+            <div class="muted dpSceneResText">${esc(it.notes||"—")}</div>
           </div>
         `}
 </div>
@@ -6647,7 +6562,7 @@ function renderReportDayplanDetail(d){
       const locTxt = isNote ? "" : (it.location||"");
       const todTxt = isNote ? "" : (it.timeOfDay||"");
       const pagesTxt = isNote ? "" : ((Number(it.pages)||0) > 0 ? fmtPages(it.pages) : "");
-      const sumTxt = isNote ? (it.detail||"") : (it.summary||"");
+      const sumTxt = isNote ? (it.detail||"") : (it.notes||"");
 
       const col = safeHexColor(it.color || (it.kind==="scene" ? "#BFDBFE" : "#E5E7EB"));
       const bg = hexToRgba(col, isNote ? 0.10 : 0.12);
@@ -6707,7 +6622,7 @@ function renderReportDayplanDetail(d){
       const locTxt = isNote ? "" : (it.location||"");
       const todTxt = isNote ? "" : (it.timeOfDay||"");
       const pagesTxt = isNote ? "" : ((Number(it.pages)||0) > 0 ? fmtPages(it.pages) : "");
-      const sumTxt = isNote ? (it.detail||"") : (it.summary||"");
+      const sumTxt = isNote ? (it.detail||"") : (it.notes||"");
       const col = safeHexColor(it.color || (it.kind==="scene" ? "#BFDBFE" : "#E5E7EB"));
       const bg = hexToRgba(col, isNote ? 0.10 : 0.12);
       const tA = hhmmFromMinutes(absStart);
@@ -6737,7 +6652,7 @@ function renderReportDayplanDetail(d){
             <col class="colHour"><col class="colDur"><col class="colNro"><col class="colTitle">
             <col class="colIE"><col class="colLoc"><col class="colTod"><col class="colPag"><col class="colSum">
           </colgroup>
-          <thead><tr><th>Hora</th><th>Dur</th><th>Nro</th><th>Título</th><th>I/E</th><th>Locación</th><th>Momento</th><th>Largo (Pág)</th><th>Resumen</th></tr></thead>
+          <thead><tr><th>Hora</th><th>Dur</th><th>Nro</th><th>Título</th><th>I/E</th><th>Locación</th><th>Momento</th><th>Largo (Pág)</th><th>Notas</th></tr></thead>
           <tbody>${rows || `<tr><td colspan="9" class="muted">—</td></tr>`}</tbody>
         </table>
       </div>
@@ -8036,15 +7951,10 @@ el("scriptVerSelect")?.addEventListener("change", ()=>{
           ensureSceneExtras(existing);
           existing.number = num;
           existing.slugline = sc.slugline || existing.slugline;
-          // Completar I/E + Lugar + Momento
-          const ie = (sc.intExt || sluglineToIntExt(sc.slugline || existing.slugline));
-          if(ie) existing.intExt = ie;
           existing.location = sc.location || existing.location;
           existing.timeOfDay = sc.timeOfDay || existing.timeOfDay;
           if(sc.chapter!==undefined && sc.chapter!==null && sc.chapter!=="") existing.chapter = sc.chapter;
-          // En Breakdown, el "Resumen" debe retener la info del guion (no solo 220 chars)
-          const full = String(sc.body || sc.summary || "").trim();
-          if(full) existing.summary = (full.length>8000) ? full.slice(0,8000) : full;
+          existing.summary = sc.summary || String(sc.body||"").replace(/\s+/g," ").trim().slice(0,220) || existing.summary;
           updated++;
         }else{
           const s = {
@@ -8052,14 +7962,10 @@ el("scriptVerSelect")?.addEventListener("change", ()=>{
             number: num,
             chapter: (sc.chapter!==undefined && sc.chapter!==null) ? sc.chapter : "",
             slugline: sc.slugline || "",
-            intExt: sc.intExt || sluglineToIntExt(sc.slugline || ""),
             location: sc.location || "",
             timeOfDay: sc.timeOfDay || "",
             pages: 0,
-            summary: (function(){
-              const full = String(sc.body || sc.summary || "").trim();
-              return full.length>8000 ? full.slice(0,8000) : full;
-            })(),
+            summary: sc.summary || String(sc.body||"").replace(/\s+/g," ").trim().slice(0,220),
             notes: "",
             elements: Object.fromEntries(cats.map(c=>[c,[]])),
             shots: []
