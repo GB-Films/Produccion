@@ -212,6 +212,9 @@ function sanitizeScriptState(opts={}){
   let selectedDayId = null;
   let callSheetDayId = null;
 
+  // Elements explorer: último ítem seleccionado
+  let elxSelectedKey = null;
+
   // Mantener el "día foco" sincronizado entre Call Diario / Plan de Rodaje / Shotlist / Reportes.
   function syncAllDaySelections(id){
     if(!id) return;
@@ -296,7 +299,7 @@ function sanitizeScriptState(opts={}){
   function notesOrShortSummary(notes, summary){
     const n = String(notes||"").trim();
     if(n) return n;
-    return firstWords(summary, 80);
+    return firstWords(summary, 60);
   }
 
   function toast(msg){
@@ -3681,6 +3684,70 @@ function renderDayCast(){
     }else daySel.value = "all";
   }
 
+  function syncElementsExplorerChips(){
+    const catSel = el("elxCategory");
+    const daySel = el("elxDay");
+    const catWrap = el("elxCatChips");
+    const dayWrap = el("elxDayChips");
+    if(!catSel || !daySel || !catWrap || !dayWrap) return;
+
+    // Helper para crear chips tipo 'radio'
+    function buildChips(wrap, opts, activeVal, kind){
+      wrap.innerHTML = opts.map(o=>{
+        const val = String(o.value||"");
+        const label = String(o.label||"");
+        const active = val===activeVal;
+        const dot = (kind==="cat" && val!=="all") ? `<span class="dot" style="background:${catColors[val] || 'var(--muted)'}"></span>` : ``;
+        return `<div class="chip toggle ${active? 'active':''}" data-v="${esc(val)}">${dot}${esc(label)}</div>`;
+      }).join("");
+
+      wrap.querySelectorAll(".chip.toggle").forEach(ch=>{
+        ch.addEventListener("click", ()=>{
+          const v = ch.getAttribute("data-v") || "";
+          if(kind==="cat"){ catSel.value = v; }
+          else { daySel.value = v; }
+          renderElementsExplorer();
+        });
+      });
+    }
+
+    const catOpts = Array.from(catSel.options).map(o=>({ value:o.value, label:o.textContent }));
+    const dayOpts = Array.from(daySel.options).map(o=>({ value:o.value, label:o.textContent }));
+    buildChips(catWrap, catOpts, catSel.value || "all", "cat");
+    buildChips(dayWrap, dayOpts, daySel.value || "all", "day");
+  }
+
+  function renameElementInCategory(cat, oldItem, newItem){
+    const c = String(cat||"");
+    if(!cats.includes(c)) return 0;
+    const oldKey = String(oldItem||"").trim().toLowerCase();
+    const newName = String(newItem||"").trim();
+    if(!oldKey || !newName) return 0;
+    let changedScenes = 0;
+    for(const s of (state.scenes||[])){
+      if(!s || !s.elements || !Array.isArray(s.elements[c])) continue;
+      const arr = s.elements[c];
+      let did = false;
+      const out = [];
+      const seen = new Set();
+      for(const it of arr){
+        const t = String(it||"").trim();
+        if(!t) continue;
+        let v = t;
+        if(t.trim().toLowerCase() == oldKey){ v = newName; did = true; }
+        const k = v.toLowerCase();
+        if(seen.has(k)) continue;
+        seen.add(k);
+        out.push(v);
+      }
+      if(did){
+        s.elements[c] = out;
+        changedScenes += 1;
+      }
+    }
+    return changedScenes;
+  }
+
   function scenesForDayFilter(dayFilter){
     if(dayFilter==="all") return state.scenes.slice();
     if(dayFilter==="unassigned"){
@@ -3695,6 +3762,7 @@ function renderDayCast(){
   function renderElementsExplorer(){
     if(!el("elxCategory")) return;
     populateElementsFilters();
+    syncElementsExplorerChips();
 
     const catFilter = el("elxCategory").value || "all";
     const dayFilter = el("elxDay").value || "all";
@@ -3744,9 +3812,14 @@ function renderDayCast(){
       return;
     }
 
+    const keyOf = (x)=> `${x.cat}::${String(x.item||"").trim().toLowerCase()}`;
+    if(!elxSelectedKey) elxSelectedKey = keyOf(entries[0]);
+    const selectedEntry = entries.find(x=>keyOf(x)===elxSelectedKey) || entries[0];
+    if(keyOf(selectedEntry)!==elxSelectedKey) elxSelectedKey = keyOf(selectedEntry);
+
     for(const e of entries){
       const row = document.createElement("div");
-      row.className = "sceneCard";
+      row.className = "sceneCard" + (keyOf(e)===elxSelectedKey ? " active" : "");
       row.style.cursor = "pointer";
       row.innerHTML = `
         <div class="left">
@@ -3757,11 +3830,16 @@ function renderDayCast(){
         </div>
         <div class="muted">${e.sceneIds.size}</div>
       `;
-      row.addEventListener("click", ()=>renderElementDetail(e));
+      row.addEventListener("click", ()=>{
+        elxSelectedKey = keyOf(e);
+        listWrap.querySelectorAll(".sceneCard").forEach(n=>n.classList.remove("active"));
+        row.classList.add("active");
+        renderElementDetail(e);
+      });
       listWrap.appendChild(row);
     }
 
-    renderElementDetail(entries[0]);
+    renderElementDetail(selectedEntry);
 
     function renderElementDetail(info){
       detailWrap.innerHTML = "";
@@ -3772,6 +3850,48 @@ function renderDayCast(){
         <div class="items">${esc(catNames[info.cat])}</div>
       `;
       detailWrap.appendChild(header);
+
+      const renameBox = document.createElement("div");
+      renameBox.className = "catBlock";
+      const ro = isReadOnly();
+      renameBox.innerHTML = `
+        <div class="hdr">Renombrar</div>
+        <div class="items">
+          <div class="row gap alignEnd" style="flex-wrap:wrap;">
+            <div class="field grow" style="min-width:240px;">
+              <label>Nuevo nombre</label>
+              <input class="input" id="elxRenameInput" value="${esc(info.item)}" ${ro?"disabled":""}/>
+            </div>
+            <button class="btn primary" id="elxRenameBtn" ${ro?"disabled":""}>Aplicar</button>
+          </div>
+          <div class="muted small">${ro?"🔒 Desbloqueá para renombrar":"Cambia este elemento en todas las escenas de " + esc(catNames[info.cat]) + "."}</div>
+        </div>`;
+      detailWrap.appendChild(renameBox);
+      if(!ro){
+        const inp = renameBox.querySelector("#elxRenameInput");
+        const btn = renameBox.querySelector("#elxRenameBtn");
+        const run = ()=>{
+          const nn = String(inp.value||"").trim();
+          const oo = String(info.item||"").trim();
+          if(!nn) { toast("Nombre vacío"); return; }
+          if(nn.toLowerCase()===oo.toLowerCase()) { toast("Sin cambios"); return; }
+          const n = renameElementInCategory(info.cat, oo, nn);
+          if(!n){ toast("No encontré ese elemento para renombrar"); return; }
+          touch();
+          refreshElementSuggestions();
+          try{ renderScenesTable(); renderSceneEditor(); }catch(_e){}
+          try{ renderSceneBank(); renderDaysBoard(); renderDayDetail(); }catch(_e){}
+          try{ renderDayPlan(); }catch(_e){}
+          try{ renderScheduleBoard(); }catch(_e){}
+          try{ renderShotList(); }catch(_e){}
+          try{ renderReportsFilters(); renderReports(); renderReportsDetail(); }catch(_e){}
+          elxSelectedKey = `${info.cat}::${nn.toLowerCase()}`;
+          toast(`Renombrado (${n} escena(s))`);
+          renderElementsExplorer();
+        };
+        btn.addEventListener("click", run);
+        inp.addEventListener("keydown", (e)=>{ if(e.key==="Enter"){ e.preventDefault(); run(); } });
+      }
 
       const scenesList = Array.from(info.sceneIds).map(getScene).filter(Boolean);
       for(const s of scenesList){

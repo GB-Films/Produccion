@@ -966,6 +966,8 @@ tr.groupRow td{
 .sceneCard.assigned{ border-color: rgba(var(--ok-rgb),.55); }
 .sceneCard.unassigned{ border-color: rgba(255,92,92,.55); }
 
+.sceneCard.active{ border-color: rgba(var(--accent-rgb),.75); box-shadow: 0 0 0 3px rgba(var(--accent-rgb),.12) inset; }
+
 /* Plan de rodaje: títulos de escenas un poco más chicos (banco + tablero) */
 .bankList .sceneCard .title,
 .dropZone .sceneCard .title{
@@ -3198,6 +3200,7 @@ body.gbPrintingElements .muted{ color:#333 !important; }
 /* ===== Print: matar UI mobile sí o sí ===== */
 @media print{
   #mTopbar, #mDayBar, #mDock, #mBackdrop, .mTopbar, .mDayBar, .mDock, .mBackdrop, .mDockBtn{ display:none !important; }
+  #modeBanner, .modeBanner{ display:none !important; }
 }
 
 

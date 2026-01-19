@@ -498,11 +498,14 @@
               <h2 class="cardTitle">Explorar elementos</h2>
             </div>
             <div class="cardContent">
-              <div class="row gap">
-                <select class="input compact" id="elxCategory"></select>
-                <select class="input compact" id="elxDay"></select>
+              <div class="row gap" style="flex-wrap:wrap;">
                 <input class="input grow" id="elxSearch" placeholder="Buscar elemento…"/>
               </div>
+              <div class="spacer"></div>
+              <div class="chips" id="elxCatChips"></div>
+              <div class="chips" id="elxDayChips" style="margin-top:8px;"></div>
+              <select class="input compact hidden" id="elxCategory"></select>
+              <select class="input compact hidden" id="elxDay"></select>
               <div class="spacer"></div>
               <div id="elxList"></div>
             </div>
