@@ -75,6 +75,8 @@ body{
               radial-gradient(900px 600px at 85% 85%, rgba(191,167,255,.10), transparent 60%),
               var(--bg);
   color:var(--text);
+  cursor:pointer;
+  user-select:none;
 }
 
 .shell{
@@ -153,6 +155,53 @@ body{
   border:1px solid var(--border);
   border-radius:16px;
   background:rgba(255,255,255,.03);
+}
+
+/* ======= Permisos (modo lector / editor) ======= */
+.authBar{
+  margin-top:10px;
+  padding:10px;
+  border:1px solid var(--border);
+  border-radius:14px;
+  background: rgba(255,255,255,.02);
+  display:flex;
+  flex-direction:column;
+  gap:10px;
+}
+.authRow{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:10px;
+}
+.authStatus{
+  font-weight:900;
+  font-size:12px;
+  letter-spacing:.02em;
+}
+body.readOnly .authStatus{ opacity:.95; }
+body:not(.readOnly) .authStatus{ opacity:.95; }
+
+.modeBanner{
+  position:fixed;
+  right:12px;
+  bottom:12px;
+  z-index:9999;
+  padding:10px 12px;
+  border-radius:999px;
+  border:1px solid var(--border);
+  background: rgba(var(--panel-rgb), .88);
+  backdrop-filter: blur(8px);
+  box-shadow: var(--shadow);
+  font-size:12px;
+  font-weight:900;
+  color:var(--text);
+  cursor:pointer;
+  user-select:none;
+}
+.modeBanner.hidden{ display:none !important; }
+@media print{
+  .modeBanner{ display:none !important; }
 }
 .titleInput{
   width:100%;
@@ -316,6 +365,8 @@ label{ font-size:12px; color:var(--muted); }
 select option{
   background:var(--panel);
   color:var(--text);
+  cursor:pointer;
+  user-select:none;
 }
 
 /* Compact selects */
@@ -991,6 +1042,8 @@ tr.groupRow td{
   gap:10px;
   font-size:12px;
   color:var(--text);
+  cursor:pointer;
+  user-select:none;
 }
 .chip button{
   border:none;
@@ -2214,6 +2267,8 @@ body.gbPrintingElements .muted{ color:#333 !important; }
   background: rgba(var(--panel-rgb), .35);
   font-size:12px;
   color:var(--text);
+  cursor:pointer;
+  user-select:none;
 }
 
 .dayplanPretty{ margin-top:10px; }

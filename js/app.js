@@ -271,6 +271,26 @@ function sanitizeScriptState(opts={}){
       b.id = "modeBanner";
       b.className = "modeBanner";
       document.body.appendChild(b);
+      // Fallback: si no cargó CSS, forzamos estilo básico para que se vea igual.
+      try{
+        const cs = getComputedStyle(b);
+        if(cs.position !== "fixed"){
+          b.style.position = "fixed";
+          b.style.right = "12px";
+          b.style.bottom = "12px";
+          b.style.zIndex = "9999";
+          b.style.padding = "10px 12px";
+          b.style.borderRadius = "999px";
+          b.style.border = "1px solid rgba(255,255,255,.18)";
+          b.style.background = "rgba(15,26,44,.88)";
+          b.style.backdropFilter = "blur(8px)";
+          b.style.fontSize = "12px";
+          b.style.fontWeight = "900";
+          b.style.color = "#fff";
+          b.style.cursor = "pointer";
+          b.style.userSelect = "none";
+        }
+      }catch(_e){}
       b.addEventListener("click", ()=>{
         if(isEditor){
           setEditorMode(false);
@@ -279,6 +299,7 @@ function sanitizeScriptState(opts={}){
           ensureEditor("Desbloquear");
         }
       });
+
     }
     b.textContent = isEditor ? "✏️ Edición (click para bloquear)" : "🔒 Lector (click para editar)";
   }
@@ -1560,7 +1581,8 @@ function ensureDayShotsDone(d){
     const parts = [];
     parts.push(`<div class="t">#${esc(scene.number||"")} — ${esc(scene.slugline||"")}</div>`);
     parts.push(`<div class="m">${esc(scene.location||"")} · ${esc(scene.timeOfDay||"")} · Pág ${esc(scene.pages||"")}</div>`);
-    if(scene.summary) parts.push(`<div class="m" style="margin-top:8px;">${esc(scene.summary)}</div>`);
+    const _noteTxt = String((scene.notes||"")).trim() || String((scene.summary||"")).trim();
+    if(_noteTxt) parts.push(`<div class="m" style="margin-top:8px;">${esc(_noteTxt)}</div>`);
 
     for(const cat of cats){
       const items = scene.elements?.[cat] || [];
@@ -4230,7 +4252,7 @@ function renderDayCast(){
         const s = getScene(sid);
         if(!s) continue;
         if(q){
-          const hay = `${s.number||""} ${s.slugline||""} ${s.location||""} ${s.summary||""}`.toLowerCase();
+          const hay = `${s.number||""} ${s.slugline||""} ${s.location||""} ${s.notes||""} ${s.summary||""}`.toLowerCase();
           if(!hay.includes(q)) continue;
         }
 
@@ -4811,6 +4833,7 @@ items.push({
   timeOfDay: sc.timeOfDay || "",
   pages: pagesNum,
   summary: sc.summary || "",
+  notes: sc.notes || "",
 
   title: `#${sc.number||""} ${sc.slugline||""}`.trim(),
   detail: [
@@ -5245,7 +5268,7 @@ ${
         <div class="dpMetaItem"><div class="k">Momento</div><div class="v">${esc(it.timeOfDay||"—")}</div></div>
         <div class="dpMetaItem"><div class="k">Pág</div><div class="v">${esc((Number(it.pages)||0) > 0 ? fmtPages(it.pages) : "—")}</div></div>
       </div>
-      ${it.summary ? `<div class="dpBlockSummary">${esc(it.summary)}</div>` : ``}
+      ${(it.notes||it.summary) ? `<div class="dpBlockSummary">${esc((it.notes||it.summary))}</div>` : ``}
     `
     : (it.detail ? `<div class="dpBlockDetail">${esc(it.detail)}</div>` : ``)
 }
@@ -5376,7 +5399,7 @@ const ie = isNote ? "" : (it.intExt||"");
 const locTxt = isNote ? "" : (it.location||"");
 const todTxt = isNote ? "" : (it.timeOfDay||"");
 const pagesTxt = isNote ? "" : ((Number(it.pages)||0) > 0 ? fmtPages(it.pages) : "");
-const sumTxt = isNote ? (it.detail||"") : (it.summary||"");
+const sumTxt = isNote ? (it.detail||"") : (it.notes||it.summary||"");
 return `
   <tr class="${isNote ? "dpPrintNote" : ""}" style="background:${eattr(bg)};border-left:8px solid ${eattr(col)};">
     <td class="cHour">${clockHTML}</td>
@@ -5406,7 +5429,7 @@ return `
               <col class="colIE"><col class="colLoc"><col class="colTod"><col class="colPag"><col class="colSum">
             </colgroup>
             <thead>
-              <tr><th>Hora</th><th>Dur</th><th>Nro</th><th>Título</th><th>Int/Ext</th><th>Lugar</th><th>Momento</th><th>Largo (Pág)</th><th>Resumen</th></tr>
+              <tr><th>Hora</th><th>Dur</th><th>Nro</th><th>Título</th><th>Int/Ext</th><th>Lugar</th><th>Momento</th><th>Largo (Pág)</th><th>Notas</th></tr>
             </thead>
             <tbody>${rows || `<tr><td colspan="9" class="muted">—</td></tr>`}</tbody>
           </table>
@@ -5729,8 +5752,8 @@ dayplanPointer = {
             </div>
           </div>
           <div class="field" style="grid-column:1/-1">
-            <label>Resumen</label>
-            <div class="muted dpSceneResText">${esc(it.summary||"—")}</div>
+            <label>Notas</label>
+            <div class="muted dpSceneResText">${esc((it.notes||it.summary)||"—")}</div>
           </div>
         `}
 </div>
@@ -6638,7 +6661,7 @@ function renderReportDayplanDetail(d){
       const locTxt = isNote ? "" : (it.location||"");
       const todTxt = isNote ? "" : (it.timeOfDay||"");
       const pagesTxt = isNote ? "" : ((Number(it.pages)||0) > 0 ? fmtPages(it.pages) : "");
-      const sumTxt = isNote ? (it.detail||"") : (it.summary||"");
+      const sumTxt = isNote ? (it.detail||"") : (it.notes||it.summary||"");
 
       const col = safeHexColor(it.color || (it.kind==="scene" ? "#BFDBFE" : "#E5E7EB"));
       const bg = hexToRgba(col, isNote ? 0.10 : 0.12);
@@ -6698,7 +6721,7 @@ function renderReportDayplanDetail(d){
       const locTxt = isNote ? "" : (it.location||"");
       const todTxt = isNote ? "" : (it.timeOfDay||"");
       const pagesTxt = isNote ? "" : ((Number(it.pages)||0) > 0 ? fmtPages(it.pages) : "");
-      const sumTxt = isNote ? (it.detail||"") : (it.summary||"");
+      const sumTxt = isNote ? (it.detail||"") : (it.notes||it.summary||"");
       const col = safeHexColor(it.color || (it.kind==="scene" ? "#BFDBFE" : "#E5E7EB"));
       const bg = hexToRgba(col, isNote ? 0.10 : 0.12);
       const tA = hhmmFromMinutes(absStart);
@@ -6728,7 +6751,7 @@ function renderReportDayplanDetail(d){
             <col class="colHour"><col class="colDur"><col class="colNro"><col class="colTitle">
             <col class="colIE"><col class="colLoc"><col class="colTod"><col class="colPag"><col class="colSum">
           </colgroup>
-          <thead><tr><th>Hora</th><th>Dur</th><th>Nro</th><th>Título</th><th>I/E</th><th>Locación</th><th>Momento</th><th>Largo (Pág)</th><th>Resumen</th></tr></thead>
+          <thead><tr><th>Hora</th><th>Dur</th><th>Nro</th><th>Título</th><th>I/E</th><th>Locación</th><th>Momento</th><th>Largo (Pág)</th><th>Notas</th></tr></thead>
           <tbody>${rows || `<tr><td colspan="9" class="muted">—</td></tr>`}</tbody>
         </table>
       </div>
