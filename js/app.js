@@ -161,9 +161,59 @@ function sanitizeScriptState(opts={}){
   ];
 
   let state = null;
+
+
+  // ======= Permisos de edición (password 6868) =======
+  const EDIT_PASSWORD = "6868";
+  let editUnlocked = false;
+  try{ editUnlocked = sessionStorage.getItem("gb_edit_unlocked") === "1"; }catch(_e){ editUnlocked = false; }
+
+  function isReadOnly(){ return !editUnlocked; }
+
+  function updateModeBanner(){
+    const pill = document.getElementById("modeBanner");
+    if(!pill) return;
+    pill.innerHTML = editUnlocked ? "✏️ Edición (click para bloquear)" : "🔒 Lector (click para editar)";
+  }
+
+  function setEditUnlocked(v){
+    editUnlocked = !!v;
+    try{ sessionStorage.setItem("gb_edit_unlocked", editUnlocked ? "1" : "0"); }catch(_e){}
+    try{ document.body.classList.toggle("readOnly", !editUnlocked); }catch(_e){}
+    updateModeBanner();
+  }
+
+  function mountModeBanner(){
+    let pill = document.getElementById("modeBanner");
+    if(pill) { updateModeBanner(); return pill; }
+    pill = document.createElement("div");
+    pill.id = "modeBanner";
+    pill.className = "modeBanner";
+    pill.title = "Click para alternar edición";
+    pill.addEventListener("click", ()=>{
+      if(editUnlocked){
+        const ok = confirm("¿Volver a modo lector?");
+        if(ok) setEditUnlocked(false);
+        return;
+      }
+      const pass = prompt("Contraseña para editar:");
+      if(pass === EDIT_PASSWORD){
+        setEditUnlocked(true);
+        toast("Edición habilitada ✏️");
+      }else if(pass !== null){
+        toast("Contraseña incorrecta 🔒");
+      }
+    });
+    document.body.appendChild(pill);
+    updateModeBanner();
+    return pill;
+  }
   let selectedSceneId = null;
   let selectedDayId = null;
   let callSheetDayId = null;
+
+  // Elements explorer: último ítem seleccionado
+  let elxSelectedKey = null;
 
   // Mantener el "día foco" sincronizado entre Call Diario / Plan de Rodaje / Shotlist / Reportes.
   function syncAllDaySelections(id){
@@ -237,6 +287,20 @@ function sanitizeScriptState(opts={}){
 
   // Compat: algunas partes usan escapeHtml() en vez de esc()
   function escapeHtml(s){ return esc(s); }
+
+  function firstWords(txt, maxWords){
+    const s = String(txt||"").trim();
+    if(!s) return "";
+    const words = s.split(/\s+/).filter(Boolean);
+    if(words.length <= maxWords) return words.join(" " );
+    return words.slice(0, maxWords).join(" " ) + "…";
+  }
+
+  function notesOrShortSummary(notes, summary){
+    const n = String(notes||"").trim();
+    if(n) return n;
+    return firstWords(summary, 60);
+  }
 
   function toast(msg){
     const t = el("toast");
@@ -412,6 +476,11 @@ function sanitizeScriptState(opts={}){
     }
   }
   function touch(){
+    if(isReadOnly()){
+      const st = el("statusText");
+      if(st) st.textContent = "Lector";
+      return;
+    }
     state.meta.updatedAt = new Date().toISOString();
     StorageLayer.saveLocal(state);
     const saved = el("savedAtText");
@@ -1479,7 +1548,8 @@ function ensureDayShotsDone(d){
     const parts = [];
     parts.push(`<div class="t">#${esc(scene.number||"")} — ${esc(scene.slugline||"")}</div>`);
     parts.push(`<div class="m">${esc(scene.location||"")} · ${esc(scene.timeOfDay||"")} · Pág ${esc(scene.pages||"")}</div>`);
-    if(scene.summary) parts.push(`<div class="m" style="margin-top:8px;">${esc(scene.summary)}</div>`);
+    const tipBody = notesOrShortSummary(scene.notes, scene.summary);
+    if(tipBody) parts.push(`<div class="m" style="margin-top:8px;">${esc(tipBody)}</div>`);
 
     for(const cat of cats){
       const items = scene.elements?.[cat] || [];
@@ -2898,7 +2968,27 @@ function renderDayDetail(){
     `;
   }
 
+
+
+  const notesBox = el("callDayNotes");
+  if(notesBox){
+    notesBox.value = d.notes || "";
+    notesBox.disabled = isReadOnly();
+    notesBox.placeholder = isReadOnly() ? "🔒 Desbloqueá para editar" : "Notas del día…";
+    if(notesBox.dataset.bound !== "1"){
+      notesBox.dataset.bound = "1";
+      notesBox.addEventListener("input", ()=>{
+        const d1 = selectedDayId ? getDay(selectedDayId) : null;
+        if(!d1) return;
+        d1.notes = notesBox.value;
+        touch();
+        try{ renderCallSheetDetail(el("callSheetDetail"), selectedDayId); }catch(_e){}
+      });
+    }
+  }
+
   renderDayScenesDetail();
+
   renderDayCast();
   renderDayCrewPicker();
 }
@@ -3594,6 +3684,70 @@ function renderDayCast(){
     }else daySel.value = "all";
   }
 
+  function syncElementsExplorerChips(){
+    const catSel = el("elxCategory");
+    const daySel = el("elxDay");
+    const catWrap = el("elxCatChips");
+    const dayWrap = el("elxDayChips");
+    if(!catSel || !daySel || !catWrap || !dayWrap) return;
+
+    // Helper para crear chips tipo 'radio'
+    function buildChips(wrap, opts, activeVal, kind){
+      wrap.innerHTML = opts.map(o=>{
+        const val = String(o.value||"");
+        const label = String(o.label||"");
+        const active = val===activeVal;
+        const dot = (kind==="cat" && val!=="all") ? `<span class="dot" style="background:${catColors[val] || 'var(--muted)'}"></span>` : ``;
+        return `<div class="chip toggle ${active? 'active':''}" data-v="${esc(val)}">${dot}${esc(label)}</div>`;
+      }).join("");
+
+      wrap.querySelectorAll(".chip.toggle").forEach(ch=>{
+        ch.addEventListener("click", ()=>{
+          const v = ch.getAttribute("data-v") || "";
+          if(kind==="cat"){ catSel.value = v; }
+          else { daySel.value = v; }
+          renderElementsExplorer();
+        });
+      });
+    }
+
+    const catOpts = Array.from(catSel.options).map(o=>({ value:o.value, label:o.textContent }));
+    const dayOpts = Array.from(daySel.options).map(o=>({ value:o.value, label:o.textContent }));
+    buildChips(catWrap, catOpts, catSel.value || "all", "cat");
+    buildChips(dayWrap, dayOpts, daySel.value || "all", "day");
+  }
+
+  function renameElementInCategory(cat, oldItem, newItem){
+    const c = String(cat||"");
+    if(!cats.includes(c)) return 0;
+    const oldKey = String(oldItem||"").trim().toLowerCase();
+    const newName = String(newItem||"").trim();
+    if(!oldKey || !newName) return 0;
+    let changedScenes = 0;
+    for(const s of (state.scenes||[])){
+      if(!s || !s.elements || !Array.isArray(s.elements[c])) continue;
+      const arr = s.elements[c];
+      let did = false;
+      const out = [];
+      const seen = new Set();
+      for(const it of arr){
+        const t = String(it||"").trim();
+        if(!t) continue;
+        let v = t;
+        if(t.trim().toLowerCase() == oldKey){ v = newName; did = true; }
+        const k = v.toLowerCase();
+        if(seen.has(k)) continue;
+        seen.add(k);
+        out.push(v);
+      }
+      if(did){
+        s.elements[c] = out;
+        changedScenes += 1;
+      }
+    }
+    return changedScenes;
+  }
+
   function scenesForDayFilter(dayFilter){
     if(dayFilter==="all") return state.scenes.slice();
     if(dayFilter==="unassigned"){
@@ -3608,6 +3762,7 @@ function renderDayCast(){
   function renderElementsExplorer(){
     if(!el("elxCategory")) return;
     populateElementsFilters();
+    syncElementsExplorerChips();
 
     const catFilter = el("elxCategory").value || "all";
     const dayFilter = el("elxDay").value || "all";
@@ -3657,9 +3812,14 @@ function renderDayCast(){
       return;
     }
 
+    const keyOf = (x)=> `${x.cat}::${String(x.item||"").trim().toLowerCase()}`;
+    if(!elxSelectedKey) elxSelectedKey = keyOf(entries[0]);
+    const selectedEntry = entries.find(x=>keyOf(x)===elxSelectedKey) || entries[0];
+    if(keyOf(selectedEntry)!==elxSelectedKey) elxSelectedKey = keyOf(selectedEntry);
+
     for(const e of entries){
       const row = document.createElement("div");
-      row.className = "sceneCard";
+      row.className = "sceneCard" + (keyOf(e)===elxSelectedKey ? " active" : "");
       row.style.cursor = "pointer";
       row.innerHTML = `
         <div class="left">
@@ -3670,11 +3830,16 @@ function renderDayCast(){
         </div>
         <div class="muted">${e.sceneIds.size}</div>
       `;
-      row.addEventListener("click", ()=>renderElementDetail(e));
+      row.addEventListener("click", ()=>{
+        elxSelectedKey = keyOf(e);
+        listWrap.querySelectorAll(".sceneCard").forEach(n=>n.classList.remove("active"));
+        row.classList.add("active");
+        renderElementDetail(e);
+      });
       listWrap.appendChild(row);
     }
 
-    renderElementDetail(entries[0]);
+    renderElementDetail(selectedEntry);
 
     function renderElementDetail(info){
       detailWrap.innerHTML = "";
@@ -3685,6 +3850,48 @@ function renderDayCast(){
         <div class="items">${esc(catNames[info.cat])}</div>
       `;
       detailWrap.appendChild(header);
+
+      const renameBox = document.createElement("div");
+      renameBox.className = "catBlock";
+      const ro = isReadOnly();
+      renameBox.innerHTML = `
+        <div class="hdr">Renombrar</div>
+        <div class="items">
+          <div class="row gap alignEnd" style="flex-wrap:wrap;">
+            <div class="field grow" style="min-width:240px;">
+              <label>Nuevo nombre</label>
+              <input class="input" id="elxRenameInput" value="${esc(info.item)}" ${ro?"disabled":""}/>
+            </div>
+            <button class="btn primary" id="elxRenameBtn" ${ro?"disabled":""}>Aplicar</button>
+          </div>
+          <div class="muted small">${ro?"🔒 Desbloqueá para renombrar":"Cambia este elemento en todas las escenas de " + esc(catNames[info.cat]) + "."}</div>
+        </div>`;
+      detailWrap.appendChild(renameBox);
+      if(!ro){
+        const inp = renameBox.querySelector("#elxRenameInput");
+        const btn = renameBox.querySelector("#elxRenameBtn");
+        const run = ()=>{
+          const nn = String(inp.value||"").trim();
+          const oo = String(info.item||"").trim();
+          if(!nn) { toast("Nombre vacío"); return; }
+          if(nn.toLowerCase()===oo.toLowerCase()) { toast("Sin cambios"); return; }
+          const n = renameElementInCategory(info.cat, oo, nn);
+          if(!n){ toast("No encontré ese elemento para renombrar"); return; }
+          touch();
+          refreshElementSuggestions();
+          try{ renderScenesTable(); renderSceneEditor(); }catch(_e){}
+          try{ renderSceneBank(); renderDaysBoard(); renderDayDetail(); }catch(_e){}
+          try{ renderDayPlan(); }catch(_e){}
+          try{ renderScheduleBoard(); }catch(_e){}
+          try{ renderShotList(); }catch(_e){}
+          try{ renderReportsFilters(); renderReports(); renderReportsDetail(); }catch(_e){}
+          elxSelectedKey = `${info.cat}::${nn.toLowerCase()}`;
+          toast(`Renombrado (${n} escena(s))`);
+          renderElementsExplorer();
+        };
+        btn.addEventListener("click", run);
+        inp.addEventListener("keydown", (e)=>{ if(e.key==="Enter"){ e.preventDefault(); run(); } });
+      }
 
       const scenesList = Array.from(info.sceneIds).map(getScene).filter(Boolean);
       for(const s of scenesList){
@@ -5164,7 +5371,7 @@ ${
         <div class="dpMetaItem"><div class="k">Momento</div><div class="v">${esc(it.timeOfDay||"—")}</div></div>
         <div class="dpMetaItem"><div class="k">Pág</div><div class="v">${esc((Number(it.pages)||0) > 0 ? fmtPages(it.pages) : "—")}</div></div>
       </div>
-      ${it.summary ? `<div class="dpBlockSummary">${esc(it.summary)}</div>` : ``}
+      ${(()=>{ const t = notesOrShortSummary(it.notes, it.summary); return t ? `<div class="dpBlockSummary">${esc(t)}</div>` : ``; })()}
     `
     : (it.detail ? `<div class="dpBlockDetail">${esc(it.detail)}</div>` : ``)
 }
@@ -5295,7 +5502,7 @@ const ie = isNote ? "" : (it.intExt||"");
 const locTxt = isNote ? "" : (it.location||"");
 const todTxt = isNote ? "" : (it.timeOfDay||"");
 const pagesTxt = isNote ? "" : ((Number(it.pages)||0) > 0 ? fmtPages(it.pages) : "");
-const sumTxt = isNote ? (it.detail||"") : (it.summary||"");
+const sumTxt = isNote ? (it.detail||"") : (notesOrShortSummary(it.notes, it.summary) || "");
 return `
   <tr class="${isNote ? "dpPrintNote" : ""}" style="background:${eattr(bg)};border-left:8px solid ${eattr(col)};">
     <td class="cHour">${clockHTML}</td>
@@ -5325,7 +5532,7 @@ return `
               <col class="colIE"><col class="colLoc"><col class="colTod"><col class="colPag"><col class="colSum">
             </colgroup>
             <thead>
-              <tr><th>Hora</th><th>Dur</th><th>Nro</th><th>Título</th><th>Int/Ext</th><th>Lugar</th><th>Momento</th><th>Largo (Pág)</th><th>Resumen</th></tr>
+              <tr><th>Hora</th><th>Dur</th><th>Nro</th><th>Título</th><th>Int/Ext</th><th>Lugar</th><th>Momento</th><th>Largo (Pág)</th><th>Notas</th></tr>
             </thead>
             <tbody>${rows || `<tr><td colspan="9" class="muted">—</td></tr>`}</tbody>
           </table>
@@ -5648,8 +5855,8 @@ dayplanPointer = {
             </div>
           </div>
           <div class="field" style="grid-column:1/-1">
-            <label>Resumen</label>
-            <div class="muted dpSceneResText">${esc(it.summary||"—")}</div>
+            <label>Notas</label>
+            <div class="muted dpSceneResText">${esc(notesOrShortSummary(it.notes, it.summary) || "—")}</div>
           </div>
         `}
 </div>
@@ -6265,52 +6472,52 @@ grid.appendChild(cell);
     if(!crewAll.length){
       crewItems.innerHTML = `<div>—</div>`;
     }else{
-      const rows = [];
-      for(const [area, arr] of crewGrouped){
+      crewItems.innerHTML = crewGrouped.map(([area, arr])=>{
         const areaBase = baseCrewAreaCall(d, area);
-        rows.push(`<tr class="crewAreaRow"><td colspan="5">${esc(area)}</td></tr>`);
-        for(const c of arr){
-          const call = effectiveCrewCall(d, c);
-          const pu = d.pickupCrewEnabled ? effectiveCrewPU(d, c) : "—";
-          const diffArea = call !== areaBase;
-          const diffDay = call !== dayBase;
-          const sem = diffArea ? "red" : (diffDay ? "yellow" : "green");
-          const tdCls = diffArea ? "timeDiffArea" : (diffDay ? "timeDiffDay" : "");
+        return `
+        <div class="callCrewArea">
+          <div class="callCrewAreaTitle">${esc(area)}</div>
 
-          // PU: en Call Diario el resaltado indica override propio (no hereda del Call)
-          const basePu = shiftHHMM(call, Number(d.pickupCrewOffsetMin ?? -30));
-          const puOv = normalizeHHMM(d?.crewPickUpTimes?.[c.id]);
-          const puIsOv = d.pickupCrewEnabled && !!puOv && puOv !== basePu;
-          const puSem = puIsOv ? "yellow" : "green";
-          const puCls = (puIsOv && pu !== "—") ? "timeDiffDay" : "";
-          const puCell = (pu === "—") ? "—" : `<span class="callTimeDot ${puSem}"></span><b>${esc(pu)}</b>`;
+          <table class="callTimeTable callTimeTable--crew">
+            <thead>
+              <tr>
+                <th>Nombre</th>
+                <th>Rol</th>
+                <th class="time">PU</th>
+                <th class="time">Call</th>
+                <th>Tel</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${arr.map(c=>{
+                const call = effectiveCrewCall(d, c);
+                const pu = d.pickupCrewEnabled ? effectiveCrewPU(d, c) : "—";
+                const diffArea = call !== areaBase;
+                const diffDay = call !== dayBase;
+                const sem = diffArea ? "red" : (diffDay ? "yellow" : "green");
+                const tdCls = diffArea ? "timeDiffArea" : (diffDay ? "timeDiffDay" : "");
 
-          rows.push(`
-            <tr>
-              <td class="name">${esc(c.name||"")}</td>
-              <td>${esc(c.role||"")}</td>
-              <td class="time ${puCls}">${puCell}</td>
-              <td class="time ${tdCls}"><span class="callTimeDot ${sem}"></span><b>${esc(call)}</b></td>
-              <td class="tel">${c.phone ? esc(c.phone) : "—"}</td>
-            </tr>
-          `);
-        }
-      }
-
-      crewItems.innerHTML = `
-        <table class="callTimeTable callTimeTable--crew">
-          <thead>
-            <tr>
-              <th>Nombre</th>
-              <th>Rol</th>
-              <th class="time">PU</th>
-              <th class="time">Call</th>
-              <th>Tel</th>
-            </tr>
-          </thead>
-          <tbody>${rows.join("")}</tbody>
-        </table>
+                // PU: en Call Diario el resaltado indica override propio (no hereda del Call)
+                const basePu = shiftHHMM(call, Number(d.pickupCrewOffsetMin ?? -30));
+                const puOv = normalizeHHMM(d?.crewPickUpTimes?.[c.id]);
+                const puIsOv = d.pickupCrewEnabled && !!puOv && puOv !== basePu;
+                const puSem = puIsOv ? "yellow" : "green";
+                const puCls = (puIsOv && pu !== "—") ? "timeDiffDay" : "";
+                const puCell = (pu === "—") ? "—" : `<span class="callTimeDot ${puSem}"></span><b>${esc(pu)}</b>`;
+                return `
+                <tr>
+                  <td class="name">${esc(c.name||"")}</td>
+                  <td>${esc(c.role||"")}</td>
+                  <td class="time ${puCls}">${puCell}</td>
+                  <td class="time ${tdCls}"><span class="callTimeDot ${sem}"></span><b>${esc(call)}</b></td>
+                  <td class="time">${c.phone ? esc(c.phone) : "—"}</td>
+                </tr>`;
+              }).join("")}
+            </tbody>
+          </table>
+        </div>
       `;
+      }).join("");
     }
     crewBox.appendChild(crewItems);
     wrap.appendChild(crewBox);
@@ -6557,7 +6764,7 @@ function renderReportDayplanDetail(d){
       const locTxt = isNote ? "" : (it.location||"");
       const todTxt = isNote ? "" : (it.timeOfDay||"");
       const pagesTxt = isNote ? "" : ((Number(it.pages)||0) > 0 ? fmtPages(it.pages) : "");
-      const sumTxt = isNote ? (it.detail||"") : (it.summary||"");
+      const sumTxt = isNote ? (it.detail||"") : (notesOrShortSummary(it.notes, it.summary) || "");
 
       const col = safeHexColor(it.color || (it.kind==="scene" ? "#BFDBFE" : "#E5E7EB"));
       const bg = hexToRgba(col, isNote ? 0.10 : 0.12);
@@ -6617,7 +6824,7 @@ function renderReportDayplanDetail(d){
       const locTxt = isNote ? "" : (it.location||"");
       const todTxt = isNote ? "" : (it.timeOfDay||"");
       const pagesTxt = isNote ? "" : ((Number(it.pages)||0) > 0 ? fmtPages(it.pages) : "");
-      const sumTxt = isNote ? (it.detail||"") : (it.summary||"");
+      const sumTxt = isNote ? (it.detail||"") : (notesOrShortSummary(it.notes, it.summary) || "");
       const col = safeHexColor(it.color || (it.kind==="scene" ? "#BFDBFE" : "#E5E7EB"));
       const bg = hexToRgba(col, isNote ? 0.10 : 0.12);
       const tA = hhmmFromMinutes(absStart);
@@ -6647,7 +6854,7 @@ function renderReportDayplanDetail(d){
             <col class="colHour"><col class="colDur"><col class="colNro"><col class="colTitle">
             <col class="colIE"><col class="colLoc"><col class="colTod"><col class="colPag"><col class="colSum">
           </colgroup>
-          <thead><tr><th>Hora</th><th>Dur</th><th>Nro</th><th>Título</th><th>I/E</th><th>Locación</th><th>Momento</th><th>Largo (Pág)</th><th>Resumen</th></tr></thead>
+          <thead><tr><th>Hora</th><th>Dur</th><th>Nro</th><th>Título</th><th>I/E</th><th>Locación</th><th>Momento</th><th>Largo (Pág)</th><th>Notas</th></tr></thead>
           <tbody>${rows || `<tr><td colspan="9" class="muted">—</td></tr>`}</tbody>
         </table>
       </div>
@@ -8272,6 +8479,9 @@ if(!state.scenes.length){
     bindEvents();
     ensureMobileChrome();
     applyMobileDayFocus();
+    // Permisos de edición
+    setEditUnlocked(editUnlocked);
+    mountModeBanner();
     setupScheduleWheelScroll();
     hydrateAll();
     showView(isMobileUI() ? "dayplan" : "breakdown");
