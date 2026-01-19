@@ -1,12 +1,12 @@
 <!doctype html>
-<html lang="es-AR" data-build="20251229-05"><head>
+<html lang="es-AR" data-build="20260119-01"><head>
   <meta charset="utf-8"/>
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate"/>
   <meta http-equiv="Pragma" content="no-cache"/>
   <meta http-equiv="Expires" content="0"/>
   <meta content="width=device-width,initial-scale=1,viewport-fit=cover" name="viewport"/>
   <title>GB Production Board</title>
-  <link href="css/styles.css?v=20251229-05" rel="stylesheet"/>
+  <link href="css/styles.css?v=20260119-01" rel="stylesheet"/>
 </head>
 <body>
   <div class="shell">
@@ -19,19 +19,6 @@
 
         <input class="titleInput" id="projectTitle" placeholder="Proyecto"/>
         <select class="input projectSwitch" id="projectSwitch" title="Proyecto"></select>
-
-        <!-- Permisos: por defecto modo lector (imprimir sigue disponible) -->
-        <div class="authBar" id="authBar">
-          <div class="authRow">
-            <span class="authStatus" id="authStatus">🔒 Lector</span>
-            <span class="pill muted small" id="authHint">Solo lectura</span>
-          </div>
-          <div class="row gap">
-            <button class="btn ghost small" id="btnUnlockEdit" type="button">Desbloquear</button>
-            <button class="btn ghost small hidden" id="btnLockEdit" type="button">Bloquear</button>
-            <button class="btn ghost small hidden" id="btnChangeEditPass" type="button" title="Cambiar contraseña">Clave</button>
-          </div>
-        </div>
       </div>
 
       <nav class="nav">
@@ -238,13 +225,12 @@
 
             <div class="card collapsible collapsed span2" data-collapse-key="bd_script">
               <div class="cardHeader">
-                <div class="cardTitle">GUION EN EL BREAKDOWN <span class="keepcase">(versión y planos)</span></div>
+                <div class="cardTitle">GUION EN EL BREAKDOWN <span class="keepcase">(V1 · escenas y planos)</span></div>
                 <div class="collapseToggle" title="Expandir/Colapsar">▸</div>
               </div>
               <div class="cardContent">
                 <div class="row gap">
-                  <select class="input" id="scriptVerSelect" style="max-width:240px"></select>
-                  <button class="btn" id="btnNewScriptVersion">Nueva versión</button>
+                  <span class="pill">V1</span>
                   <button class="btn ghost" id="btnToggleScriptImport">Pegar / Procesar</button>
                   <span class="pill" id="scriptVerMeta">—</span>
                 </div>
@@ -309,7 +295,7 @@
                 <div class="divider"></div>
                 <div class="muted small">Cómo usarlo</div>
                 <ol class="small">
-                  <li>Creá una versión nueva, pegá el guion (o editá las escenas acá).</li>
+                  <li>Pegá el guion completo y tocá “Procesar” (reemplaza V1).</li>
                   <li>Insertá escenas intermedias: 6 → 6A → 6B…</li>
                   <li>Cuando esté OK, incorporá al proyecto (se sincroniza).</li>
                 </ol>

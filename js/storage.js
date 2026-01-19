@@ -12,12 +12,12 @@ window.StorageLayer = (function(){
 
   // Two trusted projects (switchable)
   const PROJECTS = [
-    { id:"casona", name:"LA CASONA", binId:"6945d8e2ae596e708fa5c4d9", scriptBinId:"69605c5dae596e708fcee467", theme:"default" },
-    { id:"jyp", name:"JUBILADA Y PELIGROSA", binId:"694b0c25ae596e708fad1e75", scriptBinId:"69605cc5ae596e708fcee544", theme:"pink" }
+    { id:"casona", name:"LA CASONA", binId:"6945d8e2ae596e708fa5c4d9", scriptBinId:"69605c5dae596e708fcee467", breakdownScriptBinId:"696e6f11ae596e708fe710c7", theme:"default" },
+    { id:"jyp", name:"JUBILADA Y PELIGROSA", binId:"694b0c25ae596e708fad1e75", scriptBinId:"69605cc5ae596e708fcee544", breakdownScriptBinId:"696e6f2ad0ea881f40769996", theme:"pink" }
   ];
 
   function getProjects(){
-    return PROJECTS.map(p=>({ id:p.id, name:p.name, theme:p.theme, binId:p.binId, scriptBinId: p.scriptBinId || "" }));
+    return PROJECTS.map(p=>({ id:p.id, name:p.name, theme:p.theme, binId:p.binId, scriptBinId: p.scriptBinId || "", breakdownScriptBinId: p.breakdownScriptBinId || "" }));
   }
 
   function getActiveProjectId(){
@@ -72,6 +72,7 @@ window.StorageLayer = (function(){
       theme: p.theme,
       binId: p.binId,
       scriptBinId: p.scriptBinId || "",
+      breakdownScriptBinId: p.breakdownScriptBinId || "",
       accessKey: accessOverride || ACCESS_KEY,
       autosync: autosyncPref,
       projects: getProjects()

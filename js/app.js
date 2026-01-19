@@ -58,119 +58,93 @@
     return found || s;
   }
 
-  // Solo una versión (V1). Sin opciones extra.
-  const MAX_SCRIPT_VERSIONS = 1;
+  const MAX_SCRIPT_VERSIONS = 1; // Solo V1 (un único guion)
 
-  // ===================== Permisos (modo lector / editor) =====================
-  // ⚠️ Cambiá esta clave apenas puedas.
-  const DEFAULT_EDIT_PASSWORD = "1234";
-  const EDIT_UNLOCK_SS_PREFIX = "gb_edit_unlocked_v1__"; // sessionStorage
-  let isEditor = false;
-  let lastSavedSnapshot = null; // JSON string del último estado "confiable"
+// Guion: el texto crudo NO se guarda en JSONBin (solo local)
+const SCRIPT_RAW_LOCAL_PREFIX = "gb_script_raw_local_v1__";
+function getScriptRawLocalKey(){
+  try{
+    const cfg = (typeof StorageLayer!=="undefined" && StorageLayer.loadCfg) ? StorageLayer.loadCfg() : null;
+    const k = cfg?.scriptBinId || cfg?.binId || cfg?.projectId || "default";
+    return SCRIPT_RAW_LOCAL_PREFIX + String(k);
+  }catch(_e){
+    return SCRIPT_RAW_LOCAL_PREFIX + "default";
+  }
+}
+function loadScriptRawLocal(){
+  try{ return localStorage.getItem(getScriptRawLocalKey()) || ""; }catch(_e){ return ""; }
+}
+function saveScriptRawLocal(txt){
+  try{ localStorage.setItem(getScriptRawLocalKey(), String(txt||"")); }catch(_e){}
+}
 
-  function getProjectKey(){
-    const cfg = StorageLayer.loadCfg();
-    return String(cfg?.scriptBinId || cfg?.binId || cfg?.projectId || "default");
+function sanitizeScriptState(opts={}){
+  const migrateRawToLocal = !!opts.migrateRawToLocal;
+  ensureScriptState();
+
+  let changed = false;
+
+  // Si hay varias versiones viejas, nos quedamos con la más nueva (solo V1)
+  try{
+    if(Array.isArray(state.script.versions) && state.script.versions.length > MAX_SCRIPT_VERSIONS){
+      state.script.versions = state.script.versions
+        .slice()
+        .sort((a,b)=>{
+          const ta = Date.parse(a?.updatedAt || a?.createdAt || "") || 0;
+          const tb = Date.parse(b?.updatedAt || b?.createdAt || "") || 0;
+          return ta - tb;
+        })
+        .slice(-MAX_SCRIPT_VERSIONS);
+      changed = true;
+    }
+  }catch(_e){}
+
+  // Asegurar que exista una versión
+  if(!Array.isArray(state.script.versions) || !state.script.versions.length){
+    const now = new Date().toISOString();
+    state.script.versions = [{
+      id: uid("scrVer"),
+      name: "V1",
+      createdAt: now,
+      updatedAt: now,
+      keywords: "",
+      scenes: [],
+      draft: true
+    }];
+    changed = true;
   }
 
-  function setSnapshotFromState(){
-    try{ lastSavedSnapshot = JSON.stringify(state); }catch(_e){ /* ignore */ }
+  // Forzar V1 y versión activa única
+  const v0 = state.script.versions[0];
+  if(v0 && v0.name !== "V1"){ v0.name = "V1"; changed = true; }
+  if(state.script.activeVersionId !== (v0?.id || null)){
+    state.script.activeVersionId = v0?.id || null;
+    changed = true;
   }
 
-  function ensureModeBanner(){
-    if(document.getElementById("modeBanner")) return;
-    const b = document.createElement("div");
-    b.id = "modeBanner";
-    b.className = "modeBanner hidden";
-    b.textContent = "🔒 MODO LECTOR";
-    document.body.appendChild(b);
-  }
-
-  function updateModeBanner(){
-    const b = document.getElementById("modeBanner");
-    if(!b) return;
-    b.classList.toggle("hidden", !!isEditor);
-    b.textContent = isEditor ? "✏️ EDICIÓN" : "🔒 MODO LECTOR";
-  }
-
-  async function sha256B64(text){
-    try{
-      const enc = new TextEncoder().encode(String(text||""));
-      const buf = await crypto.subtle.digest("SHA-256", enc);
-      const bytes = new Uint8Array(buf);
-      let bin = "";
-      for(const b of bytes) bin += String.fromCharCode(b);
-      return btoa(bin);
-    }catch(_e){
-      // fallback extremadamente simple (no criptográfico) por si el browser no soporta subtle
-      return btoa(unescape(encodeURIComponent(String(text||""))));
+  // Nunca guardar rawText en el estado (lo migramos a local si hace falta)
+  for(const v of (state.script.versions||[])){
+    if(v && Object.prototype.hasOwnProperty.call(v,"rawText")){
+      if(migrateRawToLocal){
+        const cur = loadScriptRawLocal();
+        if(!cur && v.rawText) saveScriptRawLocal(v.rawText);
+      }
+      try{ delete v.rawText; }catch(_e){}
+      changed = true;
     }
   }
 
-  async function getStoredPassHash(){
-    const h = String(state?.meta?.editPassHash || "").trim();
-    return h || "";
-  }
-
-  async function checkEditPassword(pw){
-    const tryHash = await sha256B64(pw);
-    const stored = await getStoredPassHash();
-    if(stored) return tryHash === stored;
-    // Si todavía no hay hash en el proyecto, habilitamos con la default (para bootstrap) 
-    const defHash = await sha256B64(DEFAULT_EDIT_PASSWORD);
-    return tryHash === defHash;
-  }
-
-  function setEditorMode(on){
-    isEditor = !!on;
+  // Si migramos algo, lo empujamos una sola vez para limpiar el BIN (sin texto crudo)
+  if(changed && !sanitizeScriptState._autoTouched){
+    sanitizeScriptState._autoTouched = true;
+    try{ state.meta.updatedAt = new Date().toISOString(); }catch(_e){}
     try{
-      const key = EDIT_UNLOCK_SS_PREFIX + getProjectKey();
-      if(isEditor) sessionStorage.setItem(key, "1");
-      else sessionStorage.removeItem(key);
-    }catch(_e){}
-    document.body.classList.toggle("readOnly", !isEditor);
-    updateAuthUI();
-    applyReadOnlyUI();
-    updateModeBanner();
-  }
-
-  async function unlockEditorFlow(fromAction){
-    const label = fromAction ? `\n\n(Acción: ${fromAction})` : "";
-    const pw = prompt("Contraseña para habilitar edición:" + label);
-    if(pw == null) return;
-    const ok = await checkEditPassword(pw);
-    if(!ok) return toast("Contraseña incorrecta ❌");
-
-    setEditorMode(true);
-
-    // Si el proyecto todavía no tenía contraseña guardada, la inicializamos con la ingresada
-    if(!(state?.meta?.editPassHash)){
-      state.meta = state.meta || {};
-      state.meta.editPassHash = await sha256B64(pw);
+      if(!syncReady) sanitizeScriptState._needsRemoteClean = true;
       touch();
-      toast("Edición habilitada ✅ (tip: cambiá la clave)");
-    }else{
-      toast("Edición habilitada ✅");
-    }
+    }catch(_e){}
   }
+}
 
-  function lockEditor(){
-    setEditorMode(false);
-    toast("Modo lector 🔒");
-  }
-
-  async function changeEditPassword(){
-    if(!isEditor) return unlockEditorFlow("Cambiar clave");
-    const pw1 = prompt("Nueva contraseña (no se guarda en el BIN, solo su hash):");
-    if(pw1 == null) return;
-    const pw2 = prompt("Repetí la nueva contraseña:");
-    if(pw2 == null) return;
-    if(pw1 !== pw2) return toast("No coincide ❌");
-    state.meta = state.meta || {};
-    state.meta.editPassHash = await sha256B64(pw1);
-    touch();
-    toast("Clave actualizada ✅");
-  }
 
   const crewAreas = [
     "Direccion",
@@ -228,6 +202,7 @@
   let sessionPulledRemote = false;
   let lastRemoteStamp = "";
   let lastScriptRemoteStamp = "";
+  let lastBreakdownScriptRemoteStamp = "";
 
   // Crew table: which rows are expanded to show assigned shoot days
   let expandedCrewIds = new Set();
@@ -362,58 +337,6 @@
   }
 
 
-  // ===================== UI Permisos =====================
-  function updateAuthUI(){
-    try{ ensureModeBanner(); }catch{}
-    const st = el("authStatus");
-    const hint = el("authHint");
-    const bUn = el("btnUnlockEdit");
-    const bLo = el("btnLockEdit");
-    const bCh = el("btnChangeEditPass");
-
-    if(st) st.textContent = isEditor ? "✏️ Editor" : "🔒 Lector";
-    if(hint) hint.textContent = isEditor ? "Edición habilitada" : "Solo lectura";
-
-    if(bUn) bUn.classList.toggle("hidden", !!isEditor);
-    if(bLo) bLo.classList.toggle("hidden", !isEditor);
-    if(bCh) bCh.classList.toggle("hidden", !isEditor);
-
-    // Title editable solo en modo editor
-    const pt = el("projectTitle");
-    if(pt) pt.disabled = !isEditor;
-  }
-
-  function applyReadOnlyUI(){
-    const ro = !isEditor;
-    document.body.classList.toggle("readOnly", ro);
-
-    // Botones y controles que mutan data
-    const disableIds = [
-      "projectTitle",
-      "btnAddScene","btnDuplicateScene","btnDeleteScene",
-      "btnAddSceneElement","btnAddShot",
-      "btnBDImport",
-      "btnNewScriptVersion","btnToggleScriptImport","btnParseScript","btnScriptInsertAfter","btnScriptApply","btnScriptSaveScene",
-      "btnAddShootDay","btnDeleteShootDay","btnDayplanAddNote","btnDayplanAuto",
-      "btnAddCrew"
-    ];
-    for(const id of disableIds){
-      const n = el(id);
-      if(n && ("disabled" in n)) n.disabled = ro;
-    }
-
-    // Editor de escenas
-    document.querySelectorAll("#sceneEditorCard input, #sceneEditorCard textarea, #sceneEditorCard select").forEach(n=>{
-      if("disabled" in n) n.disabled = ro;
-    });
-    // Import de guion
-    document.querySelectorAll("#scriptImportPanel input, #scriptImportPanel textarea, #scriptImportPanel select").forEach(n=>{
-      if("disabled" in n) n.disabled = ro;
-    });
-    // Crew: dejar el buscador, pero bloquear agregado (botón ya está arriba)
-  }
-
-
 
   function saveConflictBackup(binId, snapshot){
     try{
@@ -490,29 +413,8 @@
     }
   }
   function touch(){
-    // Modo lector: NO permitimos mutar el estado. Revertimos al último snapshot.
-    if(!isEditor){
-      if(touch._reverting) return;
-      touch._reverting = true;
-      try{
-        if(lastSavedSnapshot){
-          try{
-            state = JSON.parse(lastSavedSnapshot);
-            hydrateAll();
-          }catch(_e){}
-        }
-        updateAuthUI();
-        applyReadOnlyUI();
-        toast("Modo lector 🔒 (desbloqueá para editar)");
-      }finally{
-        touch._reverting = false;
-      }
-      return;
-    }
-
     state.meta.updatedAt = new Date().toISOString();
     StorageLayer.saveLocal(state);
-    setSnapshotFromState();
     const saved = el("savedAtText");
     if(saved) saved.textContent = new Date(state.meta.updatedAt).toLocaleString("es-AR");
     const st = el("statusText");
@@ -526,7 +428,6 @@
   // eso como "cambio remoto" y te pisaba el último cambio.
   let autosyncInFlight = false;
   let autosyncPending = false;
-
   async function autosyncRun(){
     if(autosyncInFlight){
       autosyncPending = true;
@@ -541,49 +442,58 @@
       return;
     }
 
+    const hasScenesBin = !!cfg.scriptBinId;
+    const hasScriptBin = !!cfg.breakdownScriptBinId;
+
     // Regla de oro: nunca empujar si no pudimos traer el remoto al menos una vez en esta sesión.
-    // Esto evita el caso "abrí después de días y pisé todo".
     if(!sessionPulledRemote){
       await initRemoteSync();
       if(!sessionPulledRemote){
         autosyncInFlight = false;
-        return; // seguimos sin remoto (offline/bloqueado)
+        return;
       }
     }
 
     try{
-      const [remoteCore, remotePackRaw] = await Promise.all([
+      const [remoteCore, remoteScenesRaw, remoteScriptRaw] = await Promise.all([
         StorageLayer.jsonbinGet(cfg.binId, cfg.accessKey),
-        cfg.scriptBinId ? StorageLayer.jsonbinGet(cfg.scriptBinId, cfg.accessKey).catch(()=>null) : Promise.resolve(null)
+        hasScenesBin ? StorageLayer.jsonbinGet(cfg.scriptBinId, cfg.accessKey).catch(()=>null) : Promise.resolve(null),
+        hasScriptBin ? StorageLayer.jsonbinGet(cfg.breakdownScriptBinId, cfg.accessKey).catch(()=>null) : Promise.resolve(null)
       ]);
 
       const coreOK = isValidState(remoteCore);
-      const packOK = isValidScriptPack(remotePackRaw);
-      const remoteCombined = coreOK ? mergeStateFromBins(remoteCore, packOK ? remotePackRaw : null) : null;
+      const remoteCombined = coreOK ? mergeStateFromBins(remoteCore, remoteScenesRaw, remoteScriptRaw) : null;
 
       if(coreOK){
         const coreStamp = String(remoteCore?.meta?.updatedAt || "");
         const storedCoreStamp = StorageLayer.getRemoteStamp(cfg.binId) || lastRemoteStamp || "";
 
-        const packStamp = cfg.scriptBinId ? String(remotePackRaw?.meta?.updatedAt || "") : "";
-        const storedPackStamp = cfg.scriptBinId ? (StorageLayer.getRemoteStamp(cfg.scriptBinId) || lastScriptRemoteStamp || "") : "";
+        const scenesStamp = hasScenesBin ? String(remoteScenesRaw?.meta?.updatedAt || "") : "";
+        const storedScenesStamp = hasScenesBin ? (StorageLayer.getRemoteStamp(cfg.scriptBinId) || lastScriptRemoteStamp || "") : "";
+
+        const bdScriptStamp = hasScriptBin ? String(remoteScriptRaw?.meta?.updatedAt || "") : "";
+        const storedBdScriptStamp = hasScriptBin ? (StorageLayer.getRemoteStamp(cfg.breakdownScriptBinId) || lastBreakdownScriptRemoteStamp || "") : "";
 
         const changedByStamp =
           (storedCoreStamp && coreStamp && coreStamp !== storedCoreStamp) ||
-          (cfg.scriptBinId && storedPackStamp && packStamp && packStamp !== storedPackStamp);
+          (hasScenesBin && storedScenesStamp && scenesStamp && scenesStamp !== storedScenesStamp) ||
+          (hasScriptBin && storedBdScriptStamp && bdScriptStamp && bdScriptStamp !== storedBdScriptStamp);
 
-        // Si el remoto cambió desde la última vez que lo vimos, NO empujamos: primero absorbemos remoto.
         if(changedByStamp){
-          saveConflictBackup(cfg.binId, state); // copia local por si hay conflicto
+          saveConflictBackup(cfg.binId, state);
           state = remoteCombined;
           StorageLayer.saveLocal(state);
 
           lastRemoteStamp = coreStamp;
           StorageLayer.setRemoteStamp(cfg.binId, lastRemoteStamp);
 
-          if(cfg.scriptBinId){
-            lastScriptRemoteStamp = packStamp;
+          if(hasScenesBin){
+            lastScriptRemoteStamp = scenesStamp;
             StorageLayer.setRemoteStamp(cfg.scriptBinId, lastScriptRemoteStamp);
+          }
+          if(hasScriptBin){
+            lastBreakdownScriptRemoteStamp = bdScriptStamp;
+            StorageLayer.setRemoteStamp(cfg.breakdownScriptBinId, lastBreakdownScriptRemoteStamp);
           }
 
           hydrateAll();
@@ -592,7 +502,6 @@
           return;
         }
 
-        // Si el remoto es más nuevo que lo local (por updatedAt), absorbemos remoto y listo.
         if(tsUpdatedAt(remoteCombined) > tsUpdatedAt(state)){
           saveConflictBackup(cfg.binId, state);
           state = remoteCombined;
@@ -601,9 +510,13 @@
           lastRemoteStamp = coreStamp || String(state?.meta?.updatedAt || "");
           StorageLayer.setRemoteStamp(cfg.binId, lastRemoteStamp);
 
-          if(cfg.scriptBinId){
-            lastScriptRemoteStamp = packStamp || String(state?.meta?.updatedAt || "");
+          if(hasScenesBin){
+            lastScriptRemoteStamp = scenesStamp || String(state?.meta?.updatedAt || "");
             StorageLayer.setRemoteStamp(cfg.scriptBinId, lastScriptRemoteStamp);
+          }
+          if(hasScriptBin){
+            lastBreakdownScriptRemoteStamp = bdScriptStamp || String(state?.meta?.updatedAt || "");
+            StorageLayer.setRemoteStamp(cfg.breakdownScriptBinId, lastBreakdownScriptRemoteStamp);
           }
 
           hydrateAll();
@@ -612,28 +525,31 @@
           return;
         }
       }else{
-        // Remoto inválido: solo empujar si parece "sin inicializar".
         if(!isUninitializedRemote(remoteCore)){
           updateSyncPill("Local");
           return;
         }
       }
 
-      // IMPORTANTÍSIMO: pusheamos un snapshot coherente y guardamos el stamp del snapshot,
-      // no el de "lo que sea" que quedó en state cuando la request vuelve.
       const snapshot = JSON.parse(JSON.stringify(state));
       const pushStamp = String(snapshot?.meta?.updatedAt || "");
-
-      const { core, pack } = splitStateForBins(snapshot);
+      const { core, scenesPack, scriptPack, legacyPack } = splitStateForBins(snapshot);
 
       await StorageLayer.jsonbinPut(cfg.binId, cfg.accessKey, core);
       lastRemoteStamp = pushStamp;
       StorageLayer.setRemoteStamp(cfg.binId, lastRemoteStamp);
 
-      if(cfg.scriptBinId){
-        await StorageLayer.jsonbinPut(cfg.scriptBinId, cfg.accessKey, pack);
+      if(hasScenesBin){
+        const scenesPayload = hasScriptBin ? scenesPack : legacyPack;
+        await StorageLayer.jsonbinPut(cfg.scriptBinId, cfg.accessKey, scenesPayload);
         lastScriptRemoteStamp = pushStamp;
         StorageLayer.setRemoteStamp(cfg.scriptBinId, lastScriptRemoteStamp);
+      }
+
+      if(hasScriptBin){
+        await StorageLayer.jsonbinPut(cfg.breakdownScriptBinId, cfg.accessKey, scriptPack);
+        lastBreakdownScriptRemoteStamp = pushStamp;
+        StorageLayer.setRemoteStamp(cfg.breakdownScriptBinId, lastBreakdownScriptRemoteStamp);
       }
 
       updateSyncPill("JSONBin");
@@ -641,7 +557,6 @@
       updateSyncPill("Local");
       try{
         const msg = String(err?.message || err || "");
-        // 403/404: no es conexión, es credenciales/bin
         if(msg.includes("403")){
           if(!autosyncRun._warn403){
             autosyncRun._warn403 = true;
@@ -658,7 +573,6 @@
     }finally{
       autosyncInFlight = false;
       if(autosyncPending){
-        // Reintento rápido para empujar el último estado (sin obligarte a esperar).
         setTimeout(()=>autosyncRun(), 250);
       }
     }
@@ -712,10 +626,44 @@
     return Number.isFinite(t) ? t : 0;
   }
 
-  function isValidScriptPack(p){
+  function isValidLegacyScriptPack(p){
     return !!(p && typeof p === "object" && !Array.isArray(p) && p.meta && Array.isArray(p.scenes) && p.script && Array.isArray(p.script.versions));
   }
-  function makeEmptyScriptPack(title, updatedAt){
+  // Back-compat alias
+  function isValidScriptPack(p){
+    // Legacy pack: scenes + script (old behavior)
+    return !!(p && typeof p === "object" && !Array.isArray(p) && p.meta && Array.isArray(p.scenes) && p.script && Array.isArray(p.script.versions));
+  }
+  function isValidScenesPack(p){
+    return !!(p && typeof p === "object" && !Array.isArray(p) && p.meta && Array.isArray(p.scenes));
+  }
+  function isValidBreakdownScriptPack(p){
+    return !!(p && typeof p === "object" && !Array.isArray(p) && p.meta && p.script && Array.isArray(p.script.versions));
+  }
+
+  function makeEmptyScenesPack(title, updatedAt){
+    return {
+      meta: {
+        part: "scenes",
+        title: title || "Proyecto",
+        updatedAt: updatedAt || new Date().toISOString()
+      },
+      scenes: []
+    };
+  }
+
+  function makeEmptyBreakdownScriptPack(title, updatedAt){
+    return {
+      meta: {
+        part: "breakdownScript",
+        title: title || "Proyecto",
+        updatedAt: updatedAt || new Date().toISOString()
+      },
+      script: { versions: [], activeVersionId: null }
+    };
+  }
+
+  function makeEmptyLegacyScriptPack(title, updatedAt){
     return {
       meta: {
         part: "script",
@@ -726,31 +674,83 @@
       script: { versions: [], activeVersionId: null }
     };
   }
+
+  function normalizeScriptForPersist(script){
+    let out = { versions: [], activeVersionId: null };
+    try{
+      const s = (script && Array.isArray(script.versions)) ? JSON.parse(JSON.stringify(script)) : { versions: [], activeVersionId: null };
+      if(!Array.isArray(s.versions)) s.versions = [];
+      // quitar rawText si viene de versiones viejas + forzar V1
+      for(const v of s.versions){
+        if(v && Object.prototype.hasOwnProperty.call(v, "rawText")){
+          try{ delete v.rawText; }catch(_e){}
+        }
+        if(v) v.name = "V1";
+      }
+      // solo V1
+      if(s.versions.length > 1){
+        s.versions = s.versions
+          .slice()
+          .sort((a,b)=>{
+            const ta = Date.parse(a?.updatedAt || a?.createdAt || "") || 0;
+            const tb = Date.parse(b?.updatedAt || b?.createdAt || "") || 0;
+            return ta - tb;
+          })
+          .slice(-1);
+      }
+      s.activeVersionId = s.versions[0]?.id || null;
+      out = s;
+    }catch(_e){}
+    return out;
+  }
+
   function splitStateForBins(full){
     const snap = JSON.parse(JSON.stringify(full || {}));
+
+    // Core: todo menos escenas y guion
     const core = JSON.parse(JSON.stringify(snap));
     core.scenes = [];
     core.script = { versions: [], activeVersionId: null };
 
-    const pack = makeEmptyScriptPack(snap?.meta?.title, snap?.meta?.updatedAt);
-    pack.scenes = Array.isArray(snap.scenes) ? snap.scenes : [];
-    pack.script = (snap.script && Array.isArray(snap.script.versions)) ? snap.script : { versions: [], activeVersionId: null };
-    // Mantener el mismo updatedAt que el core (sirve como "stamp" consistente entre bins)
-    pack.meta.updatedAt = String(snap?.meta?.updatedAt || pack.meta.updatedAt);
+    // Scenes pack (BIN de escenas/breakdown)
+    const scenesPack = makeEmptyScenesPack(snap?.meta?.title, snap?.meta?.updatedAt);
+    scenesPack.scenes = Array.isArray(snap.scenes) ? snap.scenes : [];
 
-    return { core, pack };
+    // Script pack (BIN nuevo: solo guion del breakdown)
+    const scriptPack = makeEmptyBreakdownScriptPack(snap?.meta?.title, snap?.meta?.updatedAt);
+    scriptPack.script = normalizeScriptForPersist(snap?.script);
+
+    // Mantener el mismo updatedAt como “stamp” consistente entre bins
+    const stamp = String(snap?.meta?.updatedAt || scenesPack.meta.updatedAt);
+    scenesPack.meta.updatedAt = stamp;
+    scriptPack.meta.updatedAt = stamp;
+
+    // Legacy (cuando no hay BIN separado de guion)
+    const legacyPack = makeEmptyLegacyScriptPack(snap?.meta?.title, stamp);
+    legacyPack.scenes = scenesPack.scenes;
+    legacyPack.script = scriptPack.script;
+
+    return { core, scenesPack, scriptPack, legacyPack };
   }
-  function mergeStateFromBins(core, pack){
+
+  function mergeStateFromBins(core, scenesPackRaw, scriptPackRaw){
     const out = JSON.parse(JSON.stringify(core || {}));
 
-    // Preferimos el BIN de guion/escenas si es válido; si no, caemos al legacy del core.
-    const scenes = isValidScriptPack(pack) ? pack.scenes : (Array.isArray(core?.scenes) ? core.scenes : []);
-    const script = isValidScriptPack(pack)
-      ? pack.script
-      : ((core?.script && Array.isArray(core.script.versions)) ? core.script : { versions: [], activeVersionId: null });
+    // Scenes: preferimos scenesPack (nuevo) o legacy (viejo), si no core.
+    const scenesSrc = isValidScenesPack(scenesPackRaw)
+      ? scenesPackRaw
+      : (isValidScriptPack(scenesPackRaw) ? scenesPackRaw : null);
+    const scenes = scenesSrc ? scenesSrc.scenes : (Array.isArray(core?.scenes) ? core.scenes : []);
+
+    // Script: preferimos BIN de guion (nuevo), si no legacy scenesPack, si no core.
+    const script = isValidBreakdownScriptPack(scriptPackRaw)
+      ? scriptPackRaw.script
+      : (isValidScriptPack(scenesPackRaw)
+          ? scenesPackRaw.script
+          : ((core?.script && Array.isArray(core.script.versions)) ? core.script : { versions: [], activeVersionId: null }));
 
     out.scenes = Array.isArray(scenes) ? scenes : [];
-    out.script = (script && Array.isArray(script.versions)) ? script : { versions: [], activeVersionId: null };
+    out.script = normalizeScriptForPersist(script);
 
     // safety
     if(!out.meta) out.meta = { version: 14, title: "Proyecto", updatedAt: new Date().toISOString() };
@@ -763,7 +763,7 @@
   }
 
 
-  function isUninitializedRemote(remote){
+function isUninitializedRemote(remote){
     if(remote == null) return true;
     if(typeof remote !== "object") return false;
     if(Array.isArray(remote)) return false;
@@ -779,7 +779,7 @@
     if(initRemoteSync._running) return;
     initRemoteSync._running = true;
     syncReady = false;
-    // Decide whether to adopt remote data, but DO NOT push on init.
+
     const cfg = StorageLayer.loadCfg();
     if(!cfg.binId || !cfg.accessKey){
       syncReady = true;
@@ -788,45 +788,71 @@
       return;
     }
 
+    const hasScenesBin = !!cfg.scriptBinId;
+    const hasScriptBin = !!cfg.breakdownScriptBinId;
+
     try{
-      const [remoteCore, remotePackRaw] = await Promise.all([
+      let [remoteCore, remoteScenesRaw, remoteScriptRaw] = await Promise.all([
         StorageLayer.jsonbinGet(cfg.binId, cfg.accessKey),
-        cfg.scriptBinId ? StorageLayer.jsonbinGet(cfg.scriptBinId, cfg.accessKey).catch(()=>null) : Promise.resolve(null)
+        hasScenesBin ? StorageLayer.jsonbinGet(cfg.scriptBinId, cfg.accessKey).catch(()=>null) : Promise.resolve(null),
+        hasScriptBin ? StorageLayer.jsonbinGet(cfg.breakdownScriptBinId, cfg.accessKey).catch(()=>null) : Promise.resolve(null)
       ]);
 
       sessionPulledRemote = true;
+
+      // --- Migración automática: guion del breakdown a BIN dedicado ---
+      // Caso típico: antes todo estaba en scriptBinId (scenes+script). Ahora el guion vive en breakdownScriptBinId.
+      try{
+        const newEmpty = hasScriptBin && !isValidBreakdownScriptPack(remoteScriptRaw) && isUninitializedRemote(remoteScriptRaw);
+        const legacyHasScript = isValidScriptPack(remoteScenesRaw) && ((remoteScenesRaw?.script?.versions?.length||0) > 0);
+        if(hasScenesBin && hasScriptBin && newEmpty && legacyHasScript){
+          const stamp = String(remoteCore?.meta?.updatedAt || remoteScenesRaw?.meta?.updatedAt || new Date().toISOString());
+          const title = String(remoteCore?.meta?.title || remoteScenesRaw?.meta?.title || state?.meta?.title || "Proyecto");
+
+          const newScriptPack = makeEmptyBreakdownScriptPack(title, stamp);
+          newScriptPack.script = normalizeScriptForPersist(remoteScenesRaw.script);
+          newScriptPack.meta.updatedAt = stamp;
+
+          const newScenesPack = makeEmptyScenesPack(title, stamp);
+          newScenesPack.scenes = Array.isArray(remoteScenesRaw?.scenes) ? remoteScenesRaw.scenes : [];
+          newScenesPack.meta.updatedAt = stamp;
+
+          await StorageLayer.jsonbinPut(cfg.breakdownScriptBinId, cfg.accessKey, newScriptPack);
+          await StorageLayer.jsonbinPut(cfg.scriptBinId, cfg.accessKey, newScenesPack);
+
+          remoteScriptRaw = newScriptPack;
+          remoteScenesRaw = newScenesPack;
+          toast("Migré el Guion del Breakdown a su BIN ✅");
+        }
+      }catch(_e){}
 
       // stamps (por bin)
       lastRemoteStamp = String(remoteCore?.meta?.updatedAt || "");
       StorageLayer.setRemoteStamp(cfg.binId, lastRemoteStamp);
 
-      const packStamp = cfg.scriptBinId ? String(remotePackRaw?.meta?.updatedAt || "") : "";
-      if(cfg.scriptBinId){
-        lastScriptRemoteStamp = packStamp;
+      if(hasScenesBin){
+        const scenesStamp = String(remoteScenesRaw?.meta?.updatedAt || "");
+        lastScriptRemoteStamp = scenesStamp;
         StorageLayer.setRemoteStamp(cfg.scriptBinId, lastScriptRemoteStamp);
+      }
+      if(hasScriptBin){
+        const scriptStamp = String(remoteScriptRaw?.meta?.updatedAt || "");
+        lastBreakdownScriptRemoteStamp = scriptStamp;
+        StorageLayer.setRemoteStamp(cfg.breakdownScriptBinId, lastBreakdownScriptRemoteStamp);
       }
 
       const coreOK = isValidState(remoteCore);
-      const packOK = isValidScriptPack(remotePackRaw);
-
-      const remoteCombined = coreOK ? mergeStateFromBins(remoteCore, packOK ? remotePackRaw : null) : null;
+      const remoteCombined = coreOK ? mergeStateFromBins(remoteCore, remoteScenesRaw, remoteScriptRaw) : null;
 
       if(coreOK){
         const remoteHasData = !isEmptyState(remoteCombined);
         const localHasData  = !isEmptyState(state);
 
         let shouldAdoptRemote = false;
-
-        // First run (no local) and remote has data => always adopt remote
         if(!bootHadLocal && remoteHasData) shouldAdoptRemote = true;
-
-        // If local is empty but remote isn't => adopt remote
         if(!localHasData && remoteHasData) shouldAdoptRemote = true;
-
-        // Otherwise adopt the newest by updatedAt
         if(!shouldAdoptRemote && tsUpdatedAt(remoteCombined) > tsUpdatedAt(state)) shouldAdoptRemote = true;
 
-        // Mobile safety: si el remoto tiene claramente más contenido que el local, preferimos remoto
         if(!shouldAdoptRemote && remoteHasData){
           const remoteScore = (remoteCombined.scenes?.length||0) + (remoteCombined.shootDays?.length||0) + (remoteCombined.crew?.length||0);
           const localScore  = (state.scenes?.length||0) + (state.shootDays?.length||0) + (state.crew?.length||0);
@@ -837,12 +863,17 @@
           state = remoteCombined;
           bootAppliedRemote = true;
           StorageLayer.saveLocal(state);
+
           lastRemoteStamp = String(remoteCore?.meta?.updatedAt || lastRemoteStamp || "");
           StorageLayer.setRemoteStamp(cfg.binId, lastRemoteStamp);
 
-          if(cfg.scriptBinId){
-            lastScriptRemoteStamp = String((packOK ? remotePackRaw : null)?.meta?.updatedAt || lastScriptRemoteStamp || "");
+          if(hasScenesBin){
+            lastScriptRemoteStamp = String(remoteScenesRaw?.meta?.updatedAt || lastScriptRemoteStamp || "");
             StorageLayer.setRemoteStamp(cfg.scriptBinId, lastScriptRemoteStamp);
+          }
+          if(hasScriptBin){
+            lastBreakdownScriptRemoteStamp = String(remoteScriptRaw?.meta?.updatedAt || lastBreakdownScriptRemoteStamp || "");
+            StorageLayer.setRemoteStamp(cfg.breakdownScriptBinId, lastBreakdownScriptRemoteStamp);
           }
 
           selectedSceneId = null;
@@ -854,24 +885,36 @@
 
         updateSyncPill("JSONBin");
       }else{
-        // Remote exists but is not a valid state. If it looks uninitialized (e.g. {extras:[]})
-        // and this project has no local data yet, bootstrap the remote with our default state.
+        // Remoto existe pero no es válido. Si parece sin inicializar y este proyecto no tiene local aún, lo inicializamos.
         if(!bootHadLocal && isUninitializedRemote(remoteCore)){
           try{
-            const { core, pack } = splitStateForBins(state);
+            const { core, scenesPack, scriptPack, legacyPack } = splitStateForBins(state);
+            const stamp = String(state?.meta?.updatedAt || "");
+
             await StorageLayer.jsonbinPut(cfg.binId, cfg.accessKey, core);
-            if(cfg.scriptBinId) await StorageLayer.jsonbinPut(cfg.scriptBinId, cfg.accessKey, pack);
+
+            if(hasScenesBin){
+              const scenesPayload = hasScriptBin ? scenesPack : legacyPack;
+              await StorageLayer.jsonbinPut(cfg.scriptBinId, cfg.accessKey, scenesPayload);
+            }
+            if(hasScriptBin){
+              await StorageLayer.jsonbinPut(cfg.breakdownScriptBinId, cfg.accessKey, scriptPack);
+            }
 
             updateSyncPill("JSONBin");
             toast("Inicialicé remoto ✅");
             sessionPulledRemote = true;
 
-            lastRemoteStamp = String(core?.meta?.updatedAt || "");
+            lastRemoteStamp = stamp;
             StorageLayer.setRemoteStamp(cfg.binId, lastRemoteStamp);
 
-            if(cfg.scriptBinId){
-              lastScriptRemoteStamp = String(pack?.meta?.updatedAt || "");
+            if(hasScenesBin){
+              lastScriptRemoteStamp = stamp;
               StorageLayer.setRemoteStamp(cfg.scriptBinId, lastScriptRemoteStamp);
+            }
+            if(hasScriptBin){
+              lastBreakdownScriptRemoteStamp = stamp;
+              StorageLayer.setRemoteStamp(cfg.breakdownScriptBinId, lastBreakdownScriptRemoteStamp);
             }
           }catch(err){
             updateSyncPill("Local");
@@ -886,12 +929,10 @@
         }
       }
     }catch(err){
-      // Offline / bloqueado (muy común en webviews mobile o con bloqueadores)
       updateSyncPill("Local");
       try{
         if(!initRemoteSync._warned){
           initRemoteSync._warned = true;
-          // Solo avisamos una vez por sesión para no molestar.
           const isNarrow = (typeof window !== "undefined" && window.matchMedia) ? window.matchMedia("(max-width: 860px)").matches : false;
           const extra = isNarrow ? " (probá abrir en el navegador completo)" : "";
           (function(){
@@ -906,6 +947,13 @@
       syncReady = true;
       initRemoteSync._running = false;
     }
+
+    try{
+      if(sanitizeScriptState._needsRemoteClean){
+        sanitizeScriptState._needsRemoteClean = false;
+        autosyncDebounced();
+      }
+    }catch(_e){}
   }
 
 
@@ -2105,8 +2153,7 @@ function setupScheduleWheelScroll(){
 
 
   function getActiveScriptVersion(){
-    ensureScriptState();
-    enforceScriptVersionsLimit(true);
+    sanitizeScriptState({ migrateRawToLocal:true });
     const id = state.script.activeVersionId;
     return state.script.versions.find(v=>v.id===id) || state.script.versions[0] || null;
   }
@@ -2115,19 +2162,19 @@ function setupScheduleWheelScroll(){
   function renderScriptVersionSelect(){
     const sel = el("scriptVerSelect");
     if(!sel) return;
-    ensureScriptState();
-    if(!state.script.versions.length){
-      sel.innerHTML = `<option value="">(sin versiones)</option>`;
+    sanitizeScriptState();
+    const v = state.script.versions[0];
+    if(!v){
+      sel.innerHTML = `<option value="">(sin versión)</option>`;
       sel.value = "";
+      sel.disabled = true;
       return;
     }
-    sel.innerHTML = state.script.versions
-      .slice()
-      .sort((a,b)=> (a.createdAt||"").localeCompare(b.createdAt||""))
-      .map(v=>`<option value="${esc(v.id)}">${esc(v.name||"Versión")}</option>`)
-      .join("");
-    if(!state.script.activeVersionId) state.script.activeVersionId = state.script.versions[state.script.versions.length-1].id;
-    sel.value = state.script.activeVersionId;
+    sel.innerHTML = `<option value="${esc(v.id)}">V1</option>`;
+    sel.value = v.id;
+    sel.disabled = true;
+    // Si el HTML viejo todavía trae el select, lo escondemos (ya no hay 3 opciones)
+    try{ sel.style.display = "none"; }catch(_e){}
   }
 
   // ======= Cast roster (desde Crew área Cast) =======
@@ -2386,7 +2433,7 @@ function setupScheduleWheelScroll(){
 
   function renderScriptUI(){
     const wrap = el("scriptVersionUI");
-    ensureScriptState();
+    sanitizeScriptState({ migrateRawToLocal:true });
 
     renderScriptVersionSelect();
     const v = getActiveScriptVersion();
@@ -2405,19 +2452,18 @@ function setupScheduleWheelScroll(){
 
     renderScriptSceneList(v);
     renderScriptSceneEditor(v);
-
     const btnNew = el("btnNewScriptVersion");
     if(btnNew){
-      const atLimit = (state.script.versions||[]).length >= MAX_SCRIPT_VERSIONS;
-      btnNew.disabled = atLimit;
-      btnNew.title = atLimit ? `Máximo ${MAX_SCRIPT_VERSIONS} versiones` : "";
+      btnNew.disabled = true;
+      btnNew.style.display = "none";
     }
 
     // Mantener el guion (raw) visible y persistente por versión
     const panel = el("scriptImportPanel");
     if(panel) panel.classList.remove("hidden");
     const ta = el("scriptImportText");
-    if(ta && ta.value !== (v.rawText||"")) ta.value = v.rawText || "";
+    const localRaw = loadScriptRawLocal();
+    if(ta && ta.value !== localRaw) ta.value = localRaw;
     const ki = el("scriptKeywords");
     if(ki && ki.value !== (v.keywords||"")) ki.value = v.keywords || "";
     const meta = el("scriptVerMeta");
@@ -4357,13 +4403,6 @@ function bindScheduleDnD(){
   board.addEventListener("pointerdown", (e)=>{
     const block = e.target.closest(".schedBlock");
     if(!block) return;
-
-    if(!isEditor){
-      e.preventDefault();
-      toast("Modo lector 🔒");
-      unlockEditorFlow("Arrastrar (Plan General)");
-      return;
-    }
 
     const isResize = !!e.target.closest(".resize");
 
@@ -7073,6 +7112,7 @@ function printShotlistByDayId(dayId){
     try{
       await StorageLayer.jsonbinGet(cfg.binId, cfg.accessKey);
       if(cfg.scriptBinId) await StorageLayer.jsonbinGet(cfg.scriptBinId, cfg.accessKey);
+      if(cfg.breakdownScriptBinId) await StorageLayer.jsonbinGet(cfg.breakdownScriptBinId, cfg.accessKey);
       toast("Conexión JSONBin OK ✅");
     }catch(err){
       console.error(err);
@@ -7082,26 +7122,33 @@ function printShotlistByDayId(dayId){
   async function pullRemote(){
     const cfg = StorageLayer.loadCfg();
     if(!cfg.binId || !cfg.accessKey) return toast("Falta Bin ID o Access Key");
+
+    const hasScenesBin = !!cfg.scriptBinId;
+    const hasScriptBin = !!cfg.breakdownScriptBinId;
+
     try{
-      const [core, packRaw] = await Promise.all([
+      const [core, scenesRaw, scriptRaw] = await Promise.all([
         StorageLayer.jsonbinGet(cfg.binId, cfg.accessKey),
-        cfg.scriptBinId ? StorageLayer.jsonbinGet(cfg.scriptBinId, cfg.accessKey).catch(()=>null) : Promise.resolve(null)
+        hasScenesBin ? StorageLayer.jsonbinGet(cfg.scriptBinId, cfg.accessKey).catch(()=>null) : Promise.resolve(null),
+        hasScriptBin ? StorageLayer.jsonbinGet(cfg.breakdownScriptBinId, cfg.accessKey).catch(()=>null) : Promise.resolve(null)
       ]);
 
       if(!core || !core.meta) return toast("Remoto vacío o inválido");
       if(!isValidState(core)) return toast("Remoto inválido");
 
-      const pack = isValidScriptPack(packRaw) ? packRaw : null;
-      state = mergeStateFromBins(core, pack);
-
+      state = mergeStateFromBins(core, scenesRaw, scriptRaw);
       StorageLayer.saveLocal(state);
 
       lastRemoteStamp = String(core?.meta?.updatedAt || "");
       StorageLayer.setRemoteStamp(cfg.binId, lastRemoteStamp);
 
-      if(cfg.scriptBinId){
-        lastScriptRemoteStamp = String(packRaw?.meta?.updatedAt || "");
+      if(hasScenesBin){
+        lastScriptRemoteStamp = String(scenesRaw?.meta?.updatedAt || "");
         StorageLayer.setRemoteStamp(cfg.scriptBinId, lastScriptRemoteStamp);
+      }
+      if(hasScriptBin){
+        lastBreakdownScriptRemoteStamp = String(scriptRaw?.meta?.updatedAt || "");
+        StorageLayer.setRemoteStamp(cfg.breakdownScriptBinId, lastBreakdownScriptRemoteStamp);
       }
 
       toast("Remoto cargado ✅");
@@ -7115,19 +7162,30 @@ function printShotlistByDayId(dayId){
   async function pushRemote(){
     const cfg = StorageLayer.loadCfg();
     if(!cfg.binId || !cfg.accessKey) return toast("Falta Bin ID o Access Key");
+
+    const hasScenesBin = !!cfg.scriptBinId;
+    const hasScriptBin = !!cfg.breakdownScriptBinId;
+
     try{
       const snapshot = JSON.parse(JSON.stringify(state));
       const pushStamp = String(snapshot?.meta?.updatedAt || "");
-      const { core, pack } = splitStateForBins(snapshot);
+      const { core, scenesPack, scriptPack, legacyPack } = splitStateForBins(snapshot);
 
       await StorageLayer.jsonbinPut(cfg.binId, cfg.accessKey, core);
       lastRemoteStamp = pushStamp;
       StorageLayer.setRemoteStamp(cfg.binId, lastRemoteStamp);
 
-      if(cfg.scriptBinId){
-        await StorageLayer.jsonbinPut(cfg.scriptBinId, cfg.accessKey, pack);
+      if(hasScenesBin){
+        const scenesPayload = hasScriptBin ? scenesPack : legacyPack;
+        await StorageLayer.jsonbinPut(cfg.scriptBinId, cfg.accessKey, scenesPayload);
         lastScriptRemoteStamp = pushStamp;
         StorageLayer.setRemoteStamp(cfg.scriptBinId, lastScriptRemoteStamp);
+      }
+
+      if(hasScriptBin){
+        await StorageLayer.jsonbinPut(cfg.breakdownScriptBinId, cfg.accessKey, scriptPack);
+        lastBreakdownScriptRemoteStamp = pushStamp;
+        StorageLayer.setRemoteStamp(cfg.breakdownScriptBinId, lastBreakdownScriptRemoteStamp);
       }
 
       toast("Estado subido ✅");
@@ -7654,11 +7712,6 @@ function printShotlistByDayId(dayId){
       });
     });
 
-    // Permisos
-    el("btnUnlockEdit")?.addEventListener("click", ()=> unlockEditorFlow("Desbloquear"));
-    el("btnLockEdit")?.addEventListener("click", lockEditor);
-    el("btnChangeEditPass")?.addEventListener("click", changeEditPassword);
-
     el("btnAddScene")?.addEventListener("click", addScene);
     el("btnDuplicateScene")?.addEventListener("click", duplicateScene);
     el("btnDeleteScene")?.addEventListener("click", deleteScene);
@@ -7852,11 +7905,7 @@ el("btnDayplanAddNote")?.addEventListener("click", addDayplanNote);
     el("btnCancelScriptImport")?.addEventListener("click", ()=> toggleScriptImportPanel(false));
 
     el("btnToggleScriptImport")?.addEventListener("click", ()=>{
-      ensureScriptState();
-      if(!state.script.versions.length){
-        el("btnNewScriptVersion")?.click();
-        return;
-      }
+      sanitizeScriptState({ migrateRawToLocal:true });
       const panel = el("scriptImportPanel");
       const open = panel ? panel.classList.contains("hidden") : true;
       toggleScriptImportPanel(open);
@@ -7864,41 +7913,15 @@ el("btnDayplanAddNote")?.addEventListener("click", addDayplanNote);
 
     // Nueva versión: crea una versión editable (y opcionalmente pegás el guion para procesarla)
     el("btnNewScriptVersion")?.addEventListener("click", ()=>{
-      ensureScriptState();
-      enforceScriptVersionsLimit(false);
-      if(state.script.versions.length >= MAX_SCRIPT_VERSIONS){
-        return toast(`Máximo ${MAX_SCRIPT_VERSIONS} versiones por ahora.`);
-      }
-      const now = new Date().toISOString();
-      const base = getActiveScriptVersion();
-      const v = {
-        id: uid("scrVer"),
-        name: `V${state.script.versions.length + 1}`,
-        createdAt: now,
-        updatedAt: now,
-        keywords: base?.keywords || "",
-        rawText: base?.rawText || "",
-        scenes: [],
-        draft: true
-      };
-      state.script.versions.push(v);
-      state.script.activeVersionId = v.id;
-      selectedScriptSceneId = v.scenes?.[0]?.id || null;
-
-      // Prefill textarea con el último guion (si lo había)
-      const ta = el("scriptImportText");
-      if(ta) ta.value = base?.rawText || "";
-      const ki = el("scriptKeywords");
-      if(ki) ki.value = base?.keywords || "";
-
-      touch();
-      toast(`Nueva versión creada → ${v.name}`);
-      renderScriptUI();
-      toggleScriptImportPanel(true);
+      toast("Solo existe V1. Reemplazá el guion desde “Pegar / Procesar”.");
+      const panel = el("scriptImportPanel");
+      if(panel) panel.classList.remove("hidden");
+      requestAnimationFrame(()=> el("scriptImportText")?.focus());
     });
 el("btnParseScript")?.addEventListener("click", ()=>{
       const txt = el("scriptImportText")?.value || "";
       const keys = el("scriptKeywords")?.value || "";
+      saveScriptRawLocal(txt);
       const scenes = parseScreenplayToScriptScenes(txt, keys);
       if(!scenes.length) return toast("No detecté escenas (revisá INT./EXT. por línea).");
       // Aviso: si repetís números de escena (p.ej. reiniciás en cada capítulo) el merge por número puede confundirse.
@@ -7922,7 +7945,6 @@ el("btnParseScript")?.addEventListener("click", ()=>{
       // Si venís de 'Nueva versión' (draft) y está vacía, completamos ESA versión
       if(v && v.draft && !(v.scenes||[]).length){
         v.keywords = keys;
-        v.rawText = txt;
         v.scenes = scenes;
         v.updatedAt = now;
         v.draft = false;
@@ -7930,7 +7952,6 @@ el("btnParseScript")?.addEventListener("click", ()=>{
   // Si ya llegamos al límite, re-procesamos la versión activa en lugar de crear otra.
   if(state.script.versions.length >= MAX_SCRIPT_VERSIONS){
     v.keywords = keys;
-    v.rawText = txt;
     v.scenes = scenes;
     v.updatedAt = now;
     v.draft = false;
@@ -7941,7 +7962,6 @@ el("btnParseScript")?.addEventListener("click", ()=>{
       createdAt: now,
       updatedAt: now,
       keywords: keys,
-      rawText: txt,
       scenes
     };
     state.script.versions.push(v);
@@ -7962,11 +7982,7 @@ el("btnParseScript")?.addEventListener("click", ()=>{
     if(taImport && !taImport._bound){
       taImport._bound = true;
       taImport.addEventListener("input", ()=>{
-        const v = getActiveScriptVersion();
-        if(!v) return;
-        v.rawText = taImport.value || "";
-        v.updatedAt = new Date().toISOString();
-        touch();
+        saveScriptRawLocal(taImport.value || "");
       });
     }
     const kw = el("scriptKeywords");
@@ -7990,11 +8006,10 @@ el("btnParseScript")?.addEventListener("click", ()=>{
       toast("Cambios guardados ✅");
     });
 el("scriptVerSelect")?.addEventListener("change", ()=>{
-      const id = el("scriptVerSelect").value;
-      ensureScriptState();
-      state.script.activeVersionId = id || null;
+      sanitizeScriptState();
+      const v = state.script.versions[0];
+      state.script.activeVersionId = v?.id || null;
       selectedScriptSceneId = null;
-      touch();
       renderScriptUI();
     });
 
@@ -8251,6 +8266,7 @@ el("scriptVerSelect")?.addEventListener("change", ()=>{
 
   function hydrateAll(){
     ensureScriptState();
+    sanitizeScriptState({ migrateRawToLocal:true });
     ensureProjectConfig();
     state.scenes.forEach(ensureSceneExtras);
 // Backfill automático para escenas existentes (INT/EXT, Lugar, Momento) a partir del Título/slugline
@@ -8334,12 +8350,6 @@ if(!state.scenes.length){
     renderReportsDetail();
     applyBankCollapsedUI();
     initCollapsibles();
-
-    // Mantener snapshot y UI de permisos consistentes
-    setSnapshotFromState();
-    updateAuthUI();
-    applyReadOnlyUI();
-    updateModeBanner();
   }
 
   function init(){
@@ -8389,16 +8399,6 @@ if(!state.scenes.length){
     callSheetDayId = selectedDayId;
     selectedShotlistDayId = selectedDayId;
     selectedDayplanDayId = selectedDayId;
-
-    // Permisos: por defecto modo lector. Si ya desbloqueaste en esta pestaña, se recuerda.
-    try{
-      ensureModeBanner();
-      const k = EDIT_UNLOCK_SS_PREFIX + getProjectKey();
-      const unlocked = sessionStorage.getItem(k) === "1";
-      setEditorMode(!!unlocked);
-    }catch(_e){
-      setEditorMode(false);
-    }
 
     bindEvents();
     ensureMobileChrome();
