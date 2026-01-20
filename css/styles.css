@@ -1322,13 +1322,13 @@ body.gbPrintMobile.gbPrintingCallsheet #gbPrintRoot .callTimeTable--cast th:nth-
 body.gbPrintMobile.gbPrintingCallsheet #gbPrintRoot .callTimeTable--cast td:nth-child(5){ width:64px !important; }
 
 body.gbPrintMobile.gbPrintingCallsheet #gbPrintRoot .callTimeTable--crew th:nth-child(2),
-body.gbPrintMobile.gbPrintingCallsheet #gbPrintRoot .callTimeTable--crew td:nth-child(2){ width:140px !important; }
+body.gbPrintMobile.gbPrintingCallsheet #gbPrintRoot .callTimeTable--crew td:nth-child(2){ width:130px !important; }
 body.gbPrintMobile.gbPrintingCallsheet #gbPrintRoot .callTimeTable--crew th:nth-child(3),
 body.gbPrintMobile.gbPrintingCallsheet #gbPrintRoot .callTimeTable--crew td:nth-child(3),
 body.gbPrintMobile.gbPrintingCallsheet #gbPrintRoot .callTimeTable--crew th:nth-child(4),
 body.gbPrintMobile.gbPrintingCallsheet #gbPrintRoot .callTimeTable--crew td:nth-child(4){ width:64px !important; }
 body.gbPrintMobile.gbPrintingCallsheet #gbPrintRoot .callTimeTable--crew th:nth-child(5),
-body.gbPrintMobile.gbPrintingCallsheet #gbPrintRoot .callTimeTable--crew td:nth-child(5){ width:95px !important; }
+body.gbPrintMobile.gbPrintingCallsheet #gbPrintRoot .callTimeTable--crew td:nth-child(5){ width:64px !important; }
 
 body.gbPrintMobile.gbPrintingCallsheet #gbPrintRoot .callCrewArea{ border:1px solid #ddd !important; border-radius:12px !important; padding:8px !important; }
 
@@ -1382,7 +1382,7 @@ body.gbPrintMobile.gbPrintingCallsheet #gbPrintRoot .callTimeTable--crew td:nth-
 body.gbPrintMobile.gbPrintingCallsheet #gbPrintRoot .callTimeTable--crew th:nth-child(4),
 body.gbPrintMobile.gbPrintingCallsheet #gbPrintRoot .callTimeTable--crew td:nth-child(4){ width:64px !important; }
 body.gbPrintMobile.gbPrintingCallsheet #gbPrintRoot .callTimeTable--crew th:nth-child(5),
-body.gbPrintMobile.gbPrintingCallsheet #gbPrintRoot .callTimeTable--crew td:nth-child(5){ width:95px !important; }
+body.gbPrintMobile.gbPrintingCallsheet #gbPrintRoot .callTimeTable--crew td:nth-child(5){ width:64px !important; }
 
 /* Mobile print: contenedores por Área de Crew */
 body.gbPrintMobile.gbPrintingCallsheet #gbPrintRoot .callCrewArea{
@@ -3300,6 +3300,30 @@ body.gbPrintingElements .muted{ color:#333 !important; }
 .callCrewArea{ margin-top:10px; }
 .callCrewAreaTitle{ font-weight:900; margin-bottom:6px; }
 
+/* Call Sheet: fila separadora de Área (un solo header para todo Crew) */
+.crewAreaRow td{
+  background: rgba(255,255,255,.03);
+  font-weight:950;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing:.04em;
+  font-size:11px;
+}
+body.gbPrintingCallsheet .crewAreaRow td{
+  background:#f0f0f0 !important;
+  color:#111 !important;
+  border-bottom:1px solid #ddd !important;
+}
+
+/* Call Sheet: Tel (no es hora, puede wrappear) */
+.callTimeTable td.tel{
+  text-align:center;
+  font-variant-numeric: tabular-nums;
+  white-space:normal;
+  word-break:break-word;
+}
+
+
 
 /* Call Sheet: columnas alineadas (screen + print) */
 .callTimeTable{
@@ -3319,12 +3343,15 @@ body.gbPrintingElements .muted{ color:#333 !important; }
 .callTimeTable--cast th:nth-child(2), .callTimeTable--cast td:nth-child(2){
   width:160px;
 }
+.callTimeTable--crew th:nth-child(2), .callTimeTable--crew td:nth-child(2){
+  width:160px;
+}
 .callTimeTable--crew th:nth-child(3), .callTimeTable--crew td:nth-child(3),
 .callTimeTable--crew th:nth-child(4), .callTimeTable--crew td:nth-child(4){
   width:78px;
 }
 .callTimeTable--crew th:nth-child(5), .callTimeTable--crew td:nth-child(5){
-  width:120px;
+  width:78px;
 }
 
 

@@ -6472,24 +6472,22 @@ grid.appendChild(cell);
     if(!crewAll.length){
       crewItems.innerHTML = `<div>—</div>`;
     }else{
-      crewItems.innerHTML = crewGrouped.map(([area, arr])=>{
-        const areaBase = baseCrewAreaCall(d, area);
-        return `
-        <div class="callCrewArea">
-          <div class="callCrewAreaTitle">${esc(area)}</div>
-
-          <table class="callTimeTable callTimeTable--crew">
-            <thead>
-              <tr>
-                <th>Nombre</th>
-                <th>Rol</th>
-                <th class="time">PU</th>
-                <th class="time">Call</th>
-                <th>Tel</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${arr.map(c=>{
+      crewItems.innerHTML = `
+        <table class="callTimeTable callTimeTable--crew">
+          <thead>
+            <tr>
+              <th>Nombre</th>
+              <th>Rol</th>
+              <th class="time">PU</th>
+              <th class="time">Call</th>
+              <th>Tel</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${crewGrouped.map(([area, arr])=>{
+              const areaBase = baseCrewAreaCall(d, area);
+              const areaRow = `<tr class="crewAreaRow"><td colspan="5">${esc(area)}</td></tr>`;
+              const rows = arr.map(c=>{
                 const call = effectiveCrewCall(d, c);
                 const pu = d.pickupCrewEnabled ? effectiveCrewPU(d, c) : "—";
                 const diffArea = call !== areaBase;
@@ -6504,20 +6502,20 @@ grid.appendChild(cell);
                 const puSem = puIsOv ? "yellow" : "green";
                 const puCls = (puIsOv && pu !== "—") ? "timeDiffDay" : "";
                 const puCell = (pu === "—") ? "—" : `<span class="callTimeDot ${puSem}"></span><b>${esc(pu)}</b>`;
-                return `
-                <tr>
+
+                return `<tr>
                   <td class="name">${esc(c.name||"")}</td>
                   <td>${esc(c.role||"")}</td>
                   <td class="time ${puCls}">${puCell}</td>
                   <td class="time ${tdCls}"><span class="callTimeDot ${sem}"></span><b>${esc(call)}</b></td>
-                  <td class="time">${c.phone ? esc(c.phone) : "—"}</td>
+                  <td class="tel">${c.phone ? esc(c.phone) : "—"}</td>
                 </tr>`;
-              }).join("")}
-            </tbody>
-          </table>
-        </div>
+              }).join("");
+              return areaRow + rows;
+            }).join("")}
+          </tbody>
+        </table>
       `;
-      }).join("");
     }
     crewBox.appendChild(crewItems);
     wrap.appendChild(crewBox);
