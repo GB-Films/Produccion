@@ -6411,13 +6411,6 @@ function renderShotList(){
           const done = !!d.shotsDone[key];
           const t = d.callTime ? fmtClockFromCall(d.callTime, st + offset) : "";
 
-          // Thumbs (igual que Breakdown -> Planos)
-          const hasThumb = !!(sh.thumbUrl && String(sh.thumbUrl).trim());
-          const uploading = !!_shotThumbUploading[sh.id];
-          const thumbInner = uploading
-            ? `<div class="muted small">Subiendo…</div>`
-            : (hasThumb ? `<img class="shotThumbImg" src="${esc(sh.thumbUrl)}" alt="thumb"/>` : `<div class="muted small">Drop</div>`);
-
           const tr = document.createElement("tr");
           if(done) tr.classList.add("shotRowDone");
           tr.innerHTML = `
@@ -6425,17 +6418,7 @@ function renderShotList(){
             <td class="shotNum">${idx+1}</td>
             <td class="shotTime">${esc(t||"")}</td>
             <td class="shotType">${esc(normalizeShotType(sh.type)||sh.type||"Plano")}</td>
-            <td class="shotThumb shotThumbTd">
-              <div class="noPrint">
-                <div class="shotThumbDrop ${hasThumb?"has":""} ${uploading?"uploading":""}" title="Arrastrá una imagen o click para cargar">${thumbInner}</div>
-                <div class="row gap" style="justify-content:center; margin-top:6px;">
-                  <button class="btn icon shotThumbPick" title="Cargar" ${isReadOnly()?"disabled":""}>📷</button>
-                  <button class="btn icon danger shotThumbClear" title="Quitar" ${(isReadOnly()||!hasThumb)?"disabled":""}>×</button>
-                </div>
-                <input type="file" accept="image/*" class="shotThumbFile" style="display:none" />
-              </div>
-              <div class="printOnly">${hasThumb ? `<img class="shotThumbImg" src="${esc(sh.thumbUrl)}" alt="thumb"/>` : ""}</div>
-            </td>
+            <td class="shotThumb">${(sh.thumbUrl?`<img class="shotThumbImg" src="${esc(sh.thumbUrl)}" alt="thumb"/>`:"")}</td>
             <td>${esc(sh.desc||"")}</td>
             <td class="shotDur">
               <select class="input compact shotDurSel">
@@ -6446,12 +6429,6 @@ function renderShotList(){
 
           const chk = tr.querySelector("input[type=checkbox]");
           const selDur = tr.querySelector("select");
-
-          // Thumb controls
-          const drop = tr.querySelector(".shotThumbDrop");
-          const pick = tr.querySelector(".shotThumbPick");
-          const clear = tr.querySelector(".shotThumbClear");
-          const fileIn = tr.querySelector(".shotThumbFile");
 
           chk?.addEventListener("change", ()=>{
             d.shotsDone[key] = chk.checked;
@@ -6469,39 +6446,6 @@ function renderShotList(){
               renderReportsDetail();
             }
             renderShotList();
-          });
-
-          const openPicker = ()=>{
-            if(isReadOnly()){ toast("Modo lector 🔒 (desbloqueá para editar)"); return; }
-            fileIn && fileIn.click();
-          };
-          drop?.addEventListener("click", openPicker);
-          pick?.addEventListener("click", (e)=>{ e.preventDefault(); openPicker(); });
-          fileIn?.addEventListener("change", ()=>{
-            const f = fileIn.files && fileIn.files[0];
-            if(f) setShotThumb(sh, f);
-            try{ fileIn.value = ""; }catch(_e){}
-          });
-          clear?.addEventListener("click", (e)=>{
-            e.preventDefault();
-            if(isReadOnly()){ toast("Modo lector 🔒 (desbloqueá para editar)"); return; }
-            sh.thumbUrl = "";
-            delete sh.thumbUpdatedAt;
-            touch();
-            try{ renderShotsEditor(); }catch(_e){}
-            renderShotList();
-          });
-
-          const prevent = (e)=>{ e.preventDefault(); e.stopPropagation(); };
-          drop?.addEventListener("dragover", (e)=>{ prevent(e); if(!isReadOnly()) drop.classList.add("drag"); });
-          drop?.addEventListener("dragenter", (e)=>{ prevent(e); if(!isReadOnly()) drop.classList.add("drag"); });
-          drop?.addEventListener("dragleave", (e)=>{ prevent(e); drop.classList.remove("drag"); });
-          drop?.addEventListener("drop", (e)=>{
-            prevent(e);
-            drop.classList.remove("drag");
-            if(isReadOnly()){ toast("Modo lector 🔒 (desbloqueá para editar)"); return; }
-            const f = e.dataTransfer?.files?.[0];
-            if(f) setShotThumb(sh, f);
           });
 
           tbody.appendChild(tr);
