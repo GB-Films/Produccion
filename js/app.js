@@ -7183,7 +7183,8 @@ function renderReportDayplanDetail(d){
       const isMobile = !!(window.matchMedia && window.matchMedia("(max-width: 820px)").matches);
       document.body.classList.toggle("gbPrintMobile", isMobile);
     }catch(_e){}
-  
+  }
+
   function waitForImages(container, timeoutMs=2500){
     try{
       const imgs = Array.from(container?.querySelectorAll?.("img") || []).filter(im=>!!im.src);
@@ -7200,7 +7201,6 @@ function renderReportDayplanDetail(d){
     }
   }
 
-}
 
   function buildShotlistPrintHTML(d){
     const project = state?.meta?.title || "Proyecto";
