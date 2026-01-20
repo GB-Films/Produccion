@@ -3354,6 +3354,18 @@ body.gbPrintingCallsheet .crewAreaRow td{
   width:78px;
 }
 
+/* Call Sheet (print): Nombre más angosto para que Rol quede más a la izquierda + Tel 50% más ancho */
+body.gbPrintingCallsheet .callTimeTable--cast th:nth-child(1),
+body.gbPrintingCallsheet .callTimeTable--cast td:nth-child(1),
+body.gbPrintingCallsheet .callTimeTable--crew th:nth-child(1),
+body.gbPrintingCallsheet .callTimeTable--crew td:nth-child(1){
+  width:190px !important;
+}
+body.gbPrintingCallsheet .callTimeTable--crew th:nth-child(5),
+body.gbPrintingCallsheet .callTimeTable--crew td:nth-child(5){
+  width:117px !important; /* 78px * 1.5 */
+}
+
 
 @media screen and screen and (max-width: 420px){
   .mDayBtn{ font-size:11px; padding:9px 0; }
