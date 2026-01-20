@@ -3526,10 +3526,18 @@ function renderDayCast(){
       });
 
       btnApply.addEventListener("click", ()=>{
-        const base = baseCrewAreaCall(d, area);
+        // Aplicar: el horario del Area se aplica a todos (sin overrides individuales)
+        const v = normalizeHHMM(areaInput.value);
+        const day = baseDayCall(d);
+        d.crewAreaCallTimes = d.crewAreaCallTimes || {};
+        if(!v || v === day) delete d.crewAreaCallTimes[area];
+        else d.crewAreaCallTimes[area] = v;
+
+        d.crewCallTimes = d.crewCallTimes || {};
         for(const c of list){
-          if(!normalizeHHMM(d.crewCallTimes[c.id])) d.crewCallTimes[c.id] = base;
+          delete d.crewCallTimes[c.id];
         }
+
         cleanupDayCallTimes(d);
         cleanupDayExtras(d);
         touch();
@@ -3538,10 +3546,12 @@ function renderDayCast(){
       });
 
       btnReset.addEventListener("click", ()=>{
-        // resetea overrides individuales del área
-        for(const c of list){
-          delete d.crewCallTimes[c.id];
-        }
+        // Reset: el horario del Area vuelve al Call del dia (no toca overrides individuales)
+        const day = baseDayCall(d);
+        areaInput.value = day;
+        d.crewAreaCallTimes = d.crewAreaCallTimes || {};
+        delete d.crewAreaCallTimes[area];
+
         cleanupDayCallTimes(d);
         cleanupDayExtras(d);
         touch();
