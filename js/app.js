@@ -1307,6 +1307,149 @@ function ensureDayShotsDone(d){
   d.shotsDone = (d.shotsDone && typeof d.shotsDone === "object") ? d.shotsDone : {};
 }
 
+
+// ======= Shot thumbnails (Cloudinary) =======
+const SHOT_THUMB_MAX_W = 420;
+const SHOT_THUMB_JPEG_Q = 0.78;
+const _shotThumbUploading = Object.create(null);
+
+function _projKey(){
+  const t = String(state?.meta?.title || "proyecto").toLowerCase().trim();
+  return t.replace(/[^a-z0-9]+/g,"_").replace(/^_+|_+$/g,"") || "proyecto";
+}
+function _cloudKey(suffix){ return `gb_cloudinary_${_projKey()}_${suffix}`; }
+
+function getCloudinaryCfg(){
+  try{
+    return {
+      cloudName: localStorage.getItem(_cloudKey("cloud")) || "",
+      preset: localStorage.getItem(_cloudKey("preset")) || "",
+      // Si el preset ya define carpeta, dejar "folder" vacio evita sobreescribirla.
+      folder: localStorage.getItem(_cloudKey("folder")) || ""
+    };
+  }catch(_e){
+    return { cloudName:"", preset:"", folder:"" };
+  }
+}
+function setCloudinaryCfg(cfg){
+  try{
+    if(cfg.cloudName) localStorage.setItem(_cloudKey("cloud"), cfg.cloudName);
+    if(cfg.preset) localStorage.setItem(_cloudKey("preset"), cfg.preset);
+    // Permite limpiar folder seteando "".
+    if(Object.prototype.hasOwnProperty.call(cfg, "folder")){
+      localStorage.setItem(_cloudKey("folder"), String(cfg.folder || ""));
+    }
+  }catch(_e){}
+}
+
+// Defaults por proyecto (sin prompts)
+const CLOUDINARY_DEFAULTS = [
+  { re: /(\bla\s*casona\b|\bcasona\b)/i, cloudName: "dewvybiwp", preset: "ProduccionLC", folder: "" },
+  { re: /(\bjubilada\b|\bpeligrosa\b|\bjyp\b)/i, cloudName: "dewvybiwp", preset: "ProduccionJYP", folder: "" }
+];
+
+function _guessCloudinaryCfgForProject(){
+  const title = String(state?.meta?.title || "");
+  for(const d of CLOUDINARY_DEFAULTS){
+    if(d.re && d.re.test(title)){
+      return { cloudName: d.cloudName, preset: d.preset, folder: (typeof d.folder === "string") ? d.folder : "" };
+    }
+  }
+  return null;
+}
+
+function ensureCloudinaryCfg(){
+  const cur = getCloudinaryCfg();
+  if(cur.cloudName && cur.preset) return cur;
+
+  // Si conocemos el proyecto, autoconfigurar
+  const guess = _guessCloudinaryCfgForProject();
+  if(guess && guess.cloudName && guess.preset){
+    setCloudinaryCfg(guess);
+    return Object.assign(cur, guess);
+  }
+
+  const cloudName = prompt("Cloudinary cloud name (ej: gbfilms):", cur.cloudName || "");
+  if(!cloudName) return null;
+  const preset = prompt("Cloudinary unsigned upload preset:", cur.preset || "");
+  if(!preset) return null;
+  const folder = prompt("Carpeta (opcional):", cur.folder || "") || (cur.folder || "");
+  const cfg = { cloudName: String(cloudName).trim(), preset: String(preset).trim(), folder: String(folder).trim() };
+  setCloudinaryCfg(cfg);
+  toast("Cloudinary configurado ✅");
+  return cfg;
+}
+
+function _fileToImage(file){
+  return new Promise((resolve, reject)=>{
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = ()=>{ try{ URL.revokeObjectURL(url); }catch(_e){} resolve(img); };
+    img.onerror = ()=>{ try{ URL.revokeObjectURL(url); }catch(_e){} reject(new Error("No pude leer la imagen")); };
+    img.src = url;
+  });
+}
+
+async function makeThumbnailBlob(file, maxW=SHOT_THUMB_MAX_W, quality=SHOT_THUMB_JPEG_Q){
+  const img = await _fileToImage(file);
+  const w = img.naturalWidth || img.width || 1;
+  const h = img.naturalHeight || img.height || 1;
+  const scale = Math.min(1, (Number(maxW)||420) / w);
+  const tw = Math.max(1, Math.round(w * scale));
+  const th = Math.max(1, Math.round(h * scale));
+  const canvas = document.createElement("canvas");
+  canvas.width = tw;
+  canvas.height = th;
+  const ctx = canvas.getContext("2d");
+  ctx.drawImage(img, 0, 0, tw, th);
+  return await new Promise((resolve, reject)=>{
+    canvas.toBlob((blob)=>{
+      if(!blob) reject(new Error("No pude generar miniatura"));
+      else resolve(blob);
+    }, "image/jpeg", Math.max(0.4, Math.min(0.92, Number(quality)||0.78)));
+  });
+}
+
+async function uploadThumbToCloudinary(file, cfg){
+  const blob = await makeThumbnailBlob(file);
+  const fd = new FormData();
+  fd.append("file", blob, "thumb.jpg");
+  fd.append("upload_preset", cfg.preset);
+  if(cfg.folder) fd.append("folder", cfg.folder);
+
+  const url = `https://api.cloudinary.com/v1_1/${encodeURIComponent(cfg.cloudName)}/image/upload`;
+  const res = await fetch(url, { method:"POST", body: fd });
+  const data = await res.json().catch(()=> ({}));
+  if(!res.ok || !data.secure_url) throw new Error(data?.error?.message || "Upload falló");
+  return data.secure_url;
+}
+
+async function setShotThumb(sh, file){
+  if(!sh || !file) return;
+  if(isReadOnly()){ toast("Modo lector 🔒 (desbloqueá para editar)"); return; }
+  const cfg = ensureCloudinaryCfg();
+  if(!cfg) return;
+
+  _shotThumbUploading[sh.id] = true;
+  try{
+    toast("Subiendo miniatura…");
+    const url = await uploadThumbToCloudinary(file, cfg);
+    sh.thumbUrl = url;
+    sh.thumbUpdatedAt = new Date().toISOString();
+    touch();
+    try{ renderShotsEditor(); }catch(_e){}
+    try{ renderShotList(); }catch(_e){}
+    toast("Miniatura cargada ✅");
+  }catch(e){
+    console.error(e);
+    toast("No pude subir la miniatura ❌");
+  }finally{
+    delete _shotThumbUploading[sh.id];
+    try{ renderShotsEditor(); }catch(_e){}
+    try{ renderShotList(); }catch(_e){}
+  }
+}
+
   
   // ======= Call times (Cast/Crew) =======
   function normalizeHHMM(val){
@@ -2331,12 +2474,13 @@ function setupScheduleWheelScroll(){
     const table = el("shotsTable");
     const btnAdd = el("btnAddShot");
     if(btnAdd){
-      btnAdd.disabled = !selectedSceneId;
+      btnAdd.disabled = !selectedSceneId || isReadOnly();
       btnAdd.onclick = ()=>{
+        if(isReadOnly()){ toast("Modo lector 🔒 (desbloqueá para editar)"); return; }
         const s = selectedSceneId ? getScene(selectedSceneId) : null;
         if(!s) return;
         ensureSceneExtras(s);
-        s.shots.push({ id: uid("shot"), type: "Plano general", desc: "", durMin: DEFAULT_SHOT_MIN });
+        s.shots.push({ id: uid("shot"), type: "Plano general", desc: "", durMin: DEFAULT_SHOT_MIN, thumbUrl: "" });
         touch();
         renderShotsEditor();
       };
@@ -2347,47 +2491,115 @@ function setupScheduleWheelScroll(){
 
     const s = selectedSceneId ? getScene(selectedSceneId) : null;
     tbody.innerHTML = "";
-    if(!s){
-      return;
-    }
-    ensureSceneExtras(s);
+    if(!s) return;
+    ensureSceneExtras_toggleThumb(s);
 
     (s.shots||[]).forEach((sh, i)=>{
       // migración: abreviaturas viejas → labels completos
       sh.type = normalizeShotType(sh.type) || "Plano general";
+      if(typeof sh.thumbUrl !== "string") sh.thumbUrl = sh.thumbUrl ? String(sh.thumbUrl) : "";
+
+      const hasThumb = !!(sh.thumbUrl && String(sh.thumbUrl).trim());
+      const uploading = !!_shotThumbUploading[sh.id];
+      const thumbInner = uploading
+        ? `<div class="muted small">Subiendo…</div>`
+        : (hasThumb ? `<img class="shotThumbImg" src="${esc(sh.thumbUrl)}" alt="thumb"/>` : `<div class="muted small">Drop</div>`);
+
       const tr = document.createElement("tr");
       tr.innerHTML = `
         <td>${i+1}</td>
         <td>
-          <select class="input compact shotTypeSel">
+          <select class="input compact shotTypeSel" ${isReadOnly()?"disabled":""}>
             ${shotTypes.map(t=>`<option value="${esc(t)}"${(normalizeShotType(sh.type)===t)?" selected":""}>${esc(t)}</option>`).join("")}
           </select>
         </td>
-        <td><input class="input shotDescInput" placeholder="Descripción del plano…" value="${esc(sh.desc||"")}" /></td>
-        <td><button class="btn icon danger" title="Borrar">×</button></td>
+        <td><input class="input shotDescInput" ${isReadOnly()?"disabled":""} placeholder="Descripción del plano…" value="${esc(sh.desc||"")}" /></td>
+        <td class="shotThumbTd">
+          <div class="shotThumbDrop ${hasThumb?"has":""} ${uploading?"uploading":""}" title="Arrastrá una imagen o click para cargar">${thumbInner}</div>
+          <div class="row gap" style="justify-content:center; margin-top:6px;">
+            <button class="btn icon shotThumbPick" title="Cargar" ${isReadOnly()?"disabled":""}>📷</button>
+            <button class="btn icon danger shotThumbClear" title="Quitar" ${(isReadOnly()||!hasThumb)?"disabled":""}>×</button>
+          </div>
+          <input type="file" accept="image/*" class="shotThumbFile" style="display:none" />
+        </td>
+        <td><button class="btn icon danger shotDelBtn" title="Borrar" ${isReadOnly()?"disabled":""}>×</button></td>
       `;
-      const sel = tr.querySelector("select");
-      const inp = tr.querySelector("input");
-      const del = tr.querySelector("button");
+
+      const sel = tr.querySelector(".shotTypeSel");
+      const inp = tr.querySelector(".shotDescInput");
+      const del = tr.querySelector(".shotDelBtn");
 
       sel?.addEventListener("change", ()=>{
+        if(isReadOnly()) return;
         sh.type = sel.value;
         touch();
       });
       inp?.addEventListener("input", ()=>{
+        if(isReadOnly()) return;
         sh.desc = inp.value;
         touch();
       });
       del?.addEventListener("click", (e)=>{
         e.preventDefault();
+        if(isReadOnly()){ toast("Modo lector 🔒 (desbloqueá para editar)"); return; }
         s.shots = (s.shots||[]).filter(x=>x.id!==sh.id);
         touch();
         renderShotsEditor();
+        try{ renderShotList(); }catch(_e){}
+      });
+
+      // Thumb controls
+      const drop = tr.querySelector(".shotThumbDrop");
+      const pick = tr.querySelector(".shotThumbPick");
+      const clear = tr.querySelector(".shotThumbClear");
+      const fileIn = tr.querySelector(".shotThumbFile");
+
+      const openPicker = ()=>{
+        if(isReadOnly()){ toast("Modo lector 🔒 (desbloqueá para editar)"); return; }
+        fileIn && fileIn.click();
+      };
+      drop?.addEventListener("click", openPicker);
+      pick?.addEventListener("click", (e)=>{ e.preventDefault(); openPicker(); });
+      fileIn?.addEventListener("change", ()=>{
+        const f = fileIn.files && fileIn.files[0];
+        if(f) setShotThumb(sh, f);
+        try{ fileIn.value = ""; }catch(_e){}
+      });
+      clear?.addEventListener("click", (e)=>{
+        e.preventDefault();
+        if(isReadOnly()){ toast("Modo lector 🔒 (desbloqueá para editar)"); return; }
+        sh.thumbUrl = "";
+        delete sh.thumbUpdatedAt;
+        touch();
+        renderShotsEditor();
+        try{ renderShotList(); }catch(_e){}
+      });
+
+      const prevent = (e)=>{ e.preventDefault(); e.stopPropagation(); };
+      drop?.addEventListener("dragover", (e)=>{ prevent(e); if(!isReadOnly()) drop.classList.add("drag"); });
+      drop?.addEventListener("dragenter", (e)=>{ prevent(e); if(!isReadOnly()) drop.classList.add("drag"); });
+      drop?.addEventListener("dragleave", (e)=>{ prevent(e); drop.classList.remove("drag"); });
+      drop?.addEventListener("drop", (e)=>{
+        prevent(e);
+        drop.classList.remove("drag");
+        if(isReadOnly()){ toast("Modo lector 🔒 (desbloqueá para editar)"); return; }
+        const f = e.dataTransfer?.files?.[0];
+        if(f) setShotThumb(sh, f);
       });
 
       tbody.appendChild(tr);
     });
   }
+
+  // Asegura que escenas viejas tengan los campos nuevos en shots
+  function ensureSceneExtras_toggleThumb(scene){
+    ensureSceneExtras(scene);
+    if(!Array.isArray(scene.shots)) scene.shots = [];
+    for(const sh of scene.shots){
+      if(typeof sh.thumbUrl !== "string") sh.thumbUrl = sh.thumbUrl ? String(sh.thumbUrl) : "";
+    }
+  }
+
 
   function renderScriptUI(){
     const wrap = el("scriptVersionUI");
@@ -3526,18 +3738,10 @@ function renderDayCast(){
       });
 
       btnApply.addEventListener("click", ()=>{
-        // Aplicar: el horario del Area se aplica a todos (sin overrides individuales)
-        const v = normalizeHHMM(areaInput.value);
-        const day = baseDayCall(d);
-        d.crewAreaCallTimes = d.crewAreaCallTimes || {};
-        if(!v || v === day) delete d.crewAreaCallTimes[area];
-        else d.crewAreaCallTimes[area] = v;
-
-        d.crewCallTimes = d.crewCallTimes || {};
+        const base = baseCrewAreaCall(d, area);
         for(const c of list){
-          delete d.crewCallTimes[c.id];
+          if(!normalizeHHMM(d.crewCallTimes[c.id])) d.crewCallTimes[c.id] = base;
         }
-
         cleanupDayCallTimes(d);
         cleanupDayExtras(d);
         touch();
@@ -3546,12 +3750,10 @@ function renderDayCast(){
       });
 
       btnReset.addEventListener("click", ()=>{
-        // Reset: el horario del Area vuelve al Call del dia (no toca overrides individuales)
-        const day = baseDayCall(d);
-        areaInput.value = day;
-        d.crewAreaCallTimes = d.crewAreaCallTimes || {};
-        delete d.crewAreaCallTimes[area];
-
+        // resetea overrides individuales del área
+        for(const c of list){
+          delete d.crewCallTimes[c.id];
+        }
         cleanupDayCallTimes(d);
         cleanupDayExtras(d);
         touch();
@@ -6179,6 +6381,7 @@ function renderShotList(){
                   <th class="shotNum">#</th>
                   <th class="shotTime">Hora</th>
                   <th class="shotType">Tipo</th>
+                  <th class="shotThumb">Mini</th>
                   <th>Descripción</th>
                   <th class="shotDur">Min</th>
                 </tr>
@@ -6192,7 +6395,7 @@ function renderShotList(){
       const tbody = box.querySelector("tbody");
       if(!(sc.shots||[]).length){
         const tr = document.createElement("tr");
-        tr.innerHTML = `<td colspan="6" class="muted">Sin planos cargados para esta escena.</td>`;
+        tr.innerHTML = `<td colspan="7" class="muted">Sin planos cargados para esta escena.</td>`;
         tbody.appendChild(tr);
       }else{
         let offset = 0;
@@ -6209,6 +6412,7 @@ function renderShotList(){
             <td class="shotNum">${idx+1}</td>
             <td class="shotTime">${esc(t||"")}</td>
             <td class="shotType">${esc(normalizeShotType(sh.type)||sh.type||"Plano")}</td>
+            <td class="shotThumb">${(sh.thumbUrl?`<img class="shotThumbImg" src="${esc(sh.thumbUrl)}" alt="thumb"/>`:"")}</td>
             <td>${esc(sh.desc||"")}</td>
             <td class="shotDur">
               <select class="input compact shotDurSel">
@@ -6979,7 +7183,24 @@ function renderReportDayplanDetail(d){
       const isMobile = !!(window.matchMedia && window.matchMedia("(max-width: 820px)").matches);
       document.body.classList.toggle("gbPrintMobile", isMobile);
     }catch(_e){}
+  
+  function waitForImages(container, timeoutMs=2500){
+    try{
+      const imgs = Array.from(container?.querySelectorAll?.("img") || []).filter(im=>!!im.src);
+      if(!imgs.length) return Promise.resolve();
+      const ps = imgs.map(im=> new Promise(res=>{
+        if(im.complete) return res();
+        const done = ()=>{ try{ im.removeEventListener("load", done); im.removeEventListener("error", done); }catch(_e){} res(); };
+        im.addEventListener("load", done);
+        im.addEventListener("error", done);
+      }));
+      return Promise.race([Promise.all(ps), new Promise(res=>setTimeout(res, Number(timeoutMs)||2500))]);
+    }catch(_e){
+      return Promise.resolve();
+    }
   }
+
+}
 
   function buildShotlistPrintHTML(d){
     const project = state?.meta?.title || "Proyecto";
@@ -7028,7 +7249,7 @@ function renderReportDayplanDetail(d){
       let offset = 0;
       const shots = (sc.shots||[]);
       if(!shots.length){
-        rows = `<tr><td colspan="6" class="muted">Sin planos cargados para esta escena.</td></tr>`;
+        rows = `<tr><td colspan="7" class="muted">Sin planos cargados para esta escena.</td></tr>`;
       }else{
         rows = shots.map((sh, idx)=>{
           const dur = shotDurMin(sh);
@@ -7042,6 +7263,7 @@ function renderReportDayplanDetail(d){
               <td class="shotNum">${idx+1}</td>
               <td class="shotTime">${esc(t||"")}</td>
               <td class="shotType">${esc(normalizeShotType(sh.type)||sh.type||"Plano")}</td>
+              <td class="shotThumb">${(sh.thumbUrl?`<img class="shotThumbImg" src="${esc(sh.thumbUrl)}" alt="thumb"/>`:"")}</td>
               <td>${esc(sh.desc||"")}</td>
               <td class="shotDur">${esc(String(dur||DEFAULT_SHOT_MIN))}</td>
             </tr>
@@ -7068,6 +7290,7 @@ function renderReportDayplanDetail(d){
                     <th class="shotNum">#</th>
                     <th class="shotTime">Hora</th>
                     <th class="shotType">Tipo</th>
+                    <th class="shotThumb">Mini</th>
                     <th>Descripción</th>
                     <th class="shotDur">Min</th>
                   </tr>
@@ -7125,7 +7348,7 @@ function renderReportDayplanDetail(d){
 
 
 
-function printShotlistByDayId(dayId){
+async function printShotlistByDayId(dayId){
     const d = dayId ? getDay(dayId) : null;
     if(!d){ toast("Elegí un día con rodaje"); return; }
     ensureDayTimingMaps(d);
@@ -7135,7 +7358,10 @@ function printShotlistByDayId(dayId){
     root.innerHTML = buildShotlistPrintHTML(d);
     document.body.classList.add("gbPrintingShotlist");
     setPrintOrientation("portrait");
-    try{ window.print(); } finally { clearPrintOrientation(); cleanupGbPrintRoot(); }
+    try{
+      await waitForImages(root, 2500);
+      window.print();
+    } finally { clearPrintOrientation(); cleanupGbPrintRoot(); }
   }
 
   // Bank collapse
