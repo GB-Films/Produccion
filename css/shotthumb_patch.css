@@ -1,0 +1,47 @@
+/* Patch: Shot thumbnails square 1:1 + 65% bigger (app + reporte) */
+:root{
+  /* Basado en tamaños anteriores: 84px (app) y 78px (print) */
+  --gb-shot-thumb-side: 140px;        /* ~ +65% */
+  --gb-shot-thumb-side-print: 130px;  /* ~ +65% */
+  --gb-shot-thumb-col: 170px;
+  --gb-shot-thumb-col-print: 150px;
+}
+
+/* Editor de planos (Breakdown -> Planos) */
+.shotThumbTd{ text-align:center; }
+.shotThumbDrop{
+  width: var(--gb-shot-thumb-side) !important;
+  height: var(--gb-shot-thumb-side) !important;
+  border-radius: 16px !important;
+  overflow:hidden;
+}
+.shotThumbDrop img,
+.shotThumbDrop .shotThumbImg{
+  width:100% !important;
+  height:100% !important;
+  object-fit:cover !important;
+  aspect-ratio: 1 / 1;
+  display:block;
+}
+
+/* Tablas Shotlist (app) */
+.shotTable .shotThumb{ width: var(--gb-shot-thumb-col) !important; }
+.shotThumbImg{
+  width: calc(var(--gb-shot-thumb-side) - 10px) !important;
+  height: calc(var(--gb-shot-thumb-side) - 10px) !important;
+  object-fit: cover !important;
+  aspect-ratio: 1 / 1;
+  border-radius: 14px !important;
+  display:block;
+  margin:0 auto;
+}
+
+/* Reporte / impresión */
+@media print{
+  body.gbPrintingShotlist .shotTable .shotThumb{ width: var(--gb-shot-thumb-col-print) !important; }
+  body.gbPrintingShotlist .shotThumbImg{
+    width: var(--gb-shot-thumb-side-print) !important;
+    height: var(--gb-shot-thumb-side-print) !important;
+    border-radius: 10px !important;
+  }
+}

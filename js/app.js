@@ -1309,7 +1309,7 @@ function ensureDayShotsDone(d){
 
 
 // ======= Shot thumbnails (Cloudinary) =======
-const SHOT_THUMB_MAX_W = 420;
+const SHOT_THUMB_MAX_W = 512;
 const SHOT_THUMB_JPEG_Q = 0.78;
 const _shotThumbUploading = Object.create(null);
 
@@ -1394,21 +1394,27 @@ async function makeThumbnailBlob(file, maxW=SHOT_THUMB_MAX_W, quality=SHOT_THUMB
   const img = await _fileToImage(file);
   const w = img.naturalWidth || img.width || 1;
   const h = img.naturalHeight || img.height || 1;
-  const scale = Math.min(1, (Number(maxW)||420) / w);
-  const tw = Math.max(1, Math.round(w * scale));
-  const th = Math.max(1, Math.round(h * scale));
+  // Queremos miniaturas 1:1: recorte centrado al cuadrado más grande posible
+  const sideSrc = Math.max(1, Math.min(w, h));
+  const sx = Math.max(0, Math.floor((w - sideSrc) / 2));
+  const sy = Math.max(0, Math.floor((h - sideSrc) / 2));
+
+  const target = Math.max(1, Math.round(Math.min(sideSrc, Number(maxW) || 512)));
   const canvas = document.createElement("canvas");
-  canvas.width = tw;
-  canvas.height = th;
+  canvas.width = target;
+  canvas.height = target;
   const ctx = canvas.getContext("2d");
-  ctx.drawImage(img, 0, 0, tw, th);
+  try{ ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = "high"; }catch(_e){}
+  ctx.drawImage(img, sx, sy, sideSrc, sideSrc, 0, 0, target, target);
+
   return await new Promise((resolve, reject)=>{
     canvas.toBlob((blob)=>{
       if(!blob) reject(new Error("No pude generar miniatura"));
       else resolve(blob);
-    }, "image/jpeg", Math.max(0.4, Math.min(0.92, Number(quality)||0.78)));
+    }, "image/jpeg", Math.max(0.4, Math.min(0.92, Number(quality) || 0.78)));
   });
 }
+
 
 async function uploadThumbToCloudinary(file, cfg){
   const blob = await makeThumbnailBlob(file);
