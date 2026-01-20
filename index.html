@@ -326,12 +326,7 @@
               </div>
 
               <div class="cardContent">
-                  <div class="callNotesBox">
-                    <div class="miniLbl">Notas</div>
-                    <textarea class="textarea smallArea" id="callDayNotes" placeholder="Notas del día…"></textarea>
-                  </div>
-                  
-                  <div class="dayDetail3col">
+                <div class="dayDetail3col">
   <!-- Col 1 -->
   <div class="col">
     <div class="colTitle">Escenas del día</div>
@@ -499,14 +494,11 @@
               <h2 class="cardTitle">Explorar elementos</h2>
             </div>
             <div class="cardContent">
-              <div class="row gap" style="flex-wrap:wrap;">
+              <div class="row gap">
+                <select class="input compact" id="elxCategory"></select>
+                <select class="input compact" id="elxDay"></select>
                 <input class="input grow" id="elxSearch" placeholder="Buscar elemento…"/>
               </div>
-              <div class="spacer"></div>
-              <div class="chips" id="elxCatChips"></div>
-              <div class="chips" id="elxDayChips" style="margin-top:8px;"></div>
-              <select class="input compact hidden" id="elxCategory"></select>
-              <select class="input compact hidden" id="elxDay"></select>
               <div class="spacer"></div>
               <div id="elxList"></div>
             </div>
@@ -628,9 +620,10 @@
       if(link) link.href = "css/styles.css?v=" + v;
     }catch(e){}
 
+
     // CSS: patch thumbs
     try{
-      const link2 = document.querySelector('link[href^="css/shotthumb_patch.css"]') || document.querySelector('link[href*="css/shotthumb_patch.css"]');
+      const link2 = document.querySelector("link[href^=\"css/shotthumb_patch.css\"]") || document.querySelector("link[href*=\"css/shotthumb_patch.css\"]");
       if(link2) link2.href = "css/shotthumb_patch.css?v=" + v;
     }catch(e){}
 

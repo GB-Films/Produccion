@@ -3391,3 +3391,43 @@ body.readOnly #callDayNotes{
   opacity:.75;
   cursor:not-allowed;
 }
+
+/* ===== Shot thumbnails ===== */
+.shotThumbTd{ text-align:center; }
+.shotThumbDrop{
+  width:96px;
+  height:54px;
+  border:1px dashed rgba(255,255,255,0.35);
+  border-color: rgba(0,0,0,0.25);
+  border-radius:12px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  overflow:hidden;
+  cursor:pointer;
+  background: rgba(255,255,255,0.06);
+}
+.shotThumbDrop.has{ border-style:solid; }
+.shotThumbDrop.drag{ border-color: var(--accent); box-shadow:0 0 0 3px rgba(0,0,0,0.12); }
+.shotThumbDrop.uploading{ cursor:progress; }
+.shotThumbDrop img{ width:100%; height:100%; object-fit:cover; display:block; }
+
+.shotThumbImg{
+  width:84px;
+  height:48px;
+  object-fit:cover;
+  border-radius:10px;
+  border:1px solid rgba(255,255,255,0.15);
+  background:#111;
+  display:block;
+  margin:0 auto;
+}
+
+.shotTable .shotThumb{ width:110px; }
+
+body.readOnly .shotThumbDrop{ cursor:not-allowed; opacity:0.75; }
+
+@media print{
+  body.gbPrintingShotlist .shotTable .shotThumb{ width:92px !important; }
+  body.gbPrintingShotlist .shotThumbImg{ width:78px !important; height:44px !important; border-radius:6px !important; border-color:#ddd !important; background:#fff !important; }
+}
