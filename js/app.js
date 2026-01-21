@@ -232,6 +232,8 @@ function sanitizeScriptState(opts={}){
   }
 
   let selectedShotlistDayId = null;
+let selectedShotlistSceneId = null;
+const shotlistCollapsedSceneIds = new Set();
   let selectedDayplanDayId = null;
   let dayDetailOpenSceneKeys = new Set();
   let reportsTab = (localStorage.getItem("gb_reports_tab") || "callsheet");
@@ -6262,6 +6264,8 @@ function renderShotList(){
     const wrap = el("shotlistWrap");
     const sum = el("shotlistSummary");
     const btnPrint = el("btnShotPrint");
+    const side = el("shotSceneInfo");
+    const btnGo = el("btnShotSceneGoBreakdown");
     if(!sel || !wrap || !sum) return;
 
     sortShootDaysInPlace();
@@ -6280,25 +6284,33 @@ function renderShotList(){
     if(!sel.dataset.bound){
       sel.dataset.bound = "1";
       sel.addEventListener("change", ()=>{
-          const id = sel.value;
-          selectedShotlistDayId = id;
-          syncAllDaySelections(id);
-          renderShotList();
-          try{ renderDayDetail(); }catch(_e){}
-          try{ renderDayPlan(); }catch(_e){}
-          try{ renderCallSheetCalendar(); }catch(_e){}
-          try{ renderReportsDetail(); }catch(_e){}
-        });
+        const id = sel.value;
+        selectedShotlistDayId = id;
+        syncAllDaySelections(id);
+        renderShotList();
+        try{ renderDayDetail(); }catch(_e){}
+        try{ renderDayPlan(); }catch(_e){}
+        try{ renderCallSheetCalendar(); }catch(_e){}
+        try{ renderReportsDetail(); }catch(_e){}
+      });
     }
     if(btnPrint && !btnPrint.dataset.bound){
       btnPrint.dataset.bound = "1";
       btnPrint.addEventListener("click", ()=> printShotlistByDayId(selectedShotlistDayId));
+    }
+    if(btnGo && !btnGo.dataset.bound){
+      btnGo.dataset.bound = "1";
+      btnGo.addEventListener("click", ()=>{
+        if(selectedShotlistSceneId) jumpToSceneInBreakdown(selectedShotlistSceneId);
+      });
     }
 
     const d = getDay(selectedShotlistDayId);
     if(!d){
       wrap.innerHTML = `<div class="muted">No hay días cargados.</div>`;
       sum.textContent = "—";
+      if(side) side.innerHTML = `<div class="muted">Seleccioná un día con rodaje.</div>`;
+      if(btnGo) btnGo.disabled = true;
       return;
     }
 
@@ -6319,11 +6331,17 @@ function renderShotList(){
       toast("Ajusté duraciones del cronograma según los planos");
     }
 
+    // Selección de escena (si no existe o no está en el día, tomar la primera)
+    const daySceneIds = (d.sceneIds||[]).filter(Boolean);
+    if(!selectedShotlistSceneId || !daySceneIds.includes(selectedShotlistSceneId)){
+      selectedShotlistSceneId = daySceneIds[0] || null;
+    }
+
     // KPIs
     let totalShots = 0;
     let totalMin = 0;
     let lastEnd = 0;
-    for(const sid of (d.sceneIds||[])){
+    for(const sid of daySceneIds){
       const sc = getScene(sid);
       if(!sc) continue;
       ensureSceneExtras_toggleThumb(sc);
@@ -6343,20 +6361,81 @@ function renderShotList(){
     const wrapClock = d.callTime ? fmtClockFromCall(d.callTime, lastEnd) : "";
     sum.innerHTML = `
       <div class="shotDayKpis">
-        <span class="pill">Escenas: <b>${(d.sceneIds||[]).length}</b></span>
+        <span class="pill">Escenas: <b>${daySceneIds.length}</b></span>
         <span class="pill">Planos: <b>${totalShots}</b></span>
         <span class="pill">Tiempo (planos): <b>${esc(formatDuration(totalMin))}</b></span>
         <span class="pill">Fin estimado: <b>${esc(wrapClock||"—")}</b></span>
       </div>
     `;
 
+    function renderSelectedScenePanel(){
+      if(!side) return;
+      const sid = selectedShotlistSceneId;
+      const sc = sid ? getScene(sid) : null;
+      if(!sc){
+        side.innerHTML = `<div class="muted">Seleccioná una escena para ver su info.</div>`;
+        if(btnGo) btnGo.disabled = true;
+        return;
+      }
+      ensureSceneExtras(sc);
+      ensureSceneExtras_toggleThumb(sc);
+
+      const st = Number(d.times?.[sid] ?? 0) || 0;
+      const du = Number(d.durations?.[sid] ?? 60) || 60;
+      const scStart = d.callTime ? fmtClockFromCall(d.callTime, st) : "";
+      const scEnd = d.callTime ? fmtClockFromCall(d.callTime, st+du) : "";
+      const shotsMin = sceneShotsTotalMin(sc);
+      const shotsCount = (sc.shots||[]).length;
+
+      const elems = sc.elements && typeof sc.elements==="object" ? sc.elements : {};
+      const nonEmpty = Object.keys(elems).filter(k=> Array.isArray(elems[k]) && elems[k].length);
+      const elemLine = nonEmpty.length ? nonEmpty.map(k=>`${k}: ${elems[k].length}`).join(" · ") : "—";
+
+      side.innerHTML = `
+        <div class="value">#${esc(sc.number||"")} — ${esc(sc.slugline||"")}</div>
+        <div class="spacer"></div>
+
+        <div class="label">Resumen</div>
+        <div class="bigText">${esc(sc.summary||"")}</div>
+
+        <div class="spacer"></div>
+        <div class="label">Horario</div>
+        <div class="value">${esc((scStart && scEnd) ? (scStart+" → "+scEnd) : (scStart||scEnd||"—"))}</div>
+
+        <div class="spacer"></div>
+        <div class="label">Duración escena (cronograma)</div>
+        <div class="value">${esc(formatDuration(du))}</div>
+
+        <div class="spacer"></div>
+        <div class="label">Planos</div>
+        <div class="value">${esc(String(shotsCount))} · ${esc(formatDuration(shotsMin))}</div>
+
+        <div class="spacer"></div>
+        <div class="label">Páginas</div>
+        <div class="value">${esc(fmtPages(sc.pages)||"—")}</div>
+
+        <div class="spacer"></div>
+        <div class="label">Elementos</div>
+        <div class="value">${esc(elemLine)}</div>
+
+        ${sc.notes ? `
+          <div class="spacer"></div>
+          <div class="label">Notas</div>
+          <div class="bigText">${esc(sc.notes||"")}</div>
+        ` : ``}
+      `;
+      if(btnGo) btnGo.disabled = false;
+    }
+
     wrap.innerHTML = "";
-    if(!(d.sceneIds||[]).length){
+    if(!daySceneIds.length){
       wrap.innerHTML = `<div class="muted">No hay escenas asignadas a este día.</div>`;
+      if(side) side.innerHTML = `<div class="muted">No hay escenas para mostrar.</div>`;
+      if(btnGo) btnGo.disabled = true;
       return;
     }
 
-    for(const sid of (d.sceneIds||[])){
+    for(const sid of daySceneIds){
       const sc = getScene(sid);
       if(!sc) continue;
       ensureSceneExtras_toggleThumb(sc);
@@ -6368,15 +6447,24 @@ function renderShotList(){
       const shotsMin = sceneShotsTotalMin(sc);
       const warn = shotsMin > du ? "Planos > duración" : "";
 
+      const isCollapsed = shotlistCollapsedSceneIds.has(sid);
+      const isSelected = (sid === selectedShotlistSceneId);
+
       const box = document.createElement("div");
-      box.className = "shotSceneBox";
+      box.className = `shotSceneBox${isSelected?" selected":""}${isCollapsed?" collapsed":""}`;
       box.innerHTML = `
         <div class="shotSceneHead">
-          <div>
-            <div class="t">#${esc(sc.number||"")} — ${esc(sc.slugline||"")}</div>
-            <div class="m">${esc(scStart||"")} → ${esc(scEnd||"")} · Escena: ${esc(formatDuration(du))} · Planos: ${esc(formatDuration(shotsMin))}</div>
+          <div class="shotSceneHeadLeft">
+            <div class="shotSceneCaret">${isCollapsed ? "▸" : "▾"}</div>
+            <div>
+              <div class="t">#${esc(sc.number||"")} — ${esc(sc.slugline||"")}</div>
+              <div class="m">${esc(scStart||"")} → ${esc(scEnd||"")} · Escena: ${esc(formatDuration(du))} · Planos: ${esc(formatDuration(shotsMin))}</div>
+            </div>
           </div>
-          ${warn ? `<div class="warn">${esc(warn)}</div>` : ""}
+          <div class="shotSceneHeadRight">
+            ${warn ? `<div class="warn">${esc(warn)}</div>` : ""}
+            <button class="btn small shotAddBtn noPrint" title="Agregar plano" ${isReadOnly()?"disabled":""}>+ Plano</button>
+          </div>
         </div>
         <div class="shotTableWrap">
           <div class="tableWrap">
@@ -6390,6 +6478,7 @@ function renderShotList(){
                   <th class="shotThumb">Mini</th>
                   <th>Descripción</th>
                   <th class="shotDur">Min</th>
+                  <th class="shotAct noPrint"> </th>
                 </tr>
               </thead>
               <tbody></tbody>
@@ -6398,10 +6487,43 @@ function renderShotList(){
         </div>
       `;
 
+      const head = box.querySelector(".shotSceneHead");
+      const btnAdd = box.querySelector(".shotAddBtn");
+
+      head?.addEventListener("click", (e)=>{
+        // Evitar que clicks en botones/inputs cambien el estado
+        if(e.target && e.target.closest && e.target.closest("button, input, select, a, label")) return;
+
+        if(selectedShotlistSceneId !== sid){
+          selectedShotlistSceneId = sid;
+          renderShotList();
+          return;
+        }
+        // Segundo click (misma escena): colapsar/desplegar
+        if(shotlistCollapsedSceneIds.has(sid)) shotlistCollapsedSceneIds.delete(sid);
+        else shotlistCollapsedSceneIds.add(sid);
+        renderShotList();
+      });
+
+      // Doble click: ir a editar la escena en Breakdown
+      box.addEventListener("dblclick", ()=> jumpToSceneInBreakdown(sc.id));
+
+      btnAdd?.addEventListener("click", (e)=>{
+        e.preventDefault();
+        e.stopPropagation();
+        if(isReadOnly()){ toast("Modo lector 🔒 (desbloqueá para editar)"); return; }
+        sc.shots = Array.isArray(sc.shots) ? sc.shots : [];
+        sc.shots.push({ id: uid("shot"), type: "Plano general", desc: "", durMin: DEFAULT_SHOT_MIN, thumbUrl: "" });
+        selectedShotlistSceneId = sid;
+        shotlistCollapsedSceneIds.delete(sid); // asegurar abierto
+        touch();
+        renderShotList();
+      });
+
       const tbody = box.querySelector("tbody");
       if(!(sc.shots||[]).length){
         const tr = document.createElement("tr");
-        tr.innerHTML = `<td colspan="7" class="muted">Sin planos cargados para esta escena.</td>`;
+        tr.innerHTML = `<td colspan="8" class="muted">Sin planos cargados para esta escena.</td>`;
         tbody.appendChild(tr);
       }else{
         let offset = 0;
@@ -6411,12 +6533,11 @@ function renderShotList(){
           const done = !!d.shotsDone[key];
           const t = d.callTime ? fmtClockFromCall(d.callTime, st + offset) : "";
 
-          if(typeof sh.thumbUrl !== "string") sh.thumbUrl = sh.thumbUrl ? String(sh.thumbUrl) : "";
-          const hasThumb = !!(sh.thumbUrl && String(sh.thumbUrl).trim());
+          const hasThumb = !!sh.thumbUrl;
           const uploading = !!_shotThumbUploading[sh.id];
           const thumbInner = uploading
             ? `<div class="muted small">Subiendo…</div>`
-            : (hasThumb ? `<img class="shotThumbImg" src="${esc(sh.thumbUrl)}" alt="thumb"/>` : `<div class="muted small">Drop</div>`);
+            : (hasThumb ? `<img class="shotThumbImg" src="${esc(sh.thumbUrl)}" alt="thumb"/>` : `<div class="muted small">Mini</div>`);
 
           const tr = document.createElement("tr");
           if(done) tr.classList.add("shotRowDone");
@@ -6424,32 +6545,83 @@ function renderShotList(){
             <td class="shotChk"><input type="checkbox" ${done?"checked":""} /></td>
             <td class="shotNum">${idx+1}</td>
             <td class="shotTime">${esc(t||"")}</td>
-            <td class="shotType">${esc(normalizeShotType(sh.type)||sh.type||"Plano")}</td>
-            <td class="shotThumb">
+            <td class="shotType">
+              <select class="input compact shotTypeSel" ${isReadOnly()?"disabled":""}>
+                ${shotTypes.map(tp=>`<option value="${esc(tp)}"${(normalizeShotType(sh.type)===tp)?" selected":""}>${esc(tp)}</option>`).join("")}
+              </select>
+            </td>
+            <td class="shotThumbTd">
               <div class="shotThumbDrop ${hasThumb?"has":""} ${uploading?"uploading":""}" title="Arrastrá una imagen o click para cargar">${thumbInner}</div>
-              <div class="row gap" style="justify-content:center; margin-top:6px;">
+              <div class="row gap noPrint" style="justify-content:center; margin-top:6px;">
                 <button class="btn icon shotThumbPick" title="Cargar" ${isReadOnly()?"disabled":""}>📷</button>
-                <button class="btn icon danger shotThumbClear" title="Quitar" ${(isReadOnly()||!hasThumb||uploading)?"disabled":""}>×</button>
+                <button class="btn icon danger shotThumbClear" title="Quitar" ${(isReadOnly()||!hasThumb)?"disabled":""}>×</button>
               </div>
               <input type="file" accept="image/*" class="shotThumbFile" style="display:none" />
             </td>
-            <td>${esc(sh.desc||"")}</td>
+            <td><input class="input shotDescInput" ${isReadOnly()?"disabled":""} placeholder="Descripción del plano…" value="${esc(sh.desc||"")}" /></td>
             <td class="shotDur">
-              <select class="input compact shotDurSel">
+              <select class="input compact shotDurSel" ${isReadOnly()?"disabled":""}>
                 ${[5,10,15,20,30,45,60].map(n=>`<option value="${n}"${(dur===n)?" selected":""}>${n}</option>`).join("")}
               </select>
             </td>
+            <td class="shotAct noPrint"><button class="btn icon danger shotDelBtn" title="Borrar" ${isReadOnly()?"disabled":""}>×</button></td>
           `;
 
           const chk = tr.querySelector("input[type=checkbox]");
-          const selDur = tr.querySelector("select");
+          const selDur = tr.querySelector(".shotDurSel");
+          const selType = tr.querySelector(".shotTypeSel");
+          const inpDesc = tr.querySelector(".shotDescInput");
+          const delBtn = tr.querySelector(".shotDelBtn");
 
           chk?.addEventListener("change", ()=>{
             d.shotsDone[key] = chk.checked;
             touch();
             renderShotList();
           });
-          // Thumb controls (Shotlist tab)
+
+          selDur?.addEventListener("change", ()=>{
+            if(isReadOnly()) return;
+            sh.durMin = Number(selDur.value) || DEFAULT_SHOT_MIN;
+            const changed2 = syncAllDaysDurationsFromShotsForScene(sid, snapMin);
+            touch();
+            if(changed2){
+              renderScheduleBoard();
+              try{ renderDayDetail(); }catch(_e){}
+              try{ renderReports(); }catch(_e){}
+              try{ renderCallSheetCalendar(); }catch(_e){}
+              try{ renderReportsDetail(); }catch(_e){}
+              toast("Ajusté duraciones del cronograma según los planos");
+            }
+            renderShotList();
+          });
+
+          selType?.addEventListener("change", ()=>{
+            if(isReadOnly()) return;
+            sh.type = selType.value;
+            touch();
+          });
+
+          inpDesc?.addEventListener("input", ()=>{
+            if(isReadOnly()) return;
+            sh.desc = inpDesc.value;
+          });
+          inpDesc?.addEventListener("blur", ()=>{
+            if(isReadOnly()) return;
+            sh.desc = inpDesc.value;
+            touch();
+          });
+
+          delBtn?.addEventListener("click", (e)=>{
+            e.preventDefault();
+            if(isReadOnly()){ toast("Modo lector 🔒 (desbloqueá para editar)"); return; }
+            sc.shots = (sc.shots||[]).filter(x=>x.id!==sh.id);
+            // limpiar done map del día para ese plano
+            delete d.shotsDone[key];
+            touch();
+            renderShotList();
+          });
+
+          // Thumb controls
           const drop = tr.querySelector(".shotThumbDrop");
           const pick = tr.querySelector(".shotThumbPick");
           const clear = tr.querySelector(".shotThumbClear");
@@ -6459,20 +6631,22 @@ function renderShotList(){
             if(isReadOnly()){ toast("Modo lector 🔒 (desbloqueá para editar)"); return; }
             fileIn && fileIn.click();
           };
+
           drop?.addEventListener("click", openPicker);
           pick?.addEventListener("click", (e)=>{ e.preventDefault(); openPicker(); });
+
           fileIn?.addEventListener("change", ()=>{
             const f = fileIn.files && fileIn.files[0];
             if(f) setShotThumb(sh, f);
             try{ fileIn.value = ""; }catch(_e){}
           });
+
           clear?.addEventListener("click", (e)=>{
             e.preventDefault();
             if(isReadOnly()){ toast("Modo lector 🔒 (desbloqueá para editar)"); return; }
             sh.thumbUrl = "";
             delete sh.thumbUpdatedAt;
             touch();
-            try{ renderShotsEditor(); }catch(_e){}
             renderShotList();
           });
 
@@ -6484,21 +6658,8 @@ function renderShotList(){
             prevent(e);
             drop.classList.remove("drag");
             if(isReadOnly()){ toast("Modo lector 🔒 (desbloqueá para editar)"); return; }
-            const f = e.dataTransfer?.files?.[0];
+            const f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
             if(f) setShotThumb(sh, f);
-          });
-
-          selDur?.addEventListener("change", ()=>{
-            sh.durMin = Number(selDur.value) || DEFAULT_SHOT_MIN;
-            const changed2 = syncAllDaysDurationsFromShotsForScene(sid, snapMin);
-            touch();
-            if(changed2){
-              renderScheduleBoard();
-              renderDayDetail();
-              renderReports();
-              renderReportsDetail();
-            }
-            renderShotList();
           });
 
           tbody.appendChild(tr);
@@ -6506,14 +6667,11 @@ function renderShotList(){
         });
       }
 
-      // Doble click: ir a editar la escena en Breakdown
-      box.addEventListener("dblclick", ()=> jumpToSceneInBreakdown(sc.id));
-
       wrap.appendChild(box);
     }
-  }
 
-  // ===================== Call sheets + settings (igual que antes, no copio más cambios) =====================
+    renderSelectedScenePanel();
+  }
   function renderCallSheetCalendar(){ /* ... sin cambios ... */ 
     const grid = el("calGrid");
     const title = el("calTitle");

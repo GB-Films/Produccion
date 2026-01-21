@@ -1228,8 +1228,90 @@ tr.groupRow td{
 #shotlistCard .cardContent{
   flex:1 1 auto;
   min-height:0;
-  overflow:auto;
+  overflow:hidden;
 }
+
+/* Shotlist: layout 2/3 + 1/3 */
+.shotlistLayout{
+  display:grid;
+  grid-template-columns: 2fr 1fr;
+  gap:12px;
+  height:100%;
+  min-height:0;
+}
+.shotlistMain{
+  min-width:0;
+  overflow:auto;
+  min-height:0;
+  padding-right:2px;
+}
+.shotlistSide{
+  min-width:0;
+  overflow:auto;
+  min-height:0;
+}
+@media (max-width: 980px){
+  .shotlistLayout{ grid-template-columns: 1fr; }
+  .shotlistSide{ border-top:1px solid var(--border); padding-top:10px; }
+}
+
+.shotSceneInfoCard{
+  border:1px solid var(--border);
+  border-radius:18px;
+  background: rgba(0,0,0,.10);
+  overflow:hidden;
+}
+.shotSceneInfoHead{
+  padding:10px 12px;
+  border-bottom:1px solid var(--border);
+  background: linear-gradient(180deg, rgba(255,255,255,.05), rgba(255,255,255,.01));
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:10px;
+}
+.shotSceneInfoTitle{ font-weight:950; }
+.shotSceneInfoBody{ padding:12px; }
+.shotSceneInfoBody .label{ font-size:12px; font-weight:900; color: rgba(255,255,255,.70); text-transform:uppercase; letter-spacing:.06em; }
+.shotSceneInfoBody .value{ font-weight:800; margin-top:4px; }
+.shotSceneInfoBody .bigText{
+  border:1px solid var(--border);
+  background: rgba(255,255,255,.03);
+  border-radius:16px;
+  padding:10px 12px;
+  white-space:pre-wrap;
+}
+
+/* Scene selection + collapse */
+.shotSceneBox{ position:relative; }
+.shotSceneBox.selected{
+  border-color: rgba(255,255,255,.22);
+  box-shadow: 0 0 0 2px rgba(255,255,255,.08) inset;
+}
+.shotSceneHead{ cursor:pointer; }
+.shotSceneHeadLeft{ display:flex; gap:10px; align-items:flex-end; }
+.shotSceneCaret{
+  width:18px;
+  height:18px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  border-radius:8px;
+  background: rgba(255,255,255,.06);
+  font-weight:950;
+}
+.shotSceneHeadRight{
+  display:flex;
+  align-items:flex-end;
+  gap:8px;
+}
+.shotSceneBox.collapsed .shotTableWrap{ display:none; }
+
+/* Shotlist editor-ish controls */
+.shotTable .shotAct{ width:46px; text-align:center; }
+.shotTable .shotThumbTd{ text-align:center; }
+.shotTable .shotDescInput{ width:100%; }
+
 
 .shotDayKpis{ display:flex; flex-wrap:wrap; gap:8px; }
 .shotDayKpis .pill{ background: rgba(255,255,255,.04); }

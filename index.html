@@ -1,13 +1,13 @@
 <!doctype html>
-<html lang="es-AR" data-build="20251229-05"><head>
+<html lang="es-AR" data-build="20260121-01"><head>
   <meta charset="utf-8"/>
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate"/>
   <meta http-equiv="Pragma" content="no-cache"/>
   <meta http-equiv="Expires" content="0"/>
   <meta content="width=device-width,initial-scale=1,viewport-fit=cover" name="viewport"/>
   <title>GB Production Board</title>
-  <link href="css/styles.css?v=20251229-05" rel="stylesheet"/>
-  <link href="css/shotthumb_patch.css?v=20260120-01" rel="stylesheet"/>
+  <link href="css/styles.css?v=20260121-01" rel="stylesheet"/>
+  <link href="css/shotthumb_patch.css?v=20260121-01" rel="stylesheet"/>
 </head>
 <body>
   <div class="shell">
@@ -484,9 +484,26 @@
             </div>
           </div>
           <div class="cardContent">
-            <div class="muted small" id="shotlistSummary">—</div>
-            <div class="spacer"></div>
-            <div id="shotlistWrap"></div>
+            <div class="shotlistLayout">
+              <div class="shotlistMain">
+                <div class="muted small" id="shotlistSummary">—</div>
+                <div class="spacer"></div>
+                <div id="shotlistWrap"></div>
+              </div>
+              <aside class="shotlistSide">
+                <div class="shotSceneInfoCard">
+                  <div class="shotSceneInfoHead">
+                    <div class="shotSceneInfoTitle">Escena</div>
+                    <div class="row gap noPrint">
+                      <button class="btn small" id="btnShotSceneGoBreakdown" type="button" disabled>Ir a Breakdown</button>
+                    </div>
+                  </div>
+                  <div class="shotSceneInfoBody" id="shotSceneInfo">
+                    <div class="muted">Seleccioná una escena para ver su info.</div>
+                  </div>
+                </div>
+              </aside>
+            </div>
           </div>
         </div>
       </section>
