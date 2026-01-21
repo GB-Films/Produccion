@@ -1053,7 +1053,6 @@ function enforceScriptVersionsLimit(notify=false){
     const parts = s.split(/\s*[-–—]\s*/g).map(p=>p.trim()).filter(Boolean);
     let location = "";
     let tod = "";
-    const todSet = new Set(["Día","Noche","Amanecer","Atardecer"]);
 
     const stripPrefix = (txt)=>{
       return String(txt||"")
@@ -1061,18 +1060,56 @@ function enforceScriptVersionsLimit(notify=false){
         .replace(/^\s*(INTERIOR|EXTERIOR)\s*[.\-–—:]?\s*/i,"")
         .trim();
     };
+
+    const extractTOD = (txt)=>{
+      const raw = String(txt||"")
+        .replace(/\[[^\]]*\]/g, " ")
+        .replace(/\([^\)]*\)/g, " ")
+        .replace(/[.,;:!?]+$/g, " ")
+        .replace(/\s+/g, " ")
+        .trim();
+      if(!raw) return "";
+      const up = raw.toUpperCase();
+
+      if(/\b(AMANECER|DAWN)\b/.test(up)) return "Amanecer";
+      if(/\b(ATARDECER|TARDE|SUNSET|DUSK)\b/.test(up)) return "Atardecer";
+      if(/\b(NOCHE|NIGHT)\b/.test(up)) return "Noche";
+      if(/\b(D[IÍ]A|DAY|MAÑANA|MORNING)\b/.test(up)) return "Día";
+      return "";
+    };
+
     if(parts.length >= 2){
-      const maybeTOD = normalizeTOD(parts[parts.length-1]);
-      if(todSet.has(maybeTOD)) tod = maybeTOD;
-      const mid = parts.slice(0, parts.length-1).join(" - ");
-      location = stripPrefix(mid);
-      if(!tod){
-        // si el último no era TOD real, entonces todo es lugar
+      // Buscar el TOD desde el final (soporta: "... - NOCHE - CONT.")
+      let todIndex = -1;
+      for(let i=parts.length-1;i>=0;i--){
+        const t = extractTOD(parts[i]);
+        if(t){
+          tod = t;
+          todIndex = i;
+          break;
+        }
+      }
+      if(todIndex >= 0){
+        location = stripPrefix(parts.slice(0, todIndex).join(" - "));
+        if(!location){
+          // fallback: si quedó vacío, no rompemos
+          location = stripPrefix(parts.join(" - "));
+        }
+      }else{
         location = stripPrefix(parts.join(" - "));
       }
     }else{
-      location = stripPrefix(s);
+      // Sin guiones: intentamos detectar TOD al final (p.ej. "INT. CASA NOCHE")
+      const t = extractTOD(s);
+      if(t){
+        tod = t;
+        const loc = s.replace(/\b(AMANECER|DAWN|ATARDECER|TARDE|SUNSET|DUSK|NOCHE|NIGHT|D[IÍ]A|DAY|MAÑANA|MORNING)\b[\s\S]*$/i,"").trim();
+        location = stripPrefix(loc);
+      }else{
+        location = stripPrefix(s);
+      }
     }
+
     return { location, timeOfDay: tod };
   }
 
@@ -2237,6 +2274,7 @@ function setupScheduleWheelScroll(){
       number: canonSceneNumber(String(s.number)),
       chapter: s.chapter ?? "",
       slugline: s.slugline,
+      intExt: s.intExt || sluglineToIntExt(s.slugline),
       location: s.location,
       timeOfDay: s.timeOfDay,
       body: s.body.join("\n").trim(),
@@ -2752,6 +2790,7 @@ function setupScheduleWheelScroll(){
         const { location, timeOfDay } = sluglineToLocTOD(scc.slugline);
         scc.location = location;
         scc.timeOfDay = timeOfDay;
+        scc.intExt = sluglineToIntExt(scc.slugline);
         v.updatedAt = new Date().toISOString();
         touch();
         renderScriptSceneList(v);
@@ -8602,23 +8641,49 @@ el("scriptVerSelect")?.addEventListener("change", ()=>{
         const existing = byNum.get(num);
         if(existing){
           ensureSceneExtras(existing);
+
+          const slug = String(sc.slugline || existing.slugline || "").trim();
+          const locTod = sluglineToLocTOD(slug);
+          const ie = String(sc.intExt || sluglineToIntExt(slug) || existing.intExt || "").trim();
+          const loc = String(sc.location || locTod.location || existing.location || "").trim();
+          const todRaw = String(sc.timeOfDay || locTod.timeOfDay || existing.timeOfDay || "").trim();
+          const tod = normalizeTOD(todRaw);
+
+          const hasChap = (sc.chapter!==undefined && sc.chapter!==null && String(sc.chapter).trim()!=="");
+          const bodyTxt = (sc.body!==undefined && sc.body!==null) ? String(sc.body) : "";
+          const resumen = bodyTxt.trim()
+            ? bodyTxt.trim()
+            : ((sc.summary!==undefined && sc.summary!==null) ? String(sc.summary).trim() : (existing.summary||""));
+
           existing.number = num;
-          existing.slugline = sc.slugline || existing.slugline;
-          existing.location = sc.location || existing.location;
-          existing.timeOfDay = sc.timeOfDay || existing.timeOfDay;
-          if(sc.chapter!==undefined && sc.chapter!==null && sc.chapter!=="") existing.chapter = sc.chapter;
-          existing.summary = sc.summary || String(sc.body||"").replace(/\s+/g," ").trim().slice(0,220) || existing.summary;
+          if(slug) existing.slugline = slug;
+          if(ie) existing.intExt = ie;
+          if(loc) existing.location = loc;
+          if(tod) existing.timeOfDay = tod;
+          if(hasChap) existing.chapter = sc.chapter;
+          existing.summary = resumen;
+
           updated++;
         }else{
+          const slug = String(sc.slugline || "").trim();
+          const locTod = sluglineToLocTOD(slug);
+          const ie = String(sc.intExt || sluglineToIntExt(slug) || "").trim();
+
+          const bodyTxt = (sc.body!==undefined && sc.body!==null) ? String(sc.body) : "";
+          const resumen = bodyTxt.trim()
+            ? bodyTxt.trim()
+            : ((sc.summary!==undefined && sc.summary!==null) ? String(sc.summary).trim() : "");
+
           const s = {
             id: uid("scene"),
             number: num,
-            chapter: (sc.chapter!==undefined && sc.chapter!==null) ? sc.chapter : "",
-            slugline: sc.slugline || "",
-            location: sc.location || "",
-            timeOfDay: sc.timeOfDay || "",
+            chapter: (sc.chapter!==undefined && sc.chapter!==null && String(sc.chapter).trim()!=="") ? sc.chapter : "",
+            slugline: slug,
+            intExt: ie,
+            location: String(sc.location || locTod.location || "").trim(),
+            timeOfDay: normalizeTOD(String(sc.timeOfDay || locTod.timeOfDay || "").trim()),
             pages: 0,
-            summary: sc.summary || String(sc.body||"").replace(/\s+/g," ").trim().slice(0,220),
+            summary: resumen,
             notes: "",
             elements: Object.fromEntries(cats.map(c=>[c,[]])),
             shots: []
