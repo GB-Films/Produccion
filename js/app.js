@@ -230,9 +230,10 @@ function sanitizeScriptState(opts={}){
       const c = el("shotDaySelect"); if(c) c.value = id;
     }catch(_e){}
   }
+
   let selectedShotlistDayId = null;
-  let selectedShotlistSceneId = null;
-  const shotlistCollapsedSceneIds = new Set();
+let selectedShotlistSceneId = null;
+const shotlistCollapsedSceneIds = new Set();
   let selectedDayplanDayId = null;
   let dayDetailOpenSceneKeys = new Set();
   let reportsTab = (localStorage.getItem("gb_reports_tab") || "callsheet");
@@ -934,7 +935,6 @@ function sanitizeScriptState(opts={}){
     if(!Array.isArray(s.shots)) s.shots = [];
     for(const sh of s.shots){
       if(!sh) continue;
-      if(typeof sh.thumbUrl !== "string") sh.thumbUrl = sh.thumbUrl ? String(sh.thumbUrl) : "";
       const n = Number(sh.durMin);
       if(!(Number.isFinite(n) && n>0)) sh.durMin = DEFAULT_SHOT_MIN;
     }
@@ -2602,6 +2602,10 @@ function setupScheduleWheelScroll(){
   // Asegura que escenas viejas tengan los campos nuevos en shots
   function ensureSceneExtras_toggleThumb(scene){
     ensureSceneExtras(scene);
+    if(!Array.isArray(scene.shots)) scene.shots = [];
+    for(const sh of scene.shots){
+      if(typeof sh.thumbUrl !== "string") sh.thumbUrl = sh.thumbUrl ? String(sh.thumbUrl) : "";
+    }
   }
 
 
@@ -6264,10 +6268,6 @@ function renderShotList(){
     const btnGo = el("btnShotSceneGoBreakdown");
     if(!sel || !wrap || !sum) return;
 
-    // Helper: call a renderer without breaking the UI if it throws
-    const safeCall = (fn)=>{ try{ typeof fn === "function" && fn(); }catch(_e){} };
-
-
     sortShootDaysInPlace();
 
     // Select options
@@ -6288,10 +6288,10 @@ function renderShotList(){
         selectedShotlistDayId = id;
         syncAllDaySelections(id);
         renderShotList();
-        safeCall(renderDayDetail);
-        safeCall(renderDayPlan);
-        safeCall(renderCallSheetCalendar);
-        safeCall(renderReportsDetail);
+        try{ renderDayDetail(); }catch(_e){}
+        try{ renderDayPlan(); }catch(_e){}
+        try{ renderCallSheetCalendar(); }catch(_e){}
+        try{ renderReportsDetail(); }catch(_e){}
       });
     }
     if(btnPrint && !btnPrint.dataset.bound){
@@ -6586,10 +6586,10 @@ function renderShotList(){
             touch();
             if(changed2){
               renderScheduleBoard();
-              safeCall(renderDayDetail);
-              safeCall(renderReports);
-              safeCall(renderCallSheetCalendar);
-              safeCall(renderReportsDetail);
+              try{ renderDayDetail(); }catch(_e){}
+              try{ renderReports(); }catch(_e){}
+              try{ renderCallSheetCalendar(); }catch(_e){}
+              try{ renderReportsDetail(); }catch(_e){}
               toast("Ajusté duraciones del cronograma según los planos");
             }
             renderShotList();
