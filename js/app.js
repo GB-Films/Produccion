@@ -775,7 +775,7 @@ const shotlistCollapsedSceneIds = new Set();
     const looksLikeState = !!(remote.meta || remote.scenes || remote.shootDays || remote.crew || remote.script);
     return onlyAllowed && !looksLikeState;
   }
-  async function initRemoteSync(){
+  async function initRemoteSync(opts={}){
     if(initRemoteSync._running) return;
     initRemoteSync._running = true;
     syncReady = false;
@@ -788,6 +788,10 @@ const shotlistCollapsedSceneIds = new Set();
       return;
     }
 
+    // Read last-acknowledged stamps BEFORE fetching remote (critical to detect remote drift).
+    const storedCoreStamp0 = StorageLayer.getRemoteStamp(cfg.binId) || lastRemoteStamp || "";
+    const storedPackStamp0 = cfg.scriptBinId ? (StorageLayer.getRemoteStamp(cfg.scriptBinId) || lastScriptRemoteStamp || "") : "";
+
     try{
       const [remoteCore, remotePackRaw] = await Promise.all([
         StorageLayer.jsonbinGet(cfg.binId, cfg.accessKey),
@@ -796,52 +800,67 @@ const shotlistCollapsedSceneIds = new Set();
 
       sessionPulledRemote = true;
 
-      // stamps (por bin)
-      lastRemoteStamp = String(remoteCore?.meta?.updatedAt || "");
-      StorageLayer.setRemoteStamp(cfg.binId, lastRemoteStamp);
-
-      const packStamp = cfg.scriptBinId ? String(remotePackRaw?.meta?.updatedAt || "") : "";
-      if(cfg.scriptBinId){
-        lastScriptRemoteStamp = packStamp;
-        StorageLayer.setRemoteStamp(cfg.scriptBinId, lastScriptRemoteStamp);
-      }
-
       const coreOK = isValidState(remoteCore);
       const packOK = isValidScriptPack(remotePackRaw);
 
       const remoteCombined = coreOK ? mergeStateFromBins(remoteCore, packOK ? remotePackRaw : null) : null;
 
       if(coreOK){
+        const coreStamp = String(remoteCore?.meta?.updatedAt || "");
+        const packStamp = cfg.scriptBinId ? String(remotePackRaw?.meta?.updatedAt || "") : "";
+
         const remoteHasData = !isEmptyState(remoteCombined);
         const localHasData  = !isEmptyState(state);
 
+        // If remote changed since this device last acknowledged it, we MUST absorb remote first.
+        const remoteChangedByStamp =
+          (storedCoreStamp0 && coreStamp && coreStamp !== storedCoreStamp0) ||
+          (cfg.scriptBinId && storedPackStamp0 && packStamp && packStamp !== storedPackStamp0) ||
+          // Local exists but there's no stamp baseline -> safest is "remote manda".
+          (bootHadLocal && remoteHasData && !storedCoreStamp0) ||
+          (cfg.scriptBinId && bootHadLocal && remoteHasData && !storedPackStamp0);
+
         let shouldAdoptRemote = false;
 
-        // First run (no local) and remote has data => always adopt remote
-        if(!bootHadLocal && remoteHasData) shouldAdoptRemote = true;
+        // Hard safety: if remote drift is detected, never push local over it automatically.
+        if(remoteChangedByStamp && remoteHasData){
+          shouldAdoptRemote = true;
+          if(localHasData){
+            try{ saveConflictBackup(cfg.binId, state); }catch(_e){}
+          }
+        }
 
-        // If local is empty but remote isn't => adopt remote
-        if(!localHasData && remoteHasData) shouldAdoptRemote = true;
+        // Boot: remote is the source of truth if it has data.
+        if(!shouldAdoptRemote && opts && opts.boot && remoteHasData){
+          shouldAdoptRemote = true;
+          if(localHasData){
+            try{ saveConflictBackup(cfg.binId, state); }catch(_e){}
+          }
+        }
 
-        // Otherwise adopt the newest by updatedAt
+        // Existing logic: adopt remote if local is empty / first run, or if remote is newer.
+        if(!shouldAdoptRemote && !bootHadLocal && remoteHasData) shouldAdoptRemote = true;
+        if(!shouldAdoptRemote && !localHasData && remoteHasData) shouldAdoptRemote = true;
         if(!shouldAdoptRemote && tsUpdatedAt(remoteCombined) > tsUpdatedAt(state)) shouldAdoptRemote = true;
 
-        // Mobile safety: si el remoto tiene claramente más contenido que el local, preferimos remoto
-        if(!shouldAdoptRemote && remoteHasData){
-          const remoteScore = (remoteCombined.scenes?.length||0) + (remoteCombined.shootDays?.length||0) + (remoteCombined.crew?.length||0);
-          const localScore  = (state.scenes?.length||0) + (state.shootDays?.length||0) + (state.crew?.length||0);
-          if(isMobileUI() && remoteScore > localScore) shouldAdoptRemote = true;
+        // Mobile safety score (prefers remote when local might be partial)
+        if(!shouldAdoptRemote && isMobileUI()){
+          const rs = scoreMobileCompleteness(remoteCombined);
+          const ls = scoreMobileCompleteness(state);
+          if(rs > ls + 3) shouldAdoptRemote = true;
         }
 
         if(shouldAdoptRemote){
           state = remoteCombined;
           bootAppliedRemote = true;
           StorageLayer.saveLocal(state);
-          lastRemoteStamp = String(remoteCore?.meta?.updatedAt || lastRemoteStamp || "");
+
+          // Acknowledge stamps only when we accept remote as baseline.
+          lastRemoteStamp = coreStamp || String(state?.meta?.updatedAt || "");
           StorageLayer.setRemoteStamp(cfg.binId, lastRemoteStamp);
 
           if(cfg.scriptBinId){
-            lastScriptRemoteStamp = String((packOK ? remotePackRaw : null)?.meta?.updatedAt || lastScriptRemoteStamp || "");
+            lastScriptRemoteStamp = packStamp || String(state?.meta?.updatedAt || "");
             StorageLayer.setRemoteStamp(cfg.scriptBinId, lastScriptRemoteStamp);
           }
 
@@ -850,52 +869,51 @@ const shotlistCollapsedSceneIds = new Set();
           callSheetDayId = null;
           hydrateAll();
           toast("Cargué remoto ✅");
+        }else{
+          // Keep local; do NOT overwrite stamps here (prevents blind overwrites on next autosync).
+          updateSyncPill("JSONBin");
         }
 
         updateSyncPill("JSONBin");
       }else{
-        // Remote exists but is not a valid state. If it looks uninitialized (e.g. {extras:[]})
-        // and this project has no local data yet, bootstrap the remote with our default state.
+        // Remote exists but invalid/uninitialized? Bootstrap only if local has no meaningful data.
         if(!bootHadLocal && isUninitializedRemote(remoteCore)){
+          updateSyncPill("JSONBin");
+          // Init remote with our base state (first ever run)
           try{
             const { core, pack } = splitStateForBins(state);
             await StorageLayer.jsonbinPut(cfg.binId, cfg.accessKey, core);
             if(cfg.scriptBinId) await StorageLayer.jsonbinPut(cfg.scriptBinId, cfg.accessKey, pack);
 
-            updateSyncPill("JSONBin");
-            toast("Inicialicé remoto ✅");
-            sessionPulledRemote = true;
-
-            lastRemoteStamp = String(core?.meta?.updatedAt || "");
+            // Pull stamps back
+            const pulled = await StorageLayer.jsonbinGet(cfg.binId, cfg.accessKey);
+            lastRemoteStamp = String(pulled?.meta?.updatedAt || "");
             StorageLayer.setRemoteStamp(cfg.binId, lastRemoteStamp);
 
             if(cfg.scriptBinId){
-              lastScriptRemoteStamp = String(pack?.meta?.updatedAt || "");
+              const pulledP = await StorageLayer.jsonbinGet(cfg.scriptBinId, cfg.accessKey).catch(()=>null);
+              lastScriptRemoteStamp = String(pulledP?.meta?.updatedAt || "");
               StorageLayer.setRemoteStamp(cfg.scriptBinId, lastScriptRemoteStamp);
             }
-          }catch(err){
+
+            toast("Inicialicé remoto ✅");
+          }catch(_e){
             updateSyncPill("Local");
-            try{
-              const msg = String(err?.message || err || "");
-              if(msg.includes("403")) toast("JSONBin 403: la Access Key no tiene permiso para inicializar/actualizar.");
-              if(msg.includes("404")) toast("JSONBin 404: no pude inicializar porque el bin no existe / no es tuyo.");
-            }catch(_e){}
           }
         }else{
           updateSyncPill("Local");
         }
       }
+
     }catch(err){
-      // Offline / bloqueado (muy común en webviews mobile o con bloqueadores)
-      updateSyncPill("Local");
+      // Offline / 4xx / 5xx
       try{
-        if(!initRemoteSync._warned){
-          initRemoteSync._warned = true;
-          // Solo avisamos una vez por sesión para no molestar.
-          const isNarrow = (typeof window !== "undefined" && window.matchMedia) ? window.matchMedia("(max-width: 860px)").matches : false;
-          const extra = isNarrow ? " (probá abrir en el navegador completo)" : "";
+        updateSyncPill("Local");
+        if(!syncErrorToastShown){
+          syncErrorToastShown = true;
+          const msg = String(err && (err.message||err) || "");
+          const extra = " — Revisá BIN ID y Access Key en Configuración.";
           (function(){
-            const msg = String(err?.message || err || "");
             if(msg.includes("404")) toast("JSONBin 404: bin no encontrado / no asociado a tu cuenta." + extra);
             else if(msg.includes("403")) toast("JSONBin 403: la Access Key no tiene permiso (Read/Update) o el bin no es tuyo." + extra);
             else toast("No pude conectar con JSONBin, estoy en modo Local" + extra);
@@ -913,13 +931,7 @@ const shotlistCollapsedSceneIds = new Set();
         }
       }catch(_e){}
 
-  }
-
-
-
-
-
-  function ensureSceneExtras(s){
+  }function ensureSceneExtras(s){
     if(!s) return;
     if(!("intExt" in s)) s.intExt = "";
     if(!("chapter" in s)) s.chapter = "";
@@ -8944,7 +8956,7 @@ if(!state.scenes.length){
     initCollapsibles();
   }
 
-  function init(){
+  async function init(){
     loadCallSheetCursor();
 
     const cfg = StorageLayer.loadCfg();
@@ -8977,6 +8989,9 @@ if(!state.scenes.length){
 
     initSidebarUI(cfg);
 
+    // Bloqueamos cualquier interacción/autosave antes de decidir remoto vs local.
+    try{ document.body.classList.add("bootLoading"); }catch(_e){}
+
     const local = StorageLayer.loadLocal();
     bootHadLocal = !!(local && local.meta);
     state = bootHadLocal ? local : defaultState(cfg && cfg.projectName);
@@ -8985,6 +9000,9 @@ if(!state.scenes.length){
       // Persist initial state locally for this project
       StorageLayer.saveLocal(state);
     }
+
+    // CRÍTICO: cargar remoto primero y recién después habilitar UI + eventos.
+    try{ await initRemoteSync({ boot:true }); }catch(_e){}
 
     selectedSceneId = state.scenes?.[0]?.id || null;
     selectedDayId = state.shootDays?.[0]?.id || null;
@@ -9002,14 +9020,12 @@ if(!state.scenes.length){
     hydrateAll();
     showView(isMobileUI() ? "dayplan" : "breakdown");
 
-    // Auto-pull remoto when possible (prevents first-time users overwriting remote data)
-    initRemoteSync();
     window.addEventListener("online", ()=>{
       // Cuando vuelve la conexión, refrescamos desde remoto.
       initRemoteSync();
     });
-  }
 
-  if(document.readyState === "loading") window.addEventListener("DOMContentLoaded", init);
+    try{ document.body.classList.remove("bootLoading"); }catch(_e){}
+  }if(document.readyState === "loading") window.addEventListener("DOMContentLoaded", init);
   else init();
 })();
