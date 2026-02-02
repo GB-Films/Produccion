@@ -5208,6 +5208,7 @@ items.push({
   timeOfDay: sc.timeOfDay || "",
   pages: pagesNum,
   summary: sc.summary || "",
+  notes: sc.notes || "",
 
   title: `#${sc.number||""} ${sc.slugline||""}`.trim(),
   detail: [
@@ -7319,7 +7320,6 @@ function renderReportDayplanDetail(d){
     <td class="cIE">${esc(ie)}</td>
     <td class="cLoc">${esc(locTxt)}</td>
     <td class="cTod">${esc(todTxt)}</td>
-    <td class="cPag">${esc(pagesTxt)}</td>
     <td class="cSum">${esc(sumTxt)}</td>
   </tr>
 `;
@@ -7332,10 +7332,10 @@ function renderReportDayplanDetail(d){
         <table class="dayplanPrintTable">
           <colgroup>
             <col class="colHour"><col class="colDur"><col class="colNro"><col class="colTitle">
-            <col class="colIE"><col class="colLoc"><col class="colTod"><col class="colPag"><col class="colSum">
+            <col class="colIE"><col class="colLoc"><col class="colTod"><col class="colSum">
           </colgroup>
-          <thead><tr><th>Hora</th><th>Dur</th><th>Nro</th><th>Título</th><th>I/E</th><th>Locación</th><th>Momento</th><th>Largo (Pág)</th><th>Notas</th></tr></thead>
-          <tbody>${rows || `<tr><td colspan="9" class="muted">—</td></tr>`}</tbody>
+          <thead><tr><th>Hora</th><th>Dur</th><th>Nro</th><th>Título</th><th>I/E</th><th>Locación</th><th>Momento</th><th>Notas</th></tr></thead>
+          <tbody>${rows || `<tr><td colspan="8" class="muted">—</td></tr>`}</tbody>
         </table>
       </div>
     `;

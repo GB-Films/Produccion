@@ -2135,7 +2135,7 @@ body.gbPrintingElements .muted{ color:#333 !important; }
 /* Ajuste fino de anchos (Tomi): un poco más de aire en Hora/Dur/Nro/I-E/Pág, y más en Momento/Lugar.
    Resumen sigue absorbiendo el ancho restante. */
 .dayplanPrintTable col.colHour{ width:46px; } /* +20% */
-.dayplanPrintTable col.colDur{ width:34px; }  /* +20% */
+.dayplanPrintTable col.colDur{ width:44px; }  /* +30% */
 .dayplanPrintTable col.colNro{ width:34px; }  /* +20% */
 .dayplanPrintTable col.colIE{ width:41px; }   /* +20% */
 .dayplanPrintTable col.colPag{ width:46px; }  /* +20% */
