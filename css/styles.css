@@ -767,6 +767,11 @@ tr.groupRow td{
 
 .timeInput{ width:110px; padding:6px 10px; height:34px; border-radius:12px; }
 .btn.ghost{ background: rgba(255,255,255,.02); }
+.btn.toggleOn{
+  border-color: rgba(58, 220, 126, .65);
+  background: rgba(58, 220, 126, .08);
+  box-shadow: 0 0 0 2px rgba(58, 220, 126, .12) inset;
+}
 .btn.small{ padding:6px 10px; border-radius:12px; font-size:12px; height:34px; }
 .btn.icon.small{ width:34px; height:34px; border-radius:12px; padding:0; display:flex; align-items:center; justify-content:center; }
 .timeDiffDay{ background: rgba(255, 208, 0, .18) !important; border-color: rgba(255, 208, 0, .55) !important; }
