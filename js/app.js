@@ -189,6 +189,7 @@ function sanitizeScriptState(opts={}){
     pill = document.createElement("div");
     pill.id = "modeBanner";
     pill.className = "modeBanner";
+    try{ pill.dataset.roAllow = "1"; }catch(_e){}
     pill.title = "Click para alternar edición";
     pill.addEventListener("click", ()=>{
       if(editUnlocked){
@@ -313,6 +314,144 @@ const shotlistCollapsedSceneIds = new Set();
     toast._t = setTimeout(()=>t.style.display="none", 2200);
   }
 
+
+
+  // ===== Read-only hard guard (Lector) =====
+  const RO_EDIT_MSG = "Modo lector 🔒 (desbloqueá con el candado para editar)";
+  let _roLastToast = 0;
+  function roToast(){
+    const now = Date.now();
+    if(now - _roLastToast < 900) return;
+    _roLastToast = now;
+    try{ toast(RO_EDIT_MSG); }catch(_e){}
+  }
+
+  function markReadOnlyAllowList(){
+    const ids = [
+      "modeBanner",
+      "btnNavCollapse","projectSwitch",
+      "sceneSearch","sceneFilterTOD",
+      "dpBankSearch","shootDaySelect","dayplanSelect","shotDaySelect",
+      "dayplanSnap","dayplanZoom",
+      "schedSearch","schedZoom","schedSnap",
+      "elxSearch","crewSearch","reportsSearch",
+      "btnOpenCallSheet","btnDayplanPrint","btnShotPrint","btnPrintCallSheet",
+      "btnBDTemplateWide","btnBDTemplateLong",
+      "btnToggleScriptImport","btnCancelScriptImport",
+      "calPrev","calNext","btnShotSceneGoBreakdown",
+      "dpBtnToggleBank","dpBtnToggleBankDock"
+    ];
+    for(const id of ids){
+      try{ const n = document.getElementById(id); if(n) n.dataset.roAllow="1"; }catch(_e){}
+    }
+    try{ document.querySelectorAll(".navBtn").forEach(n=>{ try{ n.dataset.roAllow="1"; }catch(_e){} }); }catch(_e){}
+    try{ document.querySelectorAll(".reportTabBtn").forEach(n=>{ try{ n.dataset.roAllow="1"; }catch(_e){} }); }catch(_e){}
+  }
+
+  function installReadOnlyGuards(){
+    if(installReadOnlyGuards._done) return;
+    installReadOnlyGuards._done = true;
+
+    const isAllowed = (t)=>{
+      try{
+        if(!t) return false;
+        if(t.closest && t.closest('[data-ro-allow="1"]')) return true;
+        if(t.closest && t.closest("#modeBanner")) return true;
+        if(t.closest && t.closest(".navBtn")) return true;
+        return false;
+      }catch(_e){ return false; }
+    };
+
+    // Store original value on focus, so we can restore it if someone types in Lector mode.
+    document.addEventListener("focusin", (e)=>{
+      if(!isReadOnly()) return;
+      const t = e.target;
+      if(isAllowed(t)) return;
+      const ctrl = t?.closest?.('input, textarea, select, [contenteditable="true"]');
+      if(!ctrl) return;
+      try{
+        if(ctrl.matches?.('[contenteditable="true"]')){
+          ctrl.dataset.roRestore = ctrl.textContent ?? "";
+        }else if(ctrl.type==="checkbox" || ctrl.type==="radio"){
+          ctrl.dataset.roRestore = ctrl.checked ? "1":"0";
+        }else{
+          ctrl.dataset.roRestore = ctrl.value ?? "";
+        }
+      }catch(_e){}
+    }, true);
+
+    const restoreCtrl = (ctrl)=>{
+      try{
+        const v = ctrl?.dataset?.roRestore;
+        if(v==null) return;
+        if(ctrl.matches?.('[contenteditable="true"]')){
+          ctrl.textContent = v;
+        }else if(ctrl.type==="checkbox" || ctrl.type==="radio"){
+          ctrl.checked = (v==="1");
+        }else{
+          ctrl.value = v;
+        }
+      }catch(_e){}
+    };
+
+    const guardFormEvent = (e)=>{
+      if(!isReadOnly()) return;
+      const t = e.target;
+      if(isAllowed(t)) return;
+      const ctrl = t?.closest?.('input, textarea, select, [contenteditable="true"]');
+      if(!ctrl) return;
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      restoreCtrl(ctrl);
+      try{ ctrl.blur?.(); }catch(_e){}
+      roToast();
+    };
+
+    document.addEventListener("input", guardFormEvent, true);
+    document.addEventListener("change", guardFormEvent, true);
+    document.addEventListener("paste", guardFormEvent, true);
+
+    document.addEventListener("keydown", (e)=>{
+      if(!isReadOnly()) return;
+      const t = e.target;
+      if(isAllowed(t)) return;
+      const ctrl = t?.closest?.('input, textarea, select, [contenteditable="true"]');
+      if(!ctrl) return;
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      roToast();
+    }, true);
+
+    const clickGuard = (e)=>{
+      if(!isReadOnly()) return;
+      const t = e.target;
+      if(isAllowed(t)) return;
+
+      // Block common edit controls (buttons, action icons).
+      const btn = t?.closest?.('button, [role="button"], [data-action], .dpMiniBtn, .dpSwatchBtn, .btn, .resize, .dpResize');
+      if(!btn) return;
+
+      // Nav is always allowed
+      if(btn.classList?.contains("navBtn") || btn.closest?.(".navBtn")) return;
+      if(btn.closest?.('[data-ro-allow="1"]')) return;
+
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      roToast();
+    };
+    document.addEventListener("click", clickGuard, true);
+
+    const dragGuard = (e)=>{
+      if(!isReadOnly()) return;
+      const t = e.target;
+      if(isAllowed(t)) return;
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      roToast();
+    };
+    document.addEventListener("drop", dragGuard, true);
+    document.addEventListener("dragstart", dragGuard, true);
+  }
 
   function projectInitials(txt){
     const s = String(txt||"").trim();
@@ -4772,6 +4911,9 @@ function bindScheduleDnD(){
 
     const isResize = !!e.target.closest(".resize");
 
+    const ro = isReadOnly();
+    if(ro && isResize){ roToast(); return; }
+
     const dayId = block.dataset.dayId;
     const kind = block.dataset.kind || (block.dataset.sceneId ? "scene" : "block");
     const itemId = block.dataset.itemId || block.dataset.sceneId || "";
@@ -4799,7 +4941,8 @@ function bindScheduleDnD(){
       kind,
       itemId,
       dayId,
-      mode: isResize ? "resize" : "move",
+      mode: ro ? "tap" : (isResize ? "resize" : "move"),
+      ro,
       snapMin,
       pxPerMin,
       grabOffsetMin: clamp(clickY / pxPerMin, 0, it.dur),
@@ -4813,12 +4956,12 @@ function bindScheduleDnD(){
     };
 
     try{ block.setPointerCapture(e.pointerId); }catch(_){}
-    e.preventDefault();
+    if(!ro) e.preventDefault();
   });
 
   board.addEventListener("pointermove", (e)=>{
     if(!schedDrag || schedDrag.pointerId !== e.pointerId) return;
-    e.preventDefault();
+    if(!schedDrag.ro) e.preventDefault();
 
     const drag = schedDrag;
 
@@ -4830,6 +4973,8 @@ function bindScheduleDnD(){
         schedTap = null;
       }
     }
+
+    if(drag.ro || isReadOnly()) return;
 
     const pxPerMin = getPxPerMin();
     drag.pxPerMin = pxPerMin; // por si cambió el zoom mientras arrastra
@@ -4897,8 +5042,10 @@ function bindScheduleDnD(){
     const d0 = schedDrag;
     schedDrag = null;
 
+    const roEnd = !!d0.ro || isReadOnly();
+
     // Si fue solo click (sin drag), no tocamos layout: permite doble click y evita re-render innecesario
-    if(d0.mode === "move" && !d0.moved){
+    if((d0.mode === "move" || d0.mode === "tap") && !d0.moved){
       const now = Date.now();
       if(d0.kind === "scene" && d0.itemId){
         if(schedTap && schedTap.sceneId === d0.itemId && (now - schedTap.t) < 380){
@@ -4915,6 +5062,8 @@ function bindScheduleDnD(){
     if(d0.mode === "resize" && !d0.moved){
       return;
     }
+
+    if(roEnd) return;
 
     const fromDay = getDay(d0.dayId);
     if(!fromDay) return;
@@ -5052,6 +5201,7 @@ function updateScheduleDayDOM(dayId){
 
   function syncDayDurationsFromShots(day, snapMin=15){
     if(!day) return false;
+    if(isReadOnly()) return false;
     ensureDayTimingMaps(day);
     let changed = false;
     for(const sid of (day.sceneIds||[])){
@@ -5797,6 +5947,8 @@ ${
         e.preventDefault();
         lane.classList.remove("dpDropOver");
 
+        if(isReadOnly()){ roToast(); return; }
+
         let data = null;
         try{
           const raw = e.dataTransfer.getData("application/json");
@@ -6085,6 +6237,8 @@ return `
 
         const action = e.target.closest("[data-action]")?.dataset.action || "";
         if(action === "palette" || action === "pickColor" || action === "delete" || action === "removeScene" || action === "openScene") return;
+
+        if(isReadOnly()) return;
 
         e.preventDefault();
         try{ block.setPointerCapture(e.pointerId); }catch(_){/*ignore*/}
@@ -9268,6 +9422,8 @@ if(!state.scenes.length){
     // Permisos de edición
     setEditUnlocked(editUnlocked);
     mountModeBanner();
+    installReadOnlyGuards();
+    markReadOnlyAllowList();
     setupScheduleWheelScroll();
     hydrateAll();
     showView(isMobileUI() ? "dayplan" : "breakdown");
