@@ -5085,7 +5085,9 @@ function updateScheduleDayDOM(dayId){
   
 
   // ===================== Plan de Rodaje (vista diaria: escenas + notas) =====================
-  let dayplanSelectedKey = null;
+  let dayplanSelectedKey = null; // primary
+  let dayplanSelectedKeys = new Set();
+  let dayplanAnchorKey = null;
   let dayplanPaletteKey = null;
   let dayplanPointer = null;
 
@@ -5144,8 +5146,9 @@ function updateScheduleDayDOM(dayId){
 
       const DAY_SPAN_MIN = 24*60;
       const spanMin = DAY_SPAN_MIN - dpStartAbs;
-      const maxPx = spanMin * DAYPLAN_PPM;
-      const top = (nowMin - dpStartAbs) * DAYPLAN_PPM;
+      const ppm = getDayplanPPM() || DAYPLAN_PPM;
+      const maxPx = spanMin * ppm;
+      const top = (nowMin - dpStartAbs) * ppm;
       if(top < 0 || top > maxPx) return null;
       return Math.round(top);
     }catch(_e){
@@ -5184,6 +5187,26 @@ function updateScheduleDayDOM(dayId){
     const a = Number(el("dayplanSnap")?.value || 0);
     const b = Number(el("schedSnap")?.value || 0);
     return (a || b || 15);
+  }
+
+
+  function snapCeil(v, step){ return Math.ceil(v/step)*step; }
+  function snapFloor(v, step){ return Math.floor(v/step)*step; }
+
+  function getDayplanZoomPxPerHour(){
+    const sel = el("dayplanZoom");
+    let v = Number(sel?.value || 0);
+    if(!v){
+      const st = Number(localStorage.getItem("gb_dayplan_zoom")||0);
+      if(st) v = st;
+    }
+    if(!Number.isFinite(v) || v<=0) v = 72;
+    return v;
+  }
+
+  function getDayplanPPM(){
+    const pxH = getDayplanZoomPxPerHour();
+    return pxH/60;
   }
 
   function buildDayplanItems(d){
@@ -5256,6 +5279,77 @@ items.push({
     if(b) b.durMin = durMin;
   }
 
+  function finalizeDayplanGroupMove(d, selKeys){
+    // Mantiene el grupo seleccionado unido: primero lo corre hacia abajo lo mínimo necesario
+    // para que ninguno quede "después" de un item no-seleccionado que lo solape; luego empuja el resto.
+    if(!d) return;
+    ensureDayTimingMaps(d);
+
+    const snapMin = getDayplanSnap();
+    const base = minutesFromHHMM(d.callTime || "08:00");
+    const dpEndAbs = DAY_SPAN_MIN;
+    const availSpan = dpEndAbs - base;
+
+    const sel = new Set(selKeys || []);
+    if(!sel.size) { resolveOverlapsPushDown(d, snapMin); return; }
+
+    const items = buildDayplanItems(d);
+    const selected = items.filter(it=>sel.has(it.key));
+    if(selected.length < 2){ resolveOverlapsPushDown(d, snapMin); return; }
+
+    const getDur = (it, startOff)=>{
+      const absStart = clamp(base + startOff, base, dpEndAbs);
+      return clamp(Math.max(snapMin, it.dur||snapMin), snapMin, Math.max(snapMin, dpEndAbs - absStart));
+    };
+
+    // cuánto hay que correr el grupo para que ningún seleccionado quede "atrapado" detrás de un no-seleccionado
+    let needed = 0;
+    for(const s of selected){
+      const sStart0 = clamp(s.start||0, 0, availSpan);
+      const sAbs = base + sStart0;
+
+      for(const o of items){
+        if(sel.has(o.key)) continue;
+        const oStart0 = clamp(o.start||0, 0, availSpan);
+        const oAbs = base + oStart0;
+
+        if(oAbs < sAbs){
+          const oDur = getDur(o, oStart0);
+          const oEnd = Math.min(dpEndAbs, oAbs + oDur);
+          if(oEnd > sAbs){
+            needed = Math.max(needed, oEnd - sAbs);
+          }
+        }
+      }
+    }
+
+    if(needed > 0){
+      needed = snapCeil(needed, snapMin);
+
+      // clamp por límite del día (no pasarse de medianoche)
+      let maxShift = Infinity;
+      for(const s of selected){
+        const sStart0 = clamp(s.start||0, 0, availSpan);
+        const sDur = getDur(s, sStart0);
+        const maxStart = availSpan - sDur;
+        maxShift = Math.min(maxShift, maxStart - sStart0);
+      }
+      needed = clamp(needed, 0, maxShift);
+
+      if(needed > 0){
+        for(const s of selected){
+          const sStart0 = clamp(s.start||0, 0, availSpan);
+          const sDur = getDur(s, sStart0);
+          const maxStart = availSpan - sDur;
+          const newStart = clamp(sStart0 + needed, 0, maxStart);
+          setDayplanStart(d, s.kind, s.id, newStart);
+        }
+      }
+    }
+
+    resolveOverlapsPushDown(d, snapMin);
+  }
+
   function addDayplanNote(){
     const dayId = selectedDayplanDayId || selectedDayId || state.shootDays?.[0]?.id || null;
     const d = dayId ? getDay(dayId) : null;
@@ -5306,6 +5400,14 @@ items.push({
     const inspector = el("dayplanInspector");
     const printWrap = el("dayplanPrint");
     if(!sel || !head || !timeCol || !lane || !scroller || !inspector || !printWrap) return;
+
+    // Init zoom selector from localStorage
+    const zSel = el("dayplanZoom");
+    if(zSel && zSel.dataset.init !== "1"){
+      const st = localStorage.getItem("gb_dayplan_zoom");
+      if(st) zSel.value = st;
+      zSel.dataset.init = "1";
+    }
 
     sortShootDaysInPlace();
 
@@ -5572,7 +5674,8 @@ items.push({
     const loc = esc(d.location || "");
 
     // Timeline sizing
-    const ppm = DAYPLAN_PPM;
+    const ppm = getDayplanPPM() || DAYPLAN_PPM;
+    scroller.dataset.ppm = String(ppm);
     const dayH = Math.round(dpSpanMin * ppm);
     scroller.style.setProperty("--dp-day-h", dayH+"px");
     timeCol.style.height = dayH+"px";
@@ -5609,7 +5712,7 @@ const height = Math.max(Math.round((absEnd - absStart) * ppm), Math.round(snapMi
 
       const startTxt = hhmmFromMinutes(absStart);
       const endTxt = hhmmFromMinutes(absEnd);
-      const isSel = (dayplanSelectedKey === it.key);
+      const isSel = (dayplanSelectedKeys?.has?.(it.key) || dayplanSelectedKey === it.key);
       const showPal = (dayplanPaletteKey === it.key);
 
       const actionBtns = it.kind==="block"
@@ -5721,7 +5824,7 @@ ${
 
         // calcular hora según el punto de suelta
         const snapMin0 = getDayplanSnap();
-        const ppm0 = DAYPLAN_PPM;
+        const ppm0 = getDayplanPPM() || DAYPLAN_PPM;
 
         const base0 = minutesFromHHMM(d0.callTime || "08:00");
         const dpStartAbs0 = Math.floor(base0/60)*60;
@@ -5835,6 +5938,9 @@ return `
         const action = actEl?.dataset.action || "";
 
 
+        if(!(dayplanSelectedKeys instanceof Set)) dayplanSelectedKeys = new Set();
+        if(dayplanSelectedKey && dayplanSelectedKeys.size===0) dayplanSelectedKeys.add(dayplanSelectedKey);
+
         // Doble click (sin depender de `dblclick`): 2 taps rápidos sobre la misma escena → Breakdown
         if(action || kind !== "scene"){
           dayplanLastTapId = null;
@@ -5855,7 +5961,9 @@ return `
 
         if(action === "palette"){
           dayplanPaletteKey = (dayplanPaletteKey === key) ? null : key;
+          dayplanSelectedKeys.add(key);
           dayplanSelectedKey = key;
+          dayplanAnchorKey = key;
           renderDayPlan();
           return;
         }
@@ -5868,7 +5976,9 @@ return `
             if(b) b.color = col;
           }
           dayplanPaletteKey = null;
+          dayplanSelectedKeys.add(key);
           dayplanSelectedKey = key;
+          dayplanAnchorKey = key;
           touch();
           renderDayPlan();
           renderScheduleBoard();
@@ -5878,7 +5988,10 @@ return `
         }
         if(action === "delete" && kind === "block"){
           deleteDayplanBlock(selectedDayplanDayId, id);
-          dayplanSelectedKey = null;
+          try{ dayplanSelectedKeys.delete(key); }catch(_e){}
+          if(dayplanSelectedKey === key){
+            dayplanSelectedKey = dayplanSelectedKeys.size ? Array.from(dayplanSelectedKeys).slice(-1)[0] : null;
+          }
           dayplanPaletteKey = null;
           return;
         }
@@ -5890,7 +6003,10 @@ return `
           if(d.sceneColors) delete d.sceneColors[id];
 
           selectedDayId = d.id;
-          dayplanSelectedKey = null;
+          try{ dayplanSelectedKeys.delete(key); }catch(_e){}
+          if(dayplanSelectedKey === key){
+            dayplanSelectedKey = dayplanSelectedKeys.size ? Array.from(dayplanSelectedKeys).slice(-1)[0] : null;
+          }
           dayplanPaletteKey = null;
           touch();
           renderSceneBank();
@@ -5910,8 +6026,43 @@ return `
           return;
         }
 
-        // selección simple
-        dayplanSelectedKey = key;
+        // Selección (multi + rango)
+        const ordered = buildDayplanItems(d);
+        const multi = !!(e.ctrlKey || e.metaKey);
+        const range = !!(e.shiftKey);
+
+        if(!(dayplanSelectedKeys instanceof Set)) dayplanSelectedKeys = new Set();
+        if(dayplanSelectedKey && dayplanSelectedKeys.size===0) dayplanSelectedKeys.add(dayplanSelectedKey);
+
+        if(range && dayplanAnchorKey){
+          const ia = ordered.findIndex(x=>x.key===dayplanAnchorKey);
+          const ib = ordered.findIndex(x=>x.key===key);
+          if(ia>=0 && ib>=0){
+            const lo = Math.min(ia,ib), hi = Math.max(ia,ib);
+            dayplanSelectedKeys = new Set(ordered.slice(lo,hi+1).map(x=>x.key));
+            dayplanSelectedKey = key;
+          }else{
+            dayplanSelectedKeys = new Set([key]);
+            dayplanSelectedKey = key;
+            dayplanAnchorKey = key;
+          }
+        }else if(multi){
+          if(dayplanSelectedKeys.has(key)){
+            dayplanSelectedKeys.delete(key);
+            if(dayplanSelectedKey === key){
+              dayplanSelectedKey = dayplanSelectedKeys.size ? Array.from(dayplanSelectedKeys).slice(-1)[0] : null;
+            }
+          }else{
+            dayplanSelectedKeys.add(key);
+            dayplanSelectedKey = key;
+          }
+          dayplanAnchorKey = key;
+        }else{
+          dayplanSelectedKeys = new Set([key]);
+          dayplanSelectedKey = key;
+          dayplanAnchorKey = key;
+        }
+
         dayplanPaletteKey = null;
         renderDayPlan();
       });
@@ -5949,7 +6100,7 @@ const base = minutesFromHHMM(d.callTime || "08:00");
 const dpStartAbs = Math.floor(base/60)*60;
 const dpEndAbs = DAY_SPAN_MIN;
 const items = buildDayplanItems(d);
-const ppm = DAYPLAN_PPM;
+const ppm = getDayplanPPM() || DAYPLAN_PPM;
 
         const sc = el("dpScroller");
         const rect = sc.getBoundingClientRect();
@@ -5963,11 +6114,54 @@ const ppm = DAYPLAN_PPM;
         const it = items.find(x=>x.key===key);
         if(!it) return;
 
+        // Selection for group drag (Ctrl/Cmd = multi, Shift = rango)
+        if(!(dayplanSelectedKeys instanceof Set)) dayplanSelectedKeys = new Set();
+        if(dayplanSelectedKey && dayplanSelectedKeys.size===0) dayplanSelectedKeys.add(dayplanSelectedKey);
+
+        const wantsMulti = !!(e.ctrlKey || e.metaKey || e.shiftKey);
+        if(!dayplanSelectedKeys.has(key) && !wantsMulti){
+          dayplanSelectedKeys = new Set([key]);
+          dayplanSelectedKey = key;
+          dayplanAnchorKey = key;
+          try{
+            lane.querySelectorAll(".dpBlock.sel").forEach(x=>x.classList.remove("sel"));
+            block.classList.add("sel");
+          }catch(_e){}
+        }else{
+          dayplanSelectedKeys.add(key);
+          dayplanSelectedKey = key;
+          dayplanAnchorKey = key;
+          try{ block.classList.add("sel"); }catch(_e){}
+        }
+
+        const selSet = dayplanSelectedKeys;
+        const domMap = new Map();
+        try{ lane.querySelectorAll(".dpBlock").forEach(b=> domMap.set(b.dataset.key, b)); }catch(_e){}
+        const availSpan = dpEndAbs - base;
+
+        const selItems = items.filter(x=>selSet.has(x.key)).map(x=>{
+          const start0 = clamp(x.start||0, 0, availSpan);
+          const absStartX = clamp(base + start0, base, dpEndAbs);
+          const durX = clamp(Math.max(snapMin, x.dur||snapMin), snapMin, Math.max(snapMin, dpEndAbs - absStartX));
+          return { key:x.key, kind:x.kind, id:x.id, start0, dur0: durX, el: domMap.get(x.key) || null };
+        });
+
+        let minDelta = -Infinity;
+        let maxDelta = Infinity;
+        for(const s of selItems){
+          const start0 = clamp(s.start0||0, 0, availSpan);
+          const dur0i = clamp(Math.max(snapMin, s.dur0||snapMin), snapMin, Math.max(snapMin, availSpan - start0));
+          const maxStart = availSpan - dur0i;
+          minDelta = Math.max(minDelta, -start0);
+          maxDelta = Math.min(maxDelta, maxStart - start0);
+        }
+
         const absStart0 = clamp(base + (it.start||0), base, dpEndAbs);
         const dur0 = clamp(Math.max(snapMin, it.dur||snapMin), snapMin, Math.max(snapMin, dpEndAbs - absStart0));
 
         const mode = (action === "resize") ? "resize" : "drag";
         const grabOffset = clamp(pressAbsMin - absStart0, 0, dur0);
+        const activeStart0 = clamp(it.start||0, 0, availSpan);
 
 dayplanPointer = {
   dayId,
@@ -5983,10 +6177,16 @@ dayplanPointer = {
           grabOffset,
           absStart0,
           dur0,
+          activeStart0,
+          sel: selItems,
+          minDelta,
+          maxDelta,
           el: block
         };
 
+        dayplanSelectedKeys.add(key);
         dayplanSelectedKey = key;
+        dayplanAnchorKey = key;
         dayplanPaletteKey = null;
         block.setPointerCapture?.(e.pointerId);
         e.preventDefault();
@@ -6004,7 +6204,7 @@ dayplanPointer = {
         if(!d) return;
         ensureDayTimingMaps(d);
 
-  const ppm = p.ppm || DAYPLAN_PPM;
+  const ppm = p.ppm || getDayplanPPM() || DAYPLAN_PPM;
   const snapMin = p.snapMin || getDayplanSnap();
   const base = p.base || minutesFromHHMM(d.callTime || "08:00");
   const dpStartAbs = Number.isFinite(p.dpStartAbs) ? p.dpStartAbs : Math.floor(base/60)*60;
@@ -6015,12 +6215,33 @@ dayplanPointer = {
   if(p.mode === "drag"){
     let absStart = absPos - p.grabOffset;
     absStart = snap(absStart, snapMin);
-    absStart = clamp(absStart, base, dpEndAbs - p.dur0);
 
-    const offset = absStart - base;
-    setDayplanStart(d, p.kind, p.id, clamp(offset, 0, DAY_SPAN_MIN - snapMin));
-    // update UI live
-    p.el.style.top = Math.round((absStart - dpStartAbs)*ppm) + "px";
+    // delta based on the active item, applied to the whole selection
+    const activeOffsetRaw = absStart - base;
+    let delta = activeOffsetRaw - (p.activeStart0||0);
+
+    if(Number.isFinite(p.minDelta)) delta = Math.max(delta, p.minDelta);
+    if(Number.isFinite(p.maxDelta)) delta = Math.min(delta, p.maxDelta);
+
+    const group = Array.isArray(p.sel) ? p.sel : [];
+    if(group.length > 1){
+      // place active based on clamped delta (keeps group together)
+      const newActiveOff = clamp((p.activeStart0||0) + delta, 0, DAY_SPAN_MIN - snapMin);
+      absStart = clamp(base + newActiveOff, base, dpEndAbs - p.dur0);
+
+      for(const s of group){
+        const newStart = clamp((s.start0||0) + delta, 0, DAY_SPAN_MIN - snapMin);
+        setDayplanStart(d, s.kind, s.id, newStart);
+        const absS = base + newStart;
+        if(s.el) s.el.style.top = Math.round((absS - dpStartAbs)*ppm) + "px";
+      }
+    }else{
+      absStart = clamp(absStart, base, dpEndAbs - p.dur0);
+      const offset = absStart - base;
+      setDayplanStart(d, p.kind, p.id, clamp(offset, 0, DAY_SPAN_MIN - snapMin));
+      // update UI live
+      p.el.style.top = Math.round((absStart - dpStartAbs)*ppm) + "px";
+    }
   }else if(p.mode === "resize"){
     let dur = absPos - p.absStart0;
     dur = snap(dur, snapMin);
@@ -6034,10 +6255,17 @@ dayplanPointer = {
 
       function endPointer(){
         if(!dayplanPointer) return;
-        const dayId = dayplanPointer.dayId;
+        const p = dayplanPointer;
+        const dayId = p.dayId;
         const d2 = dayId ? getDay(dayId) : null;
         if(!d2) { dayplanPointer = null; return; }
-        resolveOverlapsPushDown(d2, getDayplanSnap());
+
+        if(p.mode === "drag" && Array.isArray(p.sel) && p.sel.length > 1){
+          finalizeDayplanGroupMove(d2, p.sel.map(x=>x.key));
+        }else{
+          resolveOverlapsPushDown(d2, getDayplanSnap());
+        }
+
         touch();
         dayplanPointer = null;
         renderDayPlan();
@@ -8356,6 +8584,30 @@ el("btnDayplanAddNote")?.addEventListener("click", addDayplanNote);
     });
     el("btnDayplanPrint")?.addEventListener("click", ()=>{ setPrintOrientation("landscape"); window.print(); });
     el("dayplanSnap")?.addEventListener("change", ()=> renderDayPlan());
+    el("dayplanZoom")?.addEventListener("change", ()=>{
+      const sc = el("dpScroller");
+      const d = selectedDayplanDayId ? getDay(selectedDayplanDayId) : null;
+      const oldPpm = Number(sc?.dataset.ppm || 0) || (getDayplanPPM() || DAYPLAN_PPM);
+
+      let centerAbs = null;
+      if(sc && d){
+        const base = minutesFromHHMM(d.callTime || "08:00");
+        const dpStartAbs = Math.floor(base/60)*60;
+        const centerY = (sc.scrollTop||0) + (sc.clientHeight||0)/2;
+        centerAbs = dpStartAbs + (centerY / oldPpm);
+      }
+
+      try{ localStorage.setItem("gb_dayplan_zoom", String(el("dayplanZoom")?.value || "")); }catch(_e){}
+      renderDayPlan();
+
+      if(sc && d && centerAbs!=null){
+        const base = minutesFromHHMM(d.callTime || "08:00");
+        const dpStartAbs = Math.floor(base/60)*60;
+        const newPpm = getDayplanPPM() || DAYPLAN_PPM;
+        const newCenterY = (centerAbs - dpStartAbs) * newPpm;
+        sc.scrollTop = Math.max(0, newCenterY - (sc.clientHeight||0)/2);
+      }
+    });
 
     // Número de escena: no permitimos duplicados (si chocan, auto 6A/6B…)
     const numNode = el("scene_number");
