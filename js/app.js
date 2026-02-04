@@ -333,7 +333,7 @@ const shotlistCollapsedSceneIds = new Set();
       "sceneSearch","sceneFilterTOD",
       "dpBankSearch","shootDaySelect","dayplanSelect","shotDaySelect",
       "dayplanSnap","dayplanZoom",
-      "schedSearch","schedZoom","schedSnap",
+      "schedSearch","schedZoom","schedSnap","btnSchedPrint",
       "elxSearch","crewSearch","reportsSearch",
       "btnOpenCallSheet","btnDayplanPrint","btnShotPrint","btnPrintCallSheet",
       "btnBDTemplateWide","btnBDTemplateLong",
@@ -7499,13 +7499,13 @@ grid.appendChild(cell);
     const tab = (reportsTab || "callsheet");
     const tabs = document.querySelectorAll("#reportTabs .reportTabBtn");
     tabs.forEach(btn=> btn.classList.toggle("active", btn.dataset.tab===tab));
-    ["dayplan","callsheet","shotlist","elements"].forEach(t=>{
+    ["dayplan","schedule","callsheet","shotlist","elements"].forEach(t=>{
       el(`reportPane-${t}`)?.classList.toggle("hidden", t!==tab);
     });
   }
 
   function setReportsTab(tab){
-    const t = (["dayplan","callsheet","shotlist","elements"].includes(tab)) ? tab : "callsheet";
+    const t = (["dayplan","schedule","callsheet","shotlist","elements"].includes(tab)) ? tab : "callsheet";
     reportsTab = t;
     localStorage.setItem("gb_reports_tab", t);
     applyReportsTabUI();
@@ -7526,6 +7526,10 @@ grid.appendChild(cell);
     }
     if(reportsTab==="elements"){
       renderReportElementsDetail(d);
+      return;
+    }
+    if(reportsTab==="schedule"){
+      renderReportScheduleDetail();
       return;
     }
     // Call Sheet
@@ -7681,6 +7685,77 @@ function buildElementsBySceneScreenPage(d, opts={}){
   }
 
 
+
+
+
+function renderReportScheduleDetail(){
+  const wrap = el("reportScheduleDetail");
+  if(!wrap) return;
+  wrap.innerHTML = "";
+
+  sortShootDaysInPlace();
+  const days = (state.shootDays || []);
+  if(!days.length){
+    wrap.innerHTML = `<div class="catBlock"><div class="items">No hay días cargados.</div></div>`;
+    return;
+  }
+
+  const proj = esc(state.meta?.title || "Proyecto");
+  const hint = document.createElement("div");
+  hint.className = "catBlock";
+  hint.innerHTML = `
+    <div class="hdr"><span class="dot" style="background:var(--cat-vehicles)"></span>Plan General</div>
+    <div class="items">
+      <div><b>${proj}</b> · ${esc(days.length)} días</div>
+      <div class="muted">Usá el botón <b>Imprimir</b> para sacar el Plan General completo (horizontal).</div>
+    </div>
+  `;
+  wrap.appendChild(hint);
+
+  const table = document.createElement("div");
+  table.className = "catBlock";
+  table.innerHTML = `<div class="hdr"><span class="dot" style="background:var(--cat-props)"></span>Resumen</div>`;
+  const items = document.createElement("div");
+  items.className = "items";
+
+  const rows = days.map((d)=>{
+    ensureDayTimingMaps(d);
+    const dayTitle = `${formatDayTitle(d.date)}${d.label ? " · "+d.label : ""}`.trim();
+    const scenes = (d.sceneIds||[]).map(getScene).filter(Boolean);
+    const pages = scenes.reduce((acc, s)=> acc + (Number(s.pages)||0), 0);
+    const notes = (d.blocks||[]).length || 0;
+    return `
+      <tr>
+        <td>${esc(dayTitle||"Día")}</td>
+        <td>${esc(d.callTime||"—")}</td>
+        <td>${esc(d.location||"—")}</td>
+        <td style="text-align:right;">${esc(String(scenes.length))}</td>
+        <td style="text-align:right;">${esc(String(notes))}</td>
+        <td style="text-align:right;">${esc(fmtPages(pages))}</td>
+      </tr>
+    `;
+  }).join("");
+
+  items.innerHTML = `
+    <div class="tableWrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Día</th>
+            <th style="width:90px;">Call</th>
+            <th>Locación</th>
+            <th style="width:70px; text-align:right;">Esc.</th>
+            <th style="width:70px; text-align:right;">Notas</th>
+            <th style="width:70px; text-align:right;">Pág</th>
+          </tr>
+        </thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>
+  `;
+  table.appendChild(items);
+  wrap.appendChild(table);
+}
 
 function renderReportDayplanDetail(d){
     const wrap = el("reportDayplanDetail");
@@ -7935,7 +8010,7 @@ function renderReportDayplanDetail(d){
     return _gbPrintRoot;
   }
   function cleanupGbPrintRoot(){
-    try{ document.body.classList.remove("gbPrintingShotlist","gbPrintingCallsheet","gbPrintingElements","gbPrintMobile"); }catch(_e){}
+    try{ document.body.classList.remove("gbPrintingShotlist","gbPrintingCallsheet","gbPrintingElements","gbPrintingSchedule","gbPrintMobile"); }catch(_e){}
     try{ if(_gbPrintRoot) _gbPrintRoot.innerHTML = ""; }catch(_e){}
   }
 
@@ -8124,6 +8199,126 @@ async function printShotlistByDayId(dayId){
       window.print();
     } finally { clearPrintOrientation(); cleanupGbPrintRoot(); }
   }
+
+
+// ===================== PRINT: Plan General (todos los días) =====================
+function buildPlanGeneralPrintHTML(){
+  sortShootDaysInPlace();
+  const project = esc(state?.meta?.title || "Proyecto");
+  const gen = new Date().toLocaleString("es-AR");
+
+  const days = (state.shootDays || []);
+  if(!days.length){
+    return `
+      <div class="pgPrintWrap">
+        <div class="pgPrintHeader">
+          <div class="pgTitle">Plan General</div>
+          <div class="pgSub"><b>${project}</b> · ${esc(gen)}</div>
+        </div>
+        <div class="muted">No hay días cargados.</div>
+      </div>
+    `;
+  }
+
+  const cards = days.map((d)=>{
+    ensureDayTimingMaps(d);
+    const dayTitle = `${formatDayTitle(d.date)}${d.label ? " · "+d.label : ""}`.trim();
+    const call = d.callTime || "";
+    const loc  = d.location || "";
+
+    const span = Math.max(5, dayplanAvailSpan(d));
+    const items = [];
+
+    for(const sid of (d.sceneIds||[])){
+      const s = getScene(sid);
+      if(!s) continue;
+      const startMin = clamp(Number(d.times?.[sid] ?? 0) || 0, 0, Math.max(0, span-1));
+      const durMin   = clamp(Number(d.durations?.[sid] ?? 60) || 60, 5, span);
+      items.push({
+        kind:"scene",
+        start:startMin,
+        dur:durMin,
+        title:`#${s.number||""} — ${s.slugline||""}`.trim()
+      });
+    }
+
+    for(const b of (d.blocks||[])){
+      if(!b) continue;
+      const startMin = clamp(Number(b.startMin ?? 0) || 0, 0, Math.max(0, span-1));
+      const durMin   = clamp(Number(b.durMin ?? 30) || 30, 5, span);
+      items.push({
+        kind:"block",
+        start:startMin,
+        dur:durMin,
+        title:`🗒 ${b.title||"Tarea"}`
+      });
+    }
+
+    items.sort((a,b)=> (a.start||0) - (b.start||0));
+
+    const rows = items.length ? items.map((it)=>{
+      const tA = clockLabelFromCall(d, it.start||0);
+      const tB = clockLabelFromCall(d, (it.start||0) + (it.dur||0));
+      const dur = formatDurHHMMCompact(it.dur||0);
+      const cls = it.kind==="block" ? "pgRowNote" : "";
+      return `
+        <tr class="${cls}">
+          <td class="pgTime"><span class="pgT">${esc(tA)}</span><span class="pgSep">–</span><span class="pgT">${esc(tB)}</span></td>
+          <td class="pgItem">${esc(it.title||"")}</td>
+          <td class="pgDur">${esc(dur)}</td>
+        </tr>
+      `;
+    }).join("") : `<tr><td colspan="3" class="muted">—</td></tr>`;
+
+    const nightBadge = d.night ? `<span class="pgBadge">Nocturno</span>` : "";
+
+    return `
+      <div class="pgDayCard">
+        <div class="pgDayHead">
+          <div class="pgDayTop">
+            <div class="pgDayTitle">${esc(dayTitle||"Día")}</div>
+            ${nightBadge}
+          </div>
+          <div class="pgDayMeta">Call ${esc(call||"—")} · ${esc(loc||"—")}</div>
+        </div>
+
+        <table class="pgTable">
+          <thead>
+            <tr>
+              <th style="width:110px;">Hora</th>
+              <th>Escena / Tarea</th>
+              <th style="width:58px; text-align:right;">Dur</th>
+            </tr>
+          </thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>
+    `;
+  }).join("");
+
+  return `
+    <div class="pgPrintWrap">
+      <div class="pgPrintHeader">
+        <div class="pgTitle">Plan General</div>
+        <div class="pgSub"><b>${project}</b> · ${esc(gen)}</div>
+      </div>
+      <div class="pgGrid">${cards}</div>
+    </div>
+  `;
+}
+
+async function printPlanGeneral(){
+  applyPrintDeviceFlag();
+  const root = ensureGbPrintRoot();
+  root.innerHTML = buildPlanGeneralPrintHTML();
+  document.body.classList.add("gbPrintingSchedule");
+  setPrintOrientation("landscape", 6);
+  try{
+    await waitForImages(root, 2500);
+    window.print();
+  } finally { clearPrintOrientation(); cleanupGbPrintRoot(); }
+}
+
 
   // Bank collapse
   function applyBankCollapsedUI(){
@@ -9338,6 +9533,10 @@ el("scriptVerSelect")?.addEventListener("change", ()=>{
     el("dpBtnToggleBankDock")?.addEventListener("click", expandBank);
 
     el("schedZoom")?.addEventListener("change", ()=>{ renderScheduleBoard(); });
+
+    el("btnSchedPrint")?.addEventListener("click", ()=>{
+      printPlanGeneral();
+    });
     el("schedSnap")?.addEventListener("change", ()=>{
       for(const d of state.shootDays) resolveOverlapsPushDown(d, Number(el("schedSnap").value||15));
       touch();
@@ -9383,6 +9582,10 @@ el("scriptVerSelect")?.addEventListener("change", ()=>{
       }
       if(reportsTab === "elements"){
         printElementsByDayId(getReportsSelectedDayId());
+        return;
+      }
+      if(reportsTab === "schedule"){
+        printPlanGeneral();
         return;
       }
       setPrintOrientation("landscape");

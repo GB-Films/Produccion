@@ -3514,3 +3514,93 @@ body.readOnly #callDayNotes{
   opacity:.75;
   cursor:not-allowed;
 }
+
+
+/* ===================== Plan General (impresión) ===================== */
+.pgPrintWrap{
+  padding: 8mm;
+  box-sizing: border-box;
+  font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+}
+.pgPrintHeader{
+  display:flex;
+  justify-content:space-between;
+  align-items:flex-end;
+  gap:12px;
+  border-bottom:1px solid #ddd;
+  padding-bottom:6px;
+  margin-bottom:10px;
+}
+.pgTitle{ font-size:18pt; font-weight:800; letter-spacing:.2px; }
+.pgSub{ font-size:10pt; color:#333; }
+
+.pgGrid{
+  display:grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap:10px;
+  align-items:start;
+}
+.pgDayCard{
+  border:1px solid #ddd;
+  border-radius:14px;
+  overflow:hidden;
+  break-inside: avoid;
+  background:#fff;
+}
+.pgDayHead{
+  padding:8px 10px;
+  background:#f6f6f6;
+  border-bottom:1px solid #ddd;
+}
+.pgDayTop{ display:flex; justify-content:space-between; gap:10px; align-items:center; }
+.pgDayTitle{ font-weight:800; font-size:11pt; line-height:1.1; }
+.pgBadge{
+  font-size:9pt;
+  border:1px solid #bbb;
+  padding:2px 8px;
+  border-radius:999px;
+  background:#fff;
+  white-space:nowrap;
+}
+.pgDayMeta{ margin-top:2px; font-size:9.5pt; color:#333; }
+
+.pgTable{ width:100%; border-collapse:collapse; }
+.pgTable thead{ display: table-header-group; }
+.pgTable th{
+  text-align:left;
+  font-size:9pt;
+  padding:6px 10px;
+  background:#fafafa;
+  border-bottom:1px solid #e6e6e6;
+}
+.pgTable td{
+  font-size:9.5pt;
+  padding:6px 10px;
+  border-bottom:1px solid #eee;
+  vertical-align:top;
+}
+.pgTime{ white-space:nowrap; font-variant-numeric: tabular-nums; }
+.pgDur{ text-align:right; white-space:nowrap; font-variant-numeric: tabular-nums; }
+.pgRowNote td{ background: rgba(0,0,0,0.02); }
+
+body.gbPrintMobile.gbPrintingSchedule .pgGrid{ grid-template-columns: repeat(2, 1fr); }
+body.gbPrintMobile.gbPrintingSchedule .pgTitle{ font-size:16pt; }
+body.gbPrintMobile.gbPrintingSchedule .pgTable th,
+body.gbPrintMobile.gbPrintingSchedule .pgTable td{ padding:5px 8px; font-size:9pt; }
+
+body.gbPrintingSchedule *{ visibility:hidden !important; }
+body.gbPrintingSchedule #gbPrintRoot,
+body.gbPrintingSchedule #gbPrintRoot *{ visibility:visible !important; }
+body.gbPrintingSchedule #gbPrintRoot{
+  display:block !important;
+  position:absolute;
+  left:0; top:0;
+  width:100%;
+  padding:0 !important;
+  margin:0 !important;
+  background:#fff;
+  color:#000;
+}
+body.gbPrintingSchedule #gbPrintRoot,
+body.gbPrintingSchedule #gbPrintRoot *{ color:#000 !important; }
+body.gbPrintingSchedule .muted{ color:#333 !important; }

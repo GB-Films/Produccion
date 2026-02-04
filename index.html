@@ -475,6 +475,7 @@
                   <option value="30">30 min</option>
                 </select>
               </label>
+              <button class="btn" id="btnSchedPrint">Imprimir</button>
             </div>
           </div>
           <div class="cardContent scheduleContent">
@@ -626,6 +627,7 @@
             <div class="cardContent">
               <div class="reportTabs screenOnly" id="reportTabs">
                 <button class="btn reportTabBtn" data-tab="dayplan">Plan de Rodaje</button>
+                <button class="btn reportTabBtn" data-tab="schedule">Plan General</button>
                 <button class="btn reportTabBtn active" data-tab="callsheet">Call Sheet</button>
                 <button class="btn reportTabBtn" data-tab="shotlist">Shotlist</button>
                 <button class="btn reportTabBtn" data-tab="elements">Elementos</button>
@@ -642,6 +644,9 @@
               </div>
               <div id="reportPane-elements" class="reportPane hidden">
                 <div id="reportElementsDetail"></div>
+              </div>
+              <div id="reportPane-schedule" class="reportPane hidden">
+                <div id="reportScheduleDetail"></div>
               </div>
             </div>
         </div>
