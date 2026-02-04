@@ -5675,15 +5675,10 @@ items.push({
 
     <div class="dpRight">
       <div class="dpActions noPrint">
-        <details class="dpDayMenu" id="dpDayMenu">
-          <summary class="btn ghost small dpDayMenuBtn" title="Opciones del día">⋯</summary>
-          <div class="dpDayMenuPop">
-            <div class="dpDayMenuItem" id="dpDayNightMount"></div>
-            <div class="dpDayMenuHelp muted small">Extiende el día hasta las 06:00 del día siguiente.</div>
-            <div class="dpDayMenuSep"></div>
-            <div class="dpDayMenuItem" id="dpDayDeleteMount"></div>
-          </div>
-        </details>
+        <div class="row gap" style="align-items:center; flex-wrap:wrap; justify-content:flex-end;">
+          <div id="dpDayNightMount"></div>
+          <div id="dpDayDeleteMount"></div>
+        </div>
       </div>
 
       <div class="dpMeta">
@@ -5739,12 +5734,12 @@ items.push({
       if(nightBtn && nightMount){
         nightMount.innerHTML = "";
         nightMount.appendChild(nightBtn);
-        nightBtn.classList.add("full");
+        nightBtn.classList.remove("full");
       }
       if(delBtn && delMount){
         delMount.innerHTML = "";
         delMount.appendChild(delBtn);
-        delBtn.classList.add("full");
+        delBtn.classList.remove("full");
       }
     }catch(_e){}
 
