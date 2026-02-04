@@ -1839,6 +1839,8 @@ body.gbPrintingElements .muted{ color:#333 !important; }
 
 
 /* ===================== PLAN DE RODAJE (VISTA DIARIA) ===================== */
+.dpToolbar{ justify-content:space-between; align-items:center; }
+
 .dayplanHeader{
   display:flex;
   justify-content:space-between;
@@ -1846,6 +1848,40 @@ body.gbPrintingElements .muted{ color:#333 !important; }
   align-items:flex-end;
   flex-wrap:wrap;
 }
+
+.dpRight{
+  display:flex;
+  flex-direction:column;
+  align-items:flex-end;
+  gap:10px;
+  max-width:min(640px, 95vw);
+}
+
+.dpActions{ display:flex; justify-content:flex-end; width:100%; }
+
+.dpDayMenu{ position:relative; }
+.dpDayMenu summary{ list-style:none; cursor:pointer; }
+.dpDayMenu summary::-webkit-details-marker{ display:none; }
+.dpDayMenuBtn{ padding:6px 10px; line-height:1; display:inline-flex; align-items:center; justify-content:center; }
+
+.dpDayMenuPop{
+  position:absolute;
+  right:0;
+  top:calc(100% + 8px);
+  min-width:240px;
+  padding:10px;
+  border:1px solid var(--border);
+  border-radius:14px;
+  background: rgba(0,0,0,.65);
+  backdrop-filter: blur(8px);
+  box-shadow: 0 14px 38px rgba(0,0,0,.45);
+  z-index:60;
+}
+.dpDayMenuItem{ display:block; }
+.dpDayMenuHelp{ margin:6px 0 8px; }
+.dpDayMenuSep{ height:1px; background: rgba(255,255,255,.14); margin:8px 0; }
+
+.btn.full{ width:100%; display:flex; align-items:center; justify-content:center; }
 .dpTitle{display:flex; flex-direction:column; gap:6px;}
 .dpRowLine{display:flex; align-items:baseline; gap:10px; flex-wrap:wrap;}
 .dayplanHeader .metaPill{font-size:13px; padding:7px 12px;}

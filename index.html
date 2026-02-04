@@ -392,40 +392,45 @@
             <div class="card" id="dayplanCard">
           <div class="cardHeader">
             <h2 class="cardTitle">Plan de Rodaje</h2>
-            <div class="row gap noPrint" style="flex-wrap:wrap">
-              <select class="input compact" id="dayplanSelect"></select>
-              <button class="btn ghost" id="btnDayplanNight" type="button" title="Extiende el día hasta las 06:00 del día siguiente">Horario nocturno</button>
-              <button class="btn" id="btnAddShootDay">+ Día</button>
-              <button class="btn danger" id="btnDeleteShootDay">Borrar Día</button>
-
-              <div class="row gap" style="align-items:center">
-                <span class="muted">Snap</span>
-                <select class="input compact" id="dayplanSnap" style="width:90px">
-                  <option value="5">5m</option>
-                  <option value="10">10m</option>
-                  <option value="15" selected>15m</option>
-                  <option value="30">30m</option>
-                </select>
+            <div class="dpToolbar row gap noPrint" style="flex-wrap:wrap">
+              <div class="row gap" style="flex-wrap:wrap">
+                <select class="input compact" id="dayplanSelect"></select>
+                <button class="btn" id="btnAddShootDay">+ Día</button>
+                <button class="btn" id="btnDayplanAddNote">+ Nota / tarea</button>
               </div>
 
-              <div class="row gap" style="align-items:center">
-                <span class="muted">Zoom</span>
-                <select class="input compact" id="dayplanZoom" style="width:110px">
-                  <option value="60">Bajo</option>
-                  <option value="72" selected>Medio</option>
-                  <option value="96">Grande</option>
-                  <option value="120">Gigante</option>
-                  <option value="160">Titan</option>
-                </select>
-              </div>
+              <div class="row gap" style="align-items:center; flex-wrap:wrap">
+                <label class="row gap small muted" style="align-items:center">Snap
+                  <select class="input compact" id="dayplanSnap" style="width:90px">
+                    <option value="5">5m</option>
+                    <option value="10">10m</option>
+                    <option value="15" selected>15m</option>
+                    <option value="30">30m</option>
+                  </select>
+                </label>
 
-              <button class="btn" id="btnDayplanAddNote">+ Nota / tarea</button>
-              <button class="btn ghost" id="btnDayplanAuto" title="Acomoda el horario sin solaparse">Auto</button>
-              <button class="btn" id="btnDayplanPrint">Imprimir</button>
+                <label class="row gap small muted" style="align-items:center">Zoom
+                  <select class="input compact" id="dayplanZoom" style="width:110px">
+                    <option value="60">Bajo</option>
+                    <option value="72" selected>Medio</option>
+                    <option value="96">Grande</option>
+                    <option value="120">Gigante</option>
+                    <option value="160">Titan</option>
+                  </select>
+                </label>
+
+                <button class="btn" id="btnDayplanPrint">Imprimir</button>
+              </div>
             </div>
           </div>
 
           <div class="cardContent">
+            <!-- Pool de botones (se montan dentro del día seleccionado) -->
+            <div class="hidden noPrint" id="dpDayActionPool">
+              <button class="btn ghost small" id="btnDayplanNight" type="button" title="Extiende el día hasta las 06:00 del día siguiente">Horario nocturno</button>
+              <button class="btn danger small" id="btnDeleteShootDay" type="button">Borrar Día</button>
+            </div>
+
             <div id="dayplanHead"></div>
             <div class="spacer"></div>
             <div class="dayplanBody">

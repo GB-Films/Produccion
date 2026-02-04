@@ -5672,8 +5672,23 @@ items.push({
         </div>
       </div>
     </div>
-    <div class="dpMeta">
-      <div class="muted small">${esc((d.notes||"").trim() ? (d.notes||"").trim() : "Click en el título para editar fecha, call time, locación, nombre y notas.")}</div>
+
+    <div class="dpRight">
+      <div class="dpActions noPrint">
+        <details class="dpDayMenu" id="dpDayMenu">
+          <summary class="btn ghost small dpDayMenuBtn" title="Opciones del día">⋯</summary>
+          <div class="dpDayMenuPop">
+            <div class="dpDayMenuItem" id="dpDayNightMount"></div>
+            <div class="dpDayMenuHelp muted small">Extiende el día hasta las 06:00 del día siguiente.</div>
+            <div class="dpDayMenuSep"></div>
+            <div class="dpDayMenuItem" id="dpDayDeleteMount"></div>
+          </div>
+        </details>
+      </div>
+
+      <div class="dpMeta">
+        <div class="muted small">${esc((d.notes||"").trim() ? (d.notes||"").trim() : "Click en el título para editar fecha, call time, locación, nombre y notas.")}</div>
+      </div>
     </div>
   </div>
 
@@ -5714,6 +5729,24 @@ items.push({
     </div>
   </div>
 `;
+
+    // Montar acciones del día (reusamos los botones existentes para no perder listeners)
+    try{
+      const nightBtn = el("btnDayplanNight");
+      const delBtn = el("btnDeleteShootDay");
+      const nightMount = head.querySelector("#dpDayNightMount");
+      const delMount = head.querySelector("#dpDayDeleteMount");
+      if(nightBtn && nightMount){
+        nightMount.innerHTML = "";
+        nightMount.appendChild(nightBtn);
+        nightBtn.classList.add("full");
+      }
+      if(delBtn && delMount){
+        delMount.innerHTML = "";
+        delMount.appendChild(delBtn);
+        delBtn.classList.add("full");
+      }
+    }catch(_e){}
 
     // Bind del editor de Detalle del Día (delegado en el header para sobrevivir re-render)
     if(head.dataset.metaBound !== "1"){
