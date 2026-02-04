@@ -6502,6 +6502,7 @@ dayplanPointer = {
 
     const snapMin = getDayplanSnap();
     const base = minutesFromHHMM(d.callTime || "08:00");
+    const dpEndAbs = dayplanEndAbs(d);
 
     const it = dayplanSelectedKey ? items.find(x=>x.key===dayplanSelectedKey) : null;
     if(!it){
