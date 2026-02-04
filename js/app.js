@@ -5647,12 +5647,19 @@ items.push({
     const dpSpanMin = dpEndAbs - dpStartAbs;
     const items = buildDayplanItems(d);
 
+    // Preservar botones de acciones del día (si están dentro del header, innerHTML los destruiría)
+    const preservedNightBtn = el("btnDayplanNight");
+    const preservedDeleteBtn = el("btnDeleteShootDay");
+    const preserveFrag = document.createDocumentFragment();
+    if(preservedNightBtn) preserveFrag.appendChild(preservedNightBtn);
+    if(preservedDeleteBtn) preserveFrag.appendChild(preservedDeleteBtn);
+
     // Toggle UI "Horario nocturno"
-    const btnNight = el("btnDayplanNight");
-    if(btnNight){
-      btnNight.classList.toggle("toggleOn", !!d.night);
-      btnNight.textContent = d.night ? "Horario nocturno ✓" : "Horario nocturno";
+    if(preservedNightBtn){
+      preservedNightBtn.classList.toggle("toggleOn", !!d.night);
+      preservedNightBtn.textContent = d.night ? "Horario nocturno ✓" : "Horario nocturno";
     }
+
 
     // Header (día seleccionado)
     const proj = esc(state.meta?.title || "Proyecto");
@@ -5727,8 +5734,8 @@ items.push({
 
     // Montar acciones del día (reusamos los botones existentes para no perder listeners)
     try{
-      const nightBtn = el("btnDayplanNight");
-      const delBtn = el("btnDeleteShootDay");
+      const nightBtn = preservedNightBtn;
+      const delBtn = preservedDeleteBtn;
       const nightMount = head.querySelector("#dpDayNightMount");
       const delMount = head.querySelector("#dpDayDeleteMount");
       if(nightBtn && nightMount){
