@@ -2381,6 +2381,11 @@ gap:6px 10px;
   .printOnly{ display:block !important; }
 
 
+  /* Plan de Rodaje (tabla de impresión): evitar cortes y repetir encabezado */
+  .dayplanPrintTable thead{ display: table-header-group; }
+  .dayplanPrintTable tr{ break-inside: avoid; page-break-inside: avoid; }
+
+
   /* Plan del día */
   .dayplanNotes{ background:#fff; border:1px solid #ddd; }
   .dayplanTable{ font-size:10.5pt; }

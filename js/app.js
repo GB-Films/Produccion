@@ -6387,11 +6387,13 @@ ${
     }
 
 
-    // Print table (se ve solo al imprimir)
+    // Print table (se ve solo al imprimir) — igual a Reportes
+    const snapMinPrint = Number(el("schedSnap")?.value || snapMin || 15);
+
     const rows = items.map((it)=>{
-      const absStart = clamp(base + (it.start||0), base, dpEndAbs - snapMin);
-      const durMax = Math.max(snapMin, dpEndAbs - absStart);
-      const dur = clamp(Math.max(snapMin, it.dur||snapMin), snapMin, durMax);
+      const absStart = clamp(base + (it.start||0), base, dpEndAbs - snapMinPrint);
+      const durMax = Math.max(snapMinPrint, dpEndAbs - absStart);
+      const dur = clamp(Math.max(snapMinPrint, it.dur||snapMinPrint), snapMinPrint, durMax);
       const absEnd = clamp(absStart + dur, base, dpEndAbs);
       const isNote = it.kind==="block";
       const col = safeHexColor(it.color || (it.kind==="scene" ? "#BFDBFE" : "#E5E7EB"));
@@ -6399,14 +6401,13 @@ ${
       const tA = clockLabelAbs(absStart);
       const tB = clockLabelAbs(absEnd);
       const clockHTML = `<div class="dpClock2"><div>${esc(tA)}</div><div>${esc(tB)}</div></div>`;
-const num = isNote ? "NOTA" : (it.number||"");
-const title = isNote ? (it.title||"") : (it.slugline||it.title||"");
-const ie = isNote ? "" : (it.intExt||"");
-const locTxt = isNote ? "" : (it.location||"");
-const todTxt = isNote ? "" : (it.timeOfDay||"");
-const pagesTxt = isNote ? "" : ((Number(it.pages)||0) > 0 ? fmtPages(it.pages) : "");
-const sumTxt = isNote ? (it.detail||"") : (notesOrShortSummary(it.notes, it.summary) || "");
-return `
+      const num = isNote ? "NOTA" : (it.number||"");
+      const title = isNote ? (it.title||"") : (it.slugline||it.title||"");
+      const ie = isNote ? "" : (it.intExt||"");
+      const locTxt = isNote ? "" : (it.location||"");
+      const todTxt = isNote ? "" : (it.timeOfDay||"");
+      const sumTxt = isNote ? (it.detail||"") : (notesOrShortSummary(it.notes, it.summary) || "");
+      return `
   <tr class="${isNote ? "dpPrintNote" : ""}" style="background:${eattr(bg)};border-left:8px solid ${eattr(col)};">
     <td class="cHour">${clockHTML}</td>
     <td class="cDur">${esc(formatDurHHMMCompact(dur))}</td>
@@ -6415,11 +6416,10 @@ return `
     <td class="cIE">${esc(ie)}</td>
     <td class="cLoc">${esc(locTxt)}</td>
     <td class="cTod">${esc(todTxt)}</td>
-    <td class="cPag">${esc(pagesTxt)}</td>
     <td class="cSum">${esc(sumTxt)}</td>
   </tr>
 `;
-}).join("");
+    }).join("");
 
     printWrap.innerHTML = `
       <div class="catBlock dpPrintBlock">
@@ -6432,17 +6432,14 @@ return `
           <table class="dayplanPrintTable">
             <colgroup>
               <col class="colHour"><col class="colDur"><col class="colNro"><col class="colTitle">
-              <col class="colIE"><col class="colLoc"><col class="colTod"><col class="colPag"><col class="colSum">
+              <col class="colIE"><col class="colLoc"><col class="colTod"><col class="colSum">
             </colgroup>
-            <thead>
-              <tr><th>Hora</th><th>Dur</th><th>Nro</th><th>Título</th><th>Int/Ext</th><th>Lugar</th><th>Momento</th><th>Largo (Pág)</th><th>Notas</th></tr>
-            </thead>
-            <tbody>${rows || `<tr><td colspan="9" class="muted">—</td></tr>`}</tbody>
+            <thead><tr><th>Hora</th><th>Dur</th><th>Nro</th><th>Título</th><th>I/E</th><th>Locación</th><th>Momento</th><th>Notas</th></tr></thead>
+            <tbody>${rows || `<tr><td colspan="8" class="muted">—</td></tr>`}</tbody>
           </table>
         </div>
       </div>
     `;
-
     renderDayplanInspector(d, items);
 
     // Bind interactions once
