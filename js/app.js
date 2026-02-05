@@ -3270,7 +3270,7 @@ function setupScheduleWheelScroll(){
     board.innerHTML = "";
     sortShootDaysInPlace();
 
-    for(const d of state.shootDays){
+    for(const d of daysToShow){
       ensureDayTimingMaps(d);
       const span = Math.max(5, dayplanAvailSpan(d));
 
@@ -4793,20 +4793,23 @@ function renderDayCast(){
   function updateSchedDaysBtn(){
     const btn = el("btnSchedDays");
     if(!btn) return;
+    // Botón ícono: el estado va en title + clase
+    btn.textContent = "📅";
+    btn.setAttribute("aria-label","Elegir días");
     ensureSchedDaySelLoaded();
     const total = (state.shootDays||[]).length;
     if(!total){
-      btn.textContent = "📅 Días";
+      btn.title = "Elegir días (no hay días cargados)";
       btn.classList.remove("active");
       return;
     }
     if(schedDaySel.mode === "all"){
-      btn.textContent = "📅 Días: Todos";
+      btn.title = "Días: Todos";
       btn.classList.remove("active");
       return;
     }
     const count = getSchedSelectedDayIds().size;
-    btn.textContent = `📅 Días: ${count}/${total}`;
+    btn.title = `Días: ${count}/${total}`;
     btn.classList.add("active");
   }
 
