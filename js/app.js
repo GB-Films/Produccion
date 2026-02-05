@@ -428,8 +428,13 @@ const shotlistCollapsedSceneIds = new Set();
       if(isAllowed(t)) return;
 
       // Block common edit controls (buttons, action icons).
-      const btn = t?.closest?.('button, [role="button"], [data-action], .dpMiniBtn, .dpSwatchBtn, .btn, .resize, .dpResize');
+      const btn = t?.closest?.('button, [role="button"], [data-action], .dpMiniBtn, .dpSwatchBtn, .btn, .resize, .dpResize, .chip.toggle, .crewPickItem');
       if(!btn) return;
+
+      // Si estás clickeando un input dentro de un item de Crew, dejamos el foco (para copiar), pero sin permitir cambios.
+      if(btn.classList?.contains("crewPickItem")){
+        if(t?.closest?.("input,button,select,textarea,label")) return;
+      }
 
       // Nav is always allowed
       if(btn.classList?.contains("navBtn") || btn.closest?.(".navBtn")) return;
