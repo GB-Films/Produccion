@@ -3022,10 +3022,8 @@ function setupScheduleWheelScroll(){
     if(!s) return;
     if(!confirm(`Borrar escena #${s.number}?`)) return;
 
-    const globalBaseHour = computeScheduleGlobalBaseHour(daysToShow);
-    board.dataset.baseHour = String(globalBaseHour);
-
-    for(const d of daysToShow){
+    for(const d of (state.shootDays || [])){
+      ensureDayTimingMaps(d);
       d.sceneIds = (d.sceneIds||[]).filter(x=>x!==s.id);
       if(d.times) delete d.times[s.id];
       if(d.durations) delete d.durations[s.id];
@@ -4776,7 +4774,7 @@ function saveSchedDayFilter(obj){
 function getScheduleDaysFiltered(){
   sortShootDaysInPlace();
   const f = loadSchedDayFilter();
-  const days = getScheduleDaysFiltered();
+  const days = (state.shootDays || []);
   if(f.mode==="all") return days.slice();
   if(f.mode==="none") return [];
   const set = new Set(f.selected || []);
@@ -4996,7 +4994,7 @@ function bindSchedDayPickerUI(){
     const daysToShow = getScheduleDaysFiltered();
 
     if(!state.shootDays.length){
-      board.innerHTML = `<div class="muted">${esc(msg)}</div>`;
+      board.innerHTML = `<div class="muted">No hay días cargados.</div>`;
       setupScheduleTopScrollbar();
       return;
     }
@@ -5007,10 +5005,13 @@ function bindSchedDayPickerUI(){
       return;
     }
 
+    const globalBaseHour = computeScheduleGlobalBaseHour(daysToShow);
+    board.dataset.baseHour = String(globalBaseHour);
+
     const zoom = Number(el("schedZoom")?.value || 90);
     const pxPerMin = zoom / 60;
 
-    for(const d of state.shootDays){
+    for(const d of daysToShow){
       ensureDayTimingMaps(d);
       const span = Math.max(5, dayplanAvailSpan(d));
 
@@ -8477,7 +8478,7 @@ function buildPlanGeneralPrintHTML(){
           <div class="pgTitle">Plan General</div>
           <div class="pgSub"><b>${project}</b> · ${esc(gen)}</div>
         </div>
-        <div class="muted">No hay días cargados.</div>
+        <div class="muted">${esc(msg)}</div>
       </div>
     `;
   }
