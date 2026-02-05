@@ -333,7 +333,7 @@ const shotlistCollapsedSceneIds = new Set();
       "sceneSearch","sceneFilterTOD",
       "dpBankSearch","shootDaySelect","dayplanSelect","shotDaySelect",
       "dayplanSnap","dayplanZoom",
-      "schedSearch","schedZoom","schedSnap","btnSchedPrint",
+      "schedSearch","schedZoom","schedSnap","btnSchedDays","btnSchedPrint","schedDayPicker","schedDayPickerClose","schedCalPrev","schedCalNext","schedCalAll","schedCalNone","schedCalDone","schedCalGrid",
       "elxSearch","crewSearch","reportsSearch",
       "btnOpenCallSheet","btnDayplanPrint","btnShotPrint","btnPrintCallSheet",
       "btnBDTemplateWide","btnBDTemplateLong",
@@ -426,28 +426,6 @@ const shotlistCollapsedSceneIds = new Set();
       if(!isReadOnly()) return;
       const t = e.target;
       if(isAllowed(t)) return;
-
-      // 🔒 Call Diario: PU/RTS chips + selector de Equipo Técnico
-      const puRts = t?.closest?.('#tglPUCast, #tglPUCrew, #tglRTS');
-      if(puRts && !puRts.closest?.('[data-ro-allow="1"]')){
-        e.preventDefault();
-        e.stopImmediatePropagation();
-        roToast();
-        return;
-      }
-
-      // Equipo Técnico: el click en el tile selecciona/deselecciona (bloquear en Lector)
-      const crewItem = t?.closest?.('.crewPickItem');
-      if(
-        crewItem &&
-        !t?.closest?.('input,button,select,textarea,label') &&
-        !crewItem.closest?.('[data-ro-allow="1"]')
-      ){
-        e.preventDefault();
-        e.stopImmediatePropagation();
-        roToast();
-        return;
-      }
 
       // Block common edit controls (buttons, action icons).
       const btn = t?.closest?.('button, [role="button"], [data-action], .dpMiniBtn, .dpSwatchBtn, .btn, .resize, .dpResize');
@@ -3044,7 +3022,8 @@ function setupScheduleWheelScroll(){
     if(!s) return;
     if(!confirm(`Borrar escena #${s.number}?`)) return;
 
-    for(const d of state.shootDays){
+    for(const d of (state.shootDays || [])){
+      ensureDayTimingMaps(d);
       d.sceneIds = (d.sceneIds||[]).filter(x=>x!==s.id);
       if(d.times) delete d.times[s.id];
       if(d.durations) delete d.durations[s.id];
@@ -4759,6 +4738,256 @@ function renderDayCast(){
 
   // ===================== Schedule =====================
 
+
+// --- Plan General: selector de días (calendario) ---
+const SCHED_DAYFILTER_PREFIX = "gb_sched_dayfilter_v1__";
+function getSchedDayFilterKey(){
+  try{
+    const cfg = (typeof StorageLayer!=="undefined" && StorageLayer.loadCfg) ? StorageLayer.loadCfg() : null;
+    const k = cfg?.binId || cfg?.projectId || cfg?.projectName || "default";
+    return SCHED_DAYFILTER_PREFIX + String(k);
+  }catch(_e){
+    return SCHED_DAYFILTER_PREFIX + "default";
+  }
+}
+
+function loadSchedDayFilter(){
+  let raw = null;
+  try{ raw = localStorage.getItem(getSchedDayFilterKey()); }catch(_e){}
+  let obj = null;
+  try{ obj = raw ? JSON.parse(raw) : null; }catch(_e){ obj=null; }
+  if(!obj || typeof obj!=="object") obj = { mode:"all", selected:[] };
+  if(obj.mode!=="all" && obj.mode!=="selected" && obj.mode!=="none") obj.mode="all";
+  if(!Array.isArray(obj.selected)) obj.selected=[];
+  obj.selected = obj.selected.filter(x=>typeof x==="string" && x.length<100);
+  return obj;
+}
+
+function saveSchedDayFilter(obj){
+  if(!obj || typeof obj!=="object") return;
+  if(obj.mode!=="all" && obj.mode!=="selected" && obj.mode!=="none") obj.mode="all";
+  if(!Array.isArray(obj.selected)) obj.selected=[];
+  obj.selected = obj.selected.filter(x=>typeof x==="string" && x.length<100);
+  try{ localStorage.setItem(getSchedDayFilterKey(), JSON.stringify(obj)); }catch(_e){}
+}
+
+function getScheduleDaysFiltered(){
+  sortShootDaysInPlace();
+  const f = loadSchedDayFilter();
+  const days = (state.shootDays || []);
+  if(f.mode==="all") return days.slice();
+  if(f.mode==="none") return [];
+  const set = new Set(f.selected || []);
+  return days.filter(d=> set.has(d.id));
+}
+
+function computeScheduleGlobalBaseHour(days){
+  let minBase = Infinity;
+  for(const d of (days||[])){
+    const baseH = baseHourFromCall((d && d.callTime) || "08:00"); // floor a la hora
+    if(Number.isFinite(baseH)) minBase = Math.min(minBase, baseH);
+  }
+  if(!Number.isFinite(minBase) || minBase===Infinity) return 8*60;
+  return minBase;
+}
+
+function scheduleBoardBaseHourFallback(){
+  const days = getScheduleDaysFiltered();
+  return computeScheduleGlobalBaseHour(days);
+}
+
+function getScheduleBoardBaseHour(){
+  const b = el("schedBoard");
+  const v = Number(b?.dataset?.baseHour ?? NaN);
+  if(Number.isFinite(v)) return v;
+  return scheduleBoardBaseHourFallback();
+}
+
+function updateSchedDaysButton(){
+  const btn = el("btnSchedDays");
+  if(!btn) return;
+  const f = loadSchedDayFilter();
+  let title = "Días: Todos";
+  btn.classList.remove("active");
+  if(f.mode==="none"){
+    title = "Días: Ninguno";
+    btn.classList.add("active");
+  }else if(f.mode==="selected"){
+    const n = (f.selected||[]).length;
+    title = `Días: ${n} seleccionado${n===1?"":"s"}`;
+    btn.classList.add("active");
+  }
+  btn.title = title;
+}
+
+// Calendar UI state
+let schedCalCursor = null; // {y,m}
+function openSchedDayPicker(){
+  const dlg = el("schedDayPicker");
+  if(!dlg) return;
+
+  // init month: primer día del proyecto o del primer seleccionado
+  const f = loadSchedDayFilter();
+  let initDateStr = null;
+  if(f.mode==="selected" && (f.selected||[]).length){
+    const d0 = getDay(f.selected[0]);
+    initDateStr = d0?.date || null;
+  }
+  if(!initDateStr){
+    initDateStr = state.shootDays?.[0]?.date || null;
+  }
+  let dt = initDateStr ? new Date(initDateStr+"T12:00:00") : new Date();
+  if(!Number.isFinite(dt.getTime())) dt = new Date();
+
+  schedCalCursor = { y: dt.getFullYear(), m: dt.getMonth() };
+  renderSchedCalendar();
+  updateSchedDaysButton();
+
+  try{ dlg.showModal(); }
+  catch(_e){ dlg.setAttribute("open",""); }
+}
+
+function closeSchedDayPicker(){
+  const dlg = el("schedDayPicker");
+  if(!dlg) return;
+  try{ dlg.close(); }catch(_e){ dlg.removeAttribute("open"); }
+}
+
+function renderSchedCalendar(){
+  const grid = el("schedCalGrid");
+  const monthLab = el("schedCalMonth");
+  if(!grid || !monthLab) return;
+  if(!schedCalCursor) schedCalCursor = { y:new Date().getFullYear(), m:new Date().getMonth() };
+
+  const y = schedCalCursor.y;
+  const m = schedCalCursor.m;
+
+  const monthName = new Date(y, m, 1).toLocaleDateString("es-AR", { month:"long", year:"numeric" });
+  monthLab.textContent = monthName.charAt(0).toUpperCase() + monthName.slice(1);
+
+  const days = (state.shootDays||[]);
+  const byDate = new Map();
+  for(const d of days){
+    if(d?.date) byDate.set(d.date, d.id);
+  }
+
+  const f = loadSchedDayFilter();
+  const sel = new Set(f.selected||[]);
+
+  const first = new Date(y, m, 1);
+  // Week starts Monday (AR): 0..6
+  const dow = (first.getDay() + 6) % 7;
+  const lastDay = new Date(y, m+1, 0).getDate();
+
+  const dows = ["L","M","X","J","V","S","D"];
+  let html = dows.map(x=>`<div class="schedCalDow">${x}</div>`).join("");
+
+  for(let i=0;i<dow;i++){
+    html += `<div class="schedCalCell isEmpty"></div>`;
+  }
+
+  for(let day=1; day<=lastDay; day++){
+    const dateStr = `${y}-${String(m+1).padStart(2,"0")}-${String(day).padStart(2,"0")}`;
+    const dayId = byDate.get(dateStr);
+    const enabled = !!dayId;
+    const isSelected = enabled && sel.has(dayId);
+    const cls = [
+      "schedCalCell",
+      enabled ? "" : "isDisabled",
+      isSelected ? "isSelected" : ""
+    ].filter(Boolean).join(" ");
+    const attrs = enabled ? `data-day-id="${escAttr(dayId)}"` : "";
+    html += `<div class="${cls}" ${attrs} title="${escAttr(dateStr)}">${day}</div>`;
+  }
+
+  grid.innerHTML = html;
+
+  // click delegate (solo una vez)
+  if(grid.dataset.bound!=="1"){
+    grid.dataset.bound="1";
+    grid.addEventListener("click", (e)=>{
+      const cell = e.target.closest(".schedCalCell");
+      if(!cell || cell.classList.contains("isEmpty") || cell.classList.contains("isDisabled")) return;
+      const dayId = cell.getAttribute("data-day-id");
+      if(!dayId) return;
+
+      const f = loadSchedDayFilter();
+      const set = new Set(f.selected||[]);
+      if(set.has(dayId)) set.delete(dayId); else set.add(dayId);
+
+      const selected = [...set];
+      if(selected.length){
+        f.mode = "selected";
+        f.selected = selected;
+      }else{
+        f.mode = "none";
+        f.selected = [];
+      }
+      saveSchedDayFilter(f);
+      updateSchedDaysButton();
+      renderSchedCalendar();
+      renderScheduleBoard();
+    });
+  }
+}
+
+function escAttr(s){
+  return String(s||"").replace(/&/g,"&amp;").replace(/"/g,"&quot;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+}
+
+function bindSchedDayPickerUI(){
+  if(el("btnSchedDays")?.dataset.bound==="1") return;
+  const btn = el("btnSchedDays");
+  if(btn) btn.dataset.bound="1";
+
+  // Allow this UI in Lector mode (filtering doesn't modify data)
+  try{ const dlg = el("schedDayPicker"); if(dlg) dlg.dataset.roAllow="1"; }catch(_e){}
+  try{
+    ["btnSchedDays","schedDayPicker","schedDayPickerClose","schedCalPrev","schedCalNext","schedCalAll","schedCalNone","schedCalDone","schedCalGrid"]
+      .forEach(id=>{ const n = el(id); if(n) n.dataset.roAllow="1"; });
+  }catch(_e){}
+
+  el("btnSchedDays")?.addEventListener("click", openSchedDayPicker);
+  el("schedDayPickerClose")?.addEventListener("click", closeSchedDayPicker);
+  el("schedCalDone")?.addEventListener("click", closeSchedDayPicker);
+
+  el("schedCalPrev")?.addEventListener("click", ()=>{
+    if(!schedCalCursor) schedCalCursor = { y:new Date().getFullYear(), m:new Date().getMonth() };
+    schedCalCursor.m -= 1;
+    if(schedCalCursor.m<0){ schedCalCursor.m=11; schedCalCursor.y -= 1; }
+    renderSchedCalendar();
+  });
+  el("schedCalNext")?.addEventListener("click", ()=>{
+    if(!schedCalCursor) schedCalCursor = { y:new Date().getFullYear(), m:new Date().getMonth() };
+    schedCalCursor.m += 1;
+    if(schedCalCursor.m>11){ schedCalCursor.m=0; schedCalCursor.y += 1; }
+    renderSchedCalendar();
+  });
+
+  el("schedCalAll")?.addEventListener("click", ()=>{
+    const f = loadSchedDayFilter();
+    f.mode = "all";
+    f.selected = [];
+    saveSchedDayFilter(f);
+    updateSchedDaysButton();
+    renderSchedCalendar();
+    renderScheduleBoard();
+  });
+
+  el("schedCalNone")?.addEventListener("click", ()=>{
+    const f = loadSchedDayFilter();
+    f.mode = "none";
+    f.selected = [];
+    saveSchedDayFilter(f);
+    updateSchedDaysButton();
+    renderSchedCalendar();
+    renderScheduleBoard();
+  });
+
+  // update initial tooltip
+  updateSchedDaysButton();
+}
+
   function renderScheduleBoard(){
     const board = el("schedBoard");
     if(!board) return;
@@ -4767,16 +4996,29 @@ function renderDayCast(){
     const q = (el("schedSearch")?.value || "").toLowerCase().trim();
 
     sortShootDaysInPlace();
+    updateSchedDaysButton();
+
+    const daysToShow = getScheduleDaysFiltered();
+
     if(!state.shootDays.length){
       board.innerHTML = `<div class="muted">No hay días cargados.</div>`;
       setupScheduleTopScrollbar();
       return;
     }
 
+    if(!daysToShow.length){
+      board.innerHTML = `<div class="muted">No hay días seleccionados.</div>`;
+      setupScheduleTopScrollbar();
+      return;
+    }
+
+    const globalBaseHour = computeScheduleGlobalBaseHour(daysToShow);
+    board.dataset.baseHour = String(globalBaseHour);
+
     const zoom = Number(el("schedZoom")?.value || 90);
     const pxPerMin = zoom / 60;
 
-    for(const d of state.shootDays){
+    for(const d of daysToShow){
       ensureDayTimingMaps(d);
       const span = Math.max(5, dayplanAvailSpan(d));
 
@@ -4794,8 +5036,9 @@ function renderDayCast(){
       grid.className = "schedGrid";
       let shownBlocks = 0;
       grid.dataset.dayId = d.id;
-      const preOffset = preOffsetFromCall(d.callTime||"08:00");
-      const baseHour = baseHourFromCall(d.callTime||"08:00");
+      const callM = minutesFromHHMM(d.callTime||"08:00");
+      const preOffset = callM - globalBaseHour;
+      const baseHour = globalBaseHour;
       const endAbs = dayplanEndAbs(d);
       const totalSpan = Math.max(60, endAbs - baseHour);
       const numHours = Math.ceil(totalSpan/60);
@@ -4820,7 +5063,17 @@ function renderDayCast(){
         const s = getScene(sid);
         if(!s) continue;
         if(q){
-          const hay = `${s.number||""} ${s.slugline||""} ${s.location||""} ${s.summary||""}`.toLowerCase();
+          let elemsTxt = "";
+          try{
+            const parts = [];
+            for(const cat of cats){
+              const items = s.elements?.[cat] || [];
+              if(items && items.length) parts.push(items.join(" "));
+            }
+            elemsTxt = parts.join(" ");
+          }catch(_e){ elemsTxt = ""; }
+
+          const hay = `${s.number||""} ${s.slugline||""} ${s.location||""} ${s.summary||""} ${elemsTxt}`.toLowerCase();
           if(!hay.includes(q)) continue;
         }
 
@@ -5050,7 +5303,8 @@ function bindScheduleDnD(){
     ensureDayTimingMaps(targetDay);
 
     const call = targetDay.callTime || "08:00";
-    const preOffset = preOffsetFromCall(call);
+    const baseHour = getScheduleBoardBaseHour();
+    const preOffset = minutesFromHHMM(call) - baseHour;
 
     const rect = targetGrid.getBoundingClientRect();
     const y = clamp(e.clientY - rect.top, 0, rect.height);
@@ -5207,7 +5461,8 @@ function updateScheduleDayDOM(dayId){
   const zoom = Number(el("schedZoom")?.value || 90); // px por hora
   const pxPerMin = zoom / 60;
 
-  const preOffset = preOffsetFromCall(d.callTime || "08:00");
+  const baseHour = getScheduleBoardBaseHour();
+  const preOffset = minutesFromHHMM(d.callTime || "08:00") - baseHour;
 
   // Normalizar overlaps (incluye bloques)
   resolveOverlapsPushDown(d, snapMin);
@@ -7716,7 +7971,8 @@ function renderReportScheduleDetail(){
   wrap.innerHTML = "";
 
   sortShootDaysInPlace();
-  const days = (state.shootDays || []);
+  const allDays = (state.shootDays || []);
+  const days = getScheduleDaysFiltered();
   if(!days.length){
     wrap.innerHTML = `<div class="catBlock"><div class="items">No hay días cargados.</div></div>`;
     return;
@@ -8229,15 +8485,17 @@ function buildPlanGeneralPrintHTML(){
   const project = esc(state?.meta?.title || "Proyecto");
   const gen = new Date().toLocaleString("es-AR");
 
-  const days = (state.shootDays || []);
+  const allDays = (state.shootDays || []);
+  const days = getScheduleDaysFiltered();
   if(!days.length){
+    const msg = allDays.length ? "No hay días seleccionados." : "No hay días cargados.";
     return `
       <div class="pgPrintWrap">
         <div class="pgPrintHeader">
           <div class="pgTitle">Plan General</div>
           <div class="pgSub"><b>${project}</b> · ${esc(gen)}</div>
         </div>
-        <div class="muted">No hay días cargados.</div>
+        <div class="muted">${esc(msg)}</div>
       </div>
     `;
   }
@@ -9555,6 +9813,8 @@ el("scriptVerSelect")?.addEventListener("change", ()=>{
     el("dpBtnToggleBankDock")?.addEventListener("click", expandBank);
 
     el("schedZoom")?.addEventListener("change", ()=>{ renderScheduleBoard(); });
+
+    bindSchedDayPickerUI();
 
     el("btnSchedPrint")?.addEventListener("click", ()=>{
       printPlanGeneral();
