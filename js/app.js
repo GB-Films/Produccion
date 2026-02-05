@@ -333,7 +333,7 @@ const shotlistCollapsedSceneIds = new Set();
       "sceneSearch","sceneFilterTOD",
       "dpBankSearch","shootDaySelect","dayplanSelect","shotDaySelect",
       "dayplanSnap","dayplanZoom",
-      "schedSearch","schedZoom","schedSnap","btnSchedPrint",
+      "schedSearch","schedZoom","schedSnap","btnSchedDays","btnSchedPrint",
       "elxSearch","crewSearch","reportsSearch",
       "btnOpenCallSheet","btnDayplanPrint","btnShotPrint","btnPrintCallSheet",
       "btnBDTemplateWide","btnBDTemplateLong",
@@ -3022,6 +3022,9 @@ function setupScheduleWheelScroll(){
     if(!s) return;
     if(!confirm(`Borrar escena #${s.number}?`)) return;
 
+    const globalBaseHour = computeScheduleGlobalBaseHour(daysToShow);
+    board.dataset.baseHour = String(globalBaseHour);
+
     for(const d of daysToShow){
       d.sceneIds = (d.sceneIds||[]).filter(x=>x!==s.id);
       if(d.times) delete d.times[s.id];
@@ -3270,7 +3273,7 @@ function setupScheduleWheelScroll(){
     board.innerHTML = "";
     sortShootDaysInPlace();
 
-    for(const d of daysToShow){
+    for(const d of state.shootDays){
       ensureDayTimingMaps(d);
       const span = Math.max(5, dayplanAvailSpan(d));
 
@@ -4737,235 +4740,248 @@ function renderDayCast(){
 
   // ===================== Schedule =====================
 
-  // Selector de días (Plan General) — se usa también para imprimir
-  let schedDaySel = { mode:"all", ids:new Set() };
-  let schedDaySelKey = "";
-  let schedDayPickerByDate = new Map();
 
-  function schedDaySelStorageKey(){
-    try{
-      const p = (typeof StorageLayer!=="undefined" && StorageLayer.getActiveProject) ? StorageLayer.getActiveProject() : null;
-      const bin = p?.binId || StorageLayer?.loadCfg?.()?.binId || "";
-      return "gb_sched_dayselect_v1__" + (bin || "default");
-    }catch(_e){
-      return "gb_sched_dayselect_v1__default";
-    }
+// --- Plan General: selector de días (calendario) ---
+const SCHED_DAYFILTER_PREFIX = "gb_sched_dayfilter_v1__";
+function getSchedDayFilterKey(){
+  try{
+    const cfg = (typeof StorageLayer!=="undefined" && StorageLayer.loadCfg) ? StorageLayer.loadCfg() : null;
+    const k = cfg?.binId || cfg?.projectId || cfg?.projectName || "default";
+    return SCHED_DAYFILTER_PREFIX + String(k);
+  }catch(_e){
+    return SCHED_DAYFILTER_PREFIX + "default";
   }
+}
 
-  function ensureSchedDaySelLoaded(){
-    const key = schedDaySelStorageKey();
-    if(key === schedDaySelKey) return;
-    schedDaySelKey = key;
-    schedDaySel = { mode:"all", ids:new Set() };
-    try{
-      const raw = localStorage.getItem(key);
-      if(raw){
-        const obj = JSON.parse(raw);
-        const mode = (obj && obj.mode === "custom") ? "custom" : "all";
-        const ids = new Set(Array.isArray(obj?.ids) ? obj.ids.map(String) : []);
-        schedDaySel = { mode, ids };
-      }
-    }catch(_e){}
+function loadSchedDayFilter(){
+  let raw = null;
+  try{ raw = localStorage.getItem(getSchedDayFilterKey()); }catch(_e){}
+  let obj = null;
+  try{ obj = raw ? JSON.parse(raw) : null; }catch(_e){ obj=null; }
+  if(!obj || typeof obj!=="object") obj = { mode:"all", selected:[] };
+  if(obj.mode!=="all" && obj.mode!=="selected" && obj.mode!=="none") obj.mode="all";
+  if(!Array.isArray(obj.selected)) obj.selected=[];
+  obj.selected = obj.selected.filter(x=>typeof x==="string" && x.length<100);
+  return obj;
+}
+
+function saveSchedDayFilter(obj){
+  if(!obj || typeof obj!=="object") return;
+  if(obj.mode!=="all" && obj.mode!=="selected" && obj.mode!=="none") obj.mode="all";
+  if(!Array.isArray(obj.selected)) obj.selected=[];
+  obj.selected = obj.selected.filter(x=>typeof x==="string" && x.length<100);
+  try{ localStorage.setItem(getSchedDayFilterKey(), JSON.stringify(obj)); }catch(_e){}
+}
+
+function getScheduleDaysFiltered(){
+  sortShootDaysInPlace();
+  const f = loadSchedDayFilter();
+  const days = getScheduleDaysFiltered();
+  if(f.mode==="all") return days.slice();
+  if(f.mode==="none") return [];
+  const set = new Set(f.selected || []);
+  return days.filter(d=> set.has(d.id));
+}
+
+function computeScheduleGlobalBaseHour(days){
+  let minBase = Infinity;
+  for(const d of (days||[])){
+    const baseH = baseHourFromCall((d && d.callTime) || "08:00"); // floor a la hora
+    if(Number.isFinite(baseH)) minBase = Math.min(minBase, baseH);
   }
+  if(!Number.isFinite(minBase) || minBase===Infinity) return 8*60;
+  return minBase;
+}
 
-  function saveSchedDaySel(){
-    ensureSchedDaySelLoaded();
-    try{
-      localStorage.setItem(schedDaySelKey, JSON.stringify({ mode:schedDaySel.mode, ids:[...schedDaySel.ids] }));
-    }catch(_e){}
-  }
+function scheduleBoardBaseHourFallback(){
+  const days = getScheduleDaysFiltered();
+  return computeScheduleGlobalBaseHour(days);
+}
 
-  function getSchedSelectedDayIds(){
-    ensureSchedDaySelLoaded();
-    const allIds = new Set((state.shootDays||[]).map(d=>String(d.id)));
-    if(schedDaySel.mode === "all") return allIds;
-    const out = new Set();
-    for(const id of schedDaySel.ids){ if(allIds.has(String(id))) out.add(String(id)); }
-    return out;
-  }
+function getScheduleBoardBaseHour(){
+  const b = el("schedBoard");
+  const v = Number(b?.dataset?.baseHour ?? NaN);
+  if(Number.isFinite(v)) return v;
+  return scheduleBoardBaseHourFallback();
+}
 
-  function getSchedDaysToShow(){
-    sortShootDaysInPlace();
-    const ids = getSchedSelectedDayIds();
-    return (state.shootDays||[]).filter(d=> ids.has(String(d.id)));
-  }
-
-  function updateSchedDaysBtn(){
-    const btn = el("btnSchedDays");
-    if(!btn) return;
-    // Botón ícono: el estado va en title + clase
-    btn.textContent = "📅";
-    btn.setAttribute("aria-label","Elegir días");
-    ensureSchedDaySelLoaded();
-    const total = (state.shootDays||[]).length;
-    if(!total){
-      btn.title = "Elegir días (no hay días cargados)";
-      btn.classList.remove("active");
-      return;
-    }
-    if(schedDaySel.mode === "all"){
-      btn.title = "Días: Todos";
-      btn.classList.remove("active");
-      return;
-    }
-    const count = getSchedSelectedDayIds().size;
-    btn.title = `Días: ${count}/${total}`;
+function updateSchedDaysButton(){
+  const btn = el("btnSchedDays");
+  if(!btn) return;
+  const f = loadSchedDayFilter();
+  let title = "Días: Todos";
+  btn.classList.remove("active");
+  if(f.mode==="none"){
+    title = "Días: Ninguno";
+    btn.classList.add("active");
+  }else if(f.mode==="selected"){
+    const n = (f.selected||[]).length;
+    title = `Días: ${n} seleccionado${n===1?"":"s"}`;
     btn.classList.add("active");
   }
+  btn.title = title;
+}
 
-  function openSchedDayPicker(){
-    const ov = el("schedDayPickerOverlay");
-    if(!ov) return;
-    renderSchedDayPicker();
-    ov.classList.remove("hidden");
+// Calendar UI state
+let schedCalCursor = null; // {y,m}
+function openSchedDayPicker(){
+  const dlg = el("schedDayPicker");
+  if(!dlg) return;
+
+  // init month: primer día del proyecto o del primer seleccionado
+  const f = loadSchedDayFilter();
+  let initDateStr = null;
+  if(f.mode==="selected" && (f.selected||[]).length){
+    const d0 = getDay(f.selected[0]);
+    initDateStr = d0?.date || null;
+  }
+  if(!initDateStr){
+    initDateStr = state.shootDays?.[0]?.date || null;
+  }
+  let dt = initDateStr ? new Date(initDateStr+"T12:00:00") : new Date();
+  if(!Number.isFinite(dt.getTime())) dt = new Date();
+
+  schedCalCursor = { y: dt.getFullYear(), m: dt.getMonth() };
+  renderSchedCalendar();
+  updateSchedDaysButton();
+
+  try{ dlg.showModal(); }
+  catch(_e){ dlg.setAttribute("open",""); }
+}
+
+function closeSchedDayPicker(){
+  const dlg = el("schedDayPicker");
+  if(!dlg) return;
+  try{ dlg.close(); }catch(_e){ dlg.removeAttribute("open"); }
+}
+
+function renderSchedCalendar(){
+  const grid = el("schedCalGrid");
+  const monthLab = el("schedCalMonth");
+  if(!grid || !monthLab) return;
+  if(!schedCalCursor) schedCalCursor = { y:new Date().getFullYear(), m:new Date().getMonth() };
+
+  const y = schedCalCursor.y;
+  const m = schedCalCursor.m;
+
+  const monthName = new Date(y, m, 1).toLocaleDateString("es-AR", { month:"long", year:"numeric" });
+  monthLab.textContent = monthName.charAt(0).toUpperCase() + monthName.slice(1);
+
+  const days = (state.shootDays||[]);
+  const byDate = new Map();
+  for(const d of days){
+    if(d?.date) byDate.set(d.date, d.id);
   }
 
-  function closeSchedDayPicker(){
-    const ov = el("schedDayPickerOverlay");
-    if(!ov) return;
-    ov.classList.add("hidden");
+  const f = loadSchedDayFilter();
+  const sel = new Set(f.selected||[]);
+
+  const first = new Date(y, m, 1);
+  // Week starts Monday (AR): 0..6
+  const dow = (first.getDay() + 6) % 7;
+  const lastDay = new Date(y, m+1, 0).getDate();
+
+  const dows = ["L","M","X","J","V","S","D"];
+  let html = dows.map(x=>`<div class="schedCalDow">${x}</div>`).join("");
+
+  for(let i=0;i<dow;i++){
+    html += `<div class="schedCalCell isEmpty"></div>`;
   }
 
-  function monthNameEs(idx){
-    return ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"][idx] || "";
+  for(let day=1; day<=lastDay; day++){
+    const dateStr = `${y}-${String(m+1).padStart(2,"0")}-${String(day).padStart(2,"0")}`;
+    const dayId = byDate.get(dateStr);
+    const enabled = !!dayId;
+    const isSelected = enabled && sel.has(dayId);
+    const cls = [
+      "schedCalCell",
+      enabled ? "" : "isDisabled",
+      isSelected ? "isSelected" : ""
+    ].filter(Boolean).join(" ");
+    const attrs = enabled ? `data-day-id="${escAttr(dayId)}"` : "";
+    html += `<div class="${cls}" ${attrs} title="${escAttr(dateStr)}">${day}</div>`;
   }
 
-  function parseISODateParts(iso){
-    const p = String(iso||"").split("-");
-    const y = Number(p[0]||0), m = Number(p[1]||0), d = Number(p[2]||0);
-    if(!y || !m || !d) return null;
-    return { y, m, d };
-  }
+  grid.innerHTML = html;
 
-  function dateISO(y,m,d){
-    return String(y).padStart(4,"0")+"-"+String(m).padStart(2,"0")+"-"+String(d).padStart(2,"0");
-  }
+  // click delegate (solo una vez)
+  if(grid.dataset.bound!=="1"){
+    grid.dataset.bound="1";
+    grid.addEventListener("click", (e)=>{
+      const cell = e.target.closest(".schedCalCell");
+      if(!cell || cell.classList.contains("isEmpty") || cell.classList.contains("isDisabled")) return;
+      const dayId = cell.getAttribute("data-day-id");
+      if(!dayId) return;
 
-  function utcDowMon0(y,m,d){
-    const dow = new Date(Date.UTC(y, m-1, d)).getUTCDay(); // 0 Sunday
-    return (dow + 6) % 7; // Monday=0
-  }
+      const f = loadSchedDayFilter();
+      const set = new Set(f.selected||[]);
+      if(set.has(dayId)) set.delete(dayId); else set.add(dayId);
 
-  function daysInMonth(y,m){
-    return new Date(Date.UTC(y, m, 0)).getUTCDate();
-  }
-
-  function renderSchedDayPicker(){
-    const body = el("schedDayPickerBody");
-    if(!body) return;
-
-    ensureSchedDaySelLoaded();
-    sortShootDaysInPlace();
-
-    const days = (state.shootDays||[]).filter(d=>d && d.date);
-    if(!days.length){
-      body.innerHTML = `<div class="muted">No hay días cargados.</div>`;
-      return;
-    }
-
-    // Armamos mapa fecha->ids (para click)
-    schedDayPickerByDate = new Map();
-    const dates = [];
-    for(const d of days){
-      const iso = String(d.date||"").slice(0,10);
-      if(!/^\d{4}-\d{2}-\d{2}$/.test(iso)) continue;
-      if(!schedDayPickerByDate.has(iso)) { schedDayPickerByDate.set(iso, []); dates.push(iso); }
-      schedDayPickerByDate.get(iso).push(String(d.id));
-    }
-    dates.sort();
-    const first = parseISODateParts(dates[0]);
-    const last  = parseISODateParts(dates[dates.length-1]);
-    if(!first || !last){
-      body.innerHTML = `<div class="muted">No pude armar el calendario (fechas inválidas).</div>`;
-      return;
-    }
-
-    const selected = getSchedSelectedDayIds();
-    const months = [];
-    let y = first.y, m = first.m;
-    while(y < last.y || (y === last.y && m <= last.m)){
-      months.push({ y, m });
-      m += 1;
-      if(m > 12){ m = 1; y += 1; }
-    }
-
-    const weekdays = ["L","M","X","J","V","S","D"];
-    const monthsHTML = months.map(({y,m})=>{
-      const dim = daysInMonth(y,m);
-      const startDow = utcDowMon0(y,m,1);
-      const cells = [];
-      for(let i=0; i<startDow; i++) cells.push(`<div class="schedCalDay empty"></div>`);
-
-      for(let d=1; d<=dim; d++){
-        const iso = dateISO(y,m,d);
-        const ids = schedDayPickerByDate.get(iso);
-        if(!ids){
-          cells.push(`<div class="schedCalDay">${d}</div>`);
-          continue;
-        }
-        const selCount = ids.reduce((acc,id)=> acc + (selected.has(id)?1:0), 0);
-        const cls = selCount===ids.length ? "has sel" : (selCount>0 ? "has partial" : "has");
-        const badge = ids.length>1 ? `<span class="badge">${ids.length}</span>` : "";
-        cells.push(`<div class="schedCalDay ${cls}" data-date="${iso}">${d}${badge}</div>`);
+      const selected = [...set];
+      if(selected.length){
+        f.mode = "selected";
+        f.selected = selected;
+      }else{
+        f.mode = "none";
+        f.selected = [];
       }
-
-      return `
-        <div class="schedCalMonth">
-          <div class="schedCalMonthTitle">${monthNameEs(m-1)} ${y}</div>
-          <div class="schedCalWeekdays">${weekdays.map(w=>`<div>${w}</div>`).join("")}</div>
-          <div class="schedCalGrid">${cells.join("")}</div>
-        </div>
-      `;
-    }).join("");
-
-    body.innerHTML = `<div class="schedCalMonths">${monthsHTML}</div>`;
-  }
-
-  function bindSchedDayPicker(){
-    const ov = el("schedDayPickerOverlay");
-    if(!ov || ov.dataset.bound === "1") return;
-    ov.dataset.bound = "1";
-
-    // Click afuera cierra
-    ov.addEventListener("click", (e)=>{
-      if(e.target === ov) closeSchedDayPicker();
-    });
-
-    // Click en día togglear (solo días con plan)
-    ov.addEventListener("click", (e)=>{
-      const cell = e.target?.closest?.(".schedCalDay.has");
-      if(!cell) return;
-      const iso = cell.dataset.date;
-      if(!iso) return;
-
-      const ids = schedDayPickerByDate.get(iso) || [];
-      if(!ids.length) return;
-
-      ensureSchedDaySelLoaded();
-
-      // Si veníamos de "Todos", pasamos a custom copiando todo, y recién ahí toggleamos.
-      if(schedDaySel.mode !== "custom"){
-        schedDaySel.mode = "custom";
-        schedDaySel.ids = new Set((state.shootDays||[]).map(d=>String(d.id)));
-      }
-
-      const allSel = ids.every(id=>schedDaySel.ids.has(id));
-      if(allSel) ids.forEach(id=>schedDaySel.ids.delete(id));
-      else ids.forEach(id=>schedDaySel.ids.add(id));
-
-      saveSchedDaySel();
-      updateSchedDaysBtn();
+      saveSchedDayFilter(f);
+      updateSchedDaysButton();
+      renderSchedCalendar();
       renderScheduleBoard();
-      renderSchedDayPicker();
-    });
-
-    document.addEventListener("keydown", (e)=>{
-      if(e.key !== "Escape") return;
-      const ov2 = el("schedDayPickerOverlay");
-      if(ov2 && !ov2.classList.contains("hidden")) closeSchedDayPicker();
     });
   }
+}
 
+function escAttr(s){
+  return String(s||"").replace(/&/g,"&amp;").replace(/"/g,"&quot;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+}
+
+function bindSchedDayPickerUI(){
+  if(el("btnSchedDays")?.dataset.bound==="1") return;
+  const btn = el("btnSchedDays");
+  if(btn) btn.dataset.bound="1";
+
+  el("btnSchedDays")?.addEventListener("click", openSchedDayPicker);
+  el("schedDayPickerClose")?.addEventListener("click", closeSchedDayPicker);
+  el("schedCalDone")?.addEventListener("click", closeSchedDayPicker);
+
+  el("schedCalPrev")?.addEventListener("click", ()=>{
+    if(!schedCalCursor) schedCalCursor = { y:new Date().getFullYear(), m:new Date().getMonth() };
+    schedCalCursor.m -= 1;
+    if(schedCalCursor.m<0){ schedCalCursor.m=11; schedCalCursor.y -= 1; }
+    renderSchedCalendar();
+  });
+  el("schedCalNext")?.addEventListener("click", ()=>{
+    if(!schedCalCursor) schedCalCursor = { y:new Date().getFullYear(), m:new Date().getMonth() };
+    schedCalCursor.m += 1;
+    if(schedCalCursor.m>11){ schedCalCursor.m=0; schedCalCursor.y += 1; }
+    renderSchedCalendar();
+  });
+
+  el("schedCalAll")?.addEventListener("click", ()=>{
+    const f = loadSchedDayFilter();
+    f.mode = "all";
+    f.selected = [];
+    saveSchedDayFilter(f);
+    updateSchedDaysButton();
+    renderSchedCalendar();
+    renderScheduleBoard();
+  });
+
+  el("schedCalNone")?.addEventListener("click", ()=>{
+    const f = loadSchedDayFilter();
+    f.mode = "none";
+    f.selected = [];
+    saveSchedDayFilter(f);
+    updateSchedDaysButton();
+    renderSchedCalendar();
+    renderScheduleBoard();
+  });
+
+  // update initial tooltip
+  updateSchedDaysButton();
+}
 
   function renderScheduleBoard(){
     const board = el("schedBoard");
@@ -4975,14 +4991,16 @@ function renderDayCast(){
     const q = (el("schedSearch")?.value || "").toLowerCase().trim();
 
     sortShootDaysInPlace();
-    updateSchedDaysBtn();
+    updateSchedDaysButton();
+
+    const daysToShow = getScheduleDaysFiltered();
+
     if(!state.shootDays.length){
-      board.innerHTML = `<div class="muted">No hay días cargados.</div>`;
+      board.innerHTML = `<div class="muted">${esc(msg)}</div>`;
       setupScheduleTopScrollbar();
       return;
     }
 
-    const daysToShow = getSchedDaysToShow();
     if(!daysToShow.length){
       board.innerHTML = `<div class="muted">No hay días seleccionados.</div>`;
       setupScheduleTopScrollbar();
@@ -4992,8 +5010,7 @@ function renderDayCast(){
     const zoom = Number(el("schedZoom")?.value || 90);
     const pxPerMin = zoom / 60;
 
-    // ✅ Renderizamos SOLO los días filtrados/seleccionados
-    for(const d of daysToShow){
+    for(const d of state.shootDays){
       ensureDayTimingMaps(d);
       const span = Math.max(5, dayplanAvailSpan(d));
 
@@ -5011,8 +5028,9 @@ function renderDayCast(){
       grid.className = "schedGrid";
       let shownBlocks = 0;
       grid.dataset.dayId = d.id;
-      const preOffset = preOffsetFromCall(d.callTime||"08:00");
-      const baseHour = baseHourFromCall(d.callTime||"08:00");
+      const callM = minutesFromHHMM(d.callTime||"08:00");
+      const preOffset = callM - globalBaseHour;
+      const baseHour = globalBaseHour;
       const endAbs = dayplanEndAbs(d);
       const totalSpan = Math.max(60, endAbs - baseHour);
       const numHours = Math.ceil(totalSpan/60);
@@ -5267,7 +5285,8 @@ function bindScheduleDnD(){
     ensureDayTimingMaps(targetDay);
 
     const call = targetDay.callTime || "08:00";
-    const preOffset = preOffsetFromCall(call);
+    const baseHour = getScheduleBoardBaseHour();
+    const preOffset = minutesFromHHMM(call) - baseHour;
 
     const rect = targetGrid.getBoundingClientRect();
     const y = clamp(e.clientY - rect.top, 0, rect.height);
@@ -5424,7 +5443,8 @@ function updateScheduleDayDOM(dayId){
   const zoom = Number(el("schedZoom")?.value || 90); // px por hora
   const pxPerMin = zoom / 60;
 
-  const preOffset = preOffsetFromCall(d.callTime || "08:00");
+  const baseHour = getScheduleBoardBaseHour();
+  const preOffset = minutesFromHHMM(d.callTime || "08:00") - baseHour;
 
   // Normalizar overlaps (incluye bloques)
   resolveOverlapsPushDown(d, snapMin);
@@ -7933,7 +7953,8 @@ function renderReportScheduleDetail(){
   wrap.innerHTML = "";
 
   sortShootDaysInPlace();
-  const days = (state.shootDays || []);
+  const allDays = (state.shootDays || []);
+  const days = getScheduleDaysFiltered();
   if(!days.length){
     wrap.innerHTML = `<div class="catBlock"><div class="items">No hay días cargados.</div></div>`;
     return;
@@ -8446,9 +8467,10 @@ function buildPlanGeneralPrintHTML(){
   const project = esc(state?.meta?.title || "Proyecto");
   const gen = new Date().toLocaleString("es-AR");
 
-
   const allDays = (state.shootDays || []);
-  if(!allDays.length){
+  const days = getScheduleDaysFiltered();
+  if(!days.length){
+    const msg = allDays.length ? "No hay días seleccionados." : "No hay días cargados.";
     return `
       <div class="pgPrintWrap">
         <div class="pgPrintHeader">
@@ -8459,20 +8481,6 @@ function buildPlanGeneralPrintHTML(){
       </div>
     `;
   }
-
-  const days = getSchedDaysToShow();
-  if(!days.length){
-    return `
-      <div class="pgPrintWrap">
-        <div class="pgPrintHeader">
-          <div class="pgTitle">Plan General</div>
-          <div class="pgSub"><b>${project}</b> · ${esc(gen)}</div>
-        </div>
-        <div class="muted">No hay días seleccionados.</div>
-      </div>
-    `;
-  }
-
 
   const cards = days.map((d)=>{
     ensureDayTimingMaps(d);
@@ -9788,29 +9796,7 @@ el("scriptVerSelect")?.addEventListener("change", ()=>{
 
     el("schedZoom")?.addEventListener("change", ()=>{ renderScheduleBoard(); });
 
-    el("btnSchedDays")?.addEventListener("click", ()=>{
-      bindSchedDayPicker();
-      openSchedDayPicker();
-    });
-    el("schedDaysClose")?.addEventListener("click", closeSchedDayPicker);
-    el("schedDaysAll")?.addEventListener("click", ()=>{
-      ensureSchedDaySelLoaded();
-      schedDaySel.mode = "all";
-      schedDaySel.ids = new Set();
-      saveSchedDaySel();
-      updateSchedDaysBtn();
-      renderScheduleBoard();
-      renderSchedDayPicker();
-    });
-    el("schedDaysNone")?.addEventListener("click", ()=>{
-      ensureSchedDaySelLoaded();
-      schedDaySel.mode = "custom";
-      schedDaySel.ids = new Set();
-      saveSchedDaySel();
-      updateSchedDaysBtn();
-      renderScheduleBoard();
-      renderSchedDayPicker();
-    });
+    bindSchedDayPickerUI();
 
     el("btnSchedPrint")?.addEventListener("click", ()=>{
       printPlanGeneral();

@@ -475,28 +475,11 @@
                   <option value="30">30 min</option>
                 </select>
               </label>
-              <button class="btn" id="btnSchedDays" title="Elegir días" aria-label="Elegir días">📅</button>
+              <button class="btn iconBtn" id="btnSchedDays" title="Días: Todos" aria-label="Seleccionar días">📅</button>
               <button class="btn" id="btnSchedPrint">Imprimir</button>
             </div>
           </div>
           <div class="cardContent scheduleContent">
-
-            <div class="schedDayPickerOverlay hidden noPrint" id="schedDayPickerOverlay">
-              <div class="schedDayPicker" role="dialog" aria-modal="true" aria-label="Seleccionar días">
-                <div class="schedDayPickerHead">
-                  <div class="schedDayPickerTitle">Días a mostrar</div>
-                  <div class="row gap">
-                    <button class="btn small" id="schedDaysAll" type="button">Todos</button>
-                    <button class="btn small" id="schedDaysNone" type="button">Ninguno</button>
-                    <button class="btn small" id="schedDaysClose" type="button">Cerrar</button>
-                  </div>
-                </div>
-                <div class="schedDayPickerBody">
-                  <div class="muted small" style="margin-bottom:10px">Click en una fecha para incluir/excluir. Solo se resaltan los días con plan cargado.</div>
-                  <div id="schedDayPickerBody"></div>
-                </div>
-              </div>
-            </div>
             <!-- Scroll horizontal superior (siempre accesible) -->
             <div class="schedScrollTop" id="schedScrollTop">
               <div class="schedScrollTopInner" id="schedScrollTopInner"></div>
@@ -675,6 +658,31 @@
 
     </main>
   </div>
+  
+  <!-- Schedule: selector de días (Plan General) -->
+  <dialog id="schedDayPicker" class="dlg">
+    <div class="dlgHead">
+      <div class="dlgTitle">Días a mostrar</div>
+      <button class="btn iconBtn" id="schedDayPickerClose" type="button" aria-label="Cerrar">✕</button>
+    </div>
+
+    <div class="schedCalTop">
+      <button class="btn iconBtn" id="schedCalPrev" type="button" aria-label="Mes anterior">‹</button>
+      <div class="schedCalMonth" id="schedCalMonth">—</div>
+      <button class="btn iconBtn" id="schedCalNext" type="button" aria-label="Mes siguiente">›</button>
+    </div>
+
+    <div class="schedCalGrid" id="schedCalGrid"></div>
+
+    <div class="schedCalActions">
+      <button class="btn" id="schedCalAll" type="button">Todos</button>
+      <button class="btn" id="schedCalNone" type="button">Ninguno</button>
+      <button class="btn primary" id="schedCalDone" type="button">Cerrar</button>
+    </div>
+
+    <div class="schedCalHint muted">Tip: clickeá un día con plan cargado para incluirlo/excluirlo.</div>
+  </dialog>
+
   <!-- Cache bust fuerte (mobile): cargamos assets con un v dinámico por sesión -->
   <script>
   (function(){
