@@ -2101,7 +2101,12 @@ body.gbPrintingElements .muted{ color:#333 !important; }
   display:flex;
   gap:6px;
   align-items:center;
-  margin-left:auto;
+}
+
+.dpBlockBtns--abs{
+  position:absolute;
+  top:6px;
+  right:8px;
 }
 .dpMiniBtn{
   border:1px solid rgba(255,255,255,.12);
@@ -2114,7 +2119,8 @@ body.gbPrintingElements .muted{ color:#333 !important; }
 }
 .dpMiniBtn:hover{ background:rgba(0,0,0,.28); }
 .dpBlockTitle{
-  margin-top:4px;
+  margin-top:0;
+  padding-right:96px;
   font-weight:900;
   line-height:1.12;
   display:flex;
@@ -2125,10 +2131,10 @@ body.gbPrintingElements .muted{ color:#333 !important; }
 .dpBlockTitle .dpNum{ font-weight:950; opacity:.92; white-space:nowrap; }
 .dpBlockTitle .dpSlug{ font-weight:900; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .dpBlockMeta{
-  margin-top:6px;
+  margin-top:4px;
   display:grid;
   grid-template-columns: repeat(3, minmax(0,1fr));
-  gap:6px 10px;
+gap:6px 10px;
 }
 @media screen and (max-width:900px){
   .dpBlockMeta{ grid-template-columns: repeat(2, minmax(0,1fr)); }

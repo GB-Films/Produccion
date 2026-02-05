@@ -3659,6 +3659,7 @@ function renderDayCast(){
 
       // PU Cast
       top.querySelector("#tglPUCast")?.addEventListener("click", ()=>{
+        if(isReadOnly()){ roToast(); return; }
         d.pickupCastEnabled = !d.pickupCastEnabled;
         touch();
         rerender();
@@ -3681,6 +3682,7 @@ function renderDayCast(){
 
       // RTS
       top.querySelector("#tglRTS")?.addEventListener("click", ()=>{
+        if(isReadOnly()){ roToast(); return; }
         d.rtsEnabled = !d.rtsEnabled;
         touch();
         rerender();
@@ -3901,6 +3903,7 @@ function renderDayCast(){
     wrap.appendChild(puBox);
 
     puBox.querySelector("#tglPUCrew")?.addEventListener("click", ()=>{
+      if(isReadOnly()){ roToast(); return; }
       d.pickupCrewEnabled = !d.pickupCrewEnabled;
       touch();
       rerender();
@@ -4038,6 +4041,7 @@ function renderDayCast(){
 
         // Toggle select (except interacting with inputs/buttons)
         item.addEventListener("click", (e)=>{
+          if(isReadOnly()){ roToast(); return; }
           if(e.target?.closest?.("input,button,select,textarea,label")) return;
           const idx = d.crewIds.indexOf(c.id);
           if(idx >= 0) d.crewIds.splice(idx,1);
@@ -6245,12 +6249,10 @@ const height = Math.max(Math.round((absEnd - absStart) * ppm), Math.round(snapMi
         <div class="dpBlock ${isSel?"sel":""} ${showPal?"showPalette":""}"
              data-key="${eattr(it.key)}" data-kind="${eattr(it.kind)}" data-id="${eattr(it.id)}"
              style="top:${top}px;height:${height}px;background:${eattr(bg)};border-left:8px solid ${eattr(col)};">
-          <div class="dpBlockTop">
-            <div class="dpBlockBtns">
+          <div class="dpBlockBtns dpBlockBtns--abs">
               <button class="dpMiniBtn noPrint" data-action="palette" title="Color">🎨</button>
               ${actionBtns}
             </div>
-          </div>
 <div class="dpBlockTitle">${
   it.kind==="scene"
     ? `<span class="dpNum">#${esc(it.number||"")}</span><span class="dpSlug">${esc(it.slugline||"")}</span>`
