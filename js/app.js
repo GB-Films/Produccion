@@ -333,7 +333,7 @@ const shotlistCollapsedSceneIds = new Set();
       "sceneSearch","sceneFilterTOD",
       "dpBankSearch","shootDaySelect","dayplanSelect","shotDaySelect",
       "dayplanSnap","dayplanZoom",
-      "schedSearch","schedZoom","schedSnap","btnSchedDays","btnSchedPrint",
+      "schedSearch","schedZoom","schedSnap","btnSchedDays","btnSchedPrint","schedDayPicker","schedDayPickerClose","schedCalPrev","schedCalNext","schedCalAll","schedCalNone","schedCalDone","schedCalGrid",
       "elxSearch","crewSearch","reportsSearch",
       "btnOpenCallSheet","btnDayplanPrint","btnShotPrint","btnPrintCallSheet",
       "btnBDTemplateWide","btnBDTemplateLong",
@@ -4940,6 +4940,13 @@ function bindSchedDayPickerUI(){
   const btn = el("btnSchedDays");
   if(btn) btn.dataset.bound="1";
 
+  // Allow this UI in Lector mode (filtering doesn't modify data)
+  try{ const dlg = el("schedDayPicker"); if(dlg) dlg.dataset.roAllow="1"; }catch(_e){}
+  try{
+    ["btnSchedDays","schedDayPicker","schedDayPickerClose","schedCalPrev","schedCalNext","schedCalAll","schedCalNone","schedCalDone","schedCalGrid"]
+      .forEach(id=>{ const n = el(id); if(n) n.dataset.roAllow="1"; });
+  }catch(_e){}
+
   el("btnSchedDays")?.addEventListener("click", openSchedDayPicker);
   el("schedDayPickerClose")?.addEventListener("click", closeSchedDayPicker);
   el("schedCalDone")?.addEventListener("click", closeSchedDayPicker);
@@ -5056,7 +5063,17 @@ function bindSchedDayPickerUI(){
         const s = getScene(sid);
         if(!s) continue;
         if(q){
-          const hay = `${s.number||""} ${s.slugline||""} ${s.location||""} ${s.summary||""}`.toLowerCase();
+          let elemsTxt = "";
+          try{
+            const parts = [];
+            for(const cat of cats){
+              const items = s.elements?.[cat] || [];
+              if(items && items.length) parts.push(items.join(" "));
+            }
+            elemsTxt = parts.join(" ");
+          }catch(_e){ elemsTxt = ""; }
+
+          const hay = `${s.number||""} ${s.slugline||""} ${s.location||""} ${s.summary||""} ${elemsTxt}`.toLowerCase();
           if(!hay.includes(q)) continue;
         }
 
