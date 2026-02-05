@@ -3604,64 +3604,86 @@ body.readOnly #callDayNotes{
   display:flex;
   justify-content:space-between;
   align-items:flex-end;
-  gap:12px;
-  border-bottom:1px solid #ddd;
-  padding-bottom:6px;
-  margin-bottom:10px;
+  gap:16px;
+  border-bottom:2px solid #111;
+  padding-bottom:8px;
+  margin-bottom:12px;
 }
-.pgTitle{ font-size:18pt; font-weight:800; letter-spacing:.2px; }
+.pgHeaderLeft{ display:flex; flex-direction:column; gap:2px; }
+.pgHeaderRight{ text-align:right; font-size:9.5pt; color:#333; line-height:1.25; }
+.pgTitle{ font-size:20pt; font-weight:900; letter-spacing:.3px; }
+.pgProject{ font-size:11pt; font-weight:800; color:#111; }
+.pgKpis{ font-size:9.5pt; color:#333; }
 .pgSub{ font-size:10pt; color:#333; }
 
 .pgGrid{
   display:grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap:10px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap:12px;
   align-items:start;
 }
 .pgDayCard{
-  border:1px solid #ddd;
+  border:1px solid #cfcfcf;
   border-radius:14px;
   overflow:hidden;
   break-inside: avoid;
+  page-break-inside: avoid;
+  -webkit-column-break-inside: avoid;
   background:#fff;
 }
 .pgDayHead{
-  padding:8px 10px;
-  background:#f6f6f6;
-  border-bottom:1px solid #ddd;
+  padding:10px 12px;
+  background:#f2f2f2;
+  border-bottom:1px solid #d7d7d7;
 }
 .pgDayTop{ display:flex; justify-content:space-between; gap:10px; align-items:center; }
-.pgDayTitle{ font-weight:800; font-size:11pt; line-height:1.1; }
+.pgDayTitle{ font-weight:900; font-size:11.5pt; line-height:1.1; }
 .pgBadge{
   font-size:9pt;
-  border:1px solid #bbb;
+  border:1px solid #bdbdbd;
   padding:2px 8px;
   border-radius:999px;
   background:#fff;
   white-space:nowrap;
 }
-.pgDayMeta{ margin-top:2px; font-size:9.5pt; color:#333; }
+.pgDayMeta{ margin-top:4px; font-size:9.5pt; color:#333; }
+.pgPills{ display:flex; flex-wrap:wrap; gap:6px; margin-top:6px; }
+.pgPill{
+  display:inline-flex;
+  align-items:center;
+  gap:6px;
+  padding:2px 9px;
+  border:1px solid #c7c7c7;
+  border-radius:999px;
+  background:#fff;
+  font-size:9pt;
+  white-space:nowrap;
+}
+.pgPill b{ font-weight:900; }
 
 .pgTable{ width:100%; border-collapse:collapse; }
 .pgTable thead{ display: table-header-group; }
 .pgTable th{
   text-align:left;
-  font-size:9pt;
-  padding:6px 10px;
+  font-size:8.5pt;
+  padding:7px 12px;
   background:#fafafa;
   border-bottom:1px solid #e6e6e6;
+  text-transform:uppercase;
+  letter-spacing:.06em;
 }
 .pgTable td{
   font-size:9.5pt;
-  padding:6px 10px;
+  padding:7px 12px;
   border-bottom:1px solid #eee;
   vertical-align:top;
 }
+.pgTable tr{ break-inside: avoid; page-break-inside: avoid; }
 .pgTime{ white-space:nowrap; font-variant-numeric: tabular-nums; }
 .pgDur{ text-align:right; white-space:nowrap; font-variant-numeric: tabular-nums; }
-.pgRowNote td{ background: rgba(0,0,0,0.02); }
+.pgRowNote td{ font-style:italic; }
 
-body.gbPrintMobile.gbPrintingSchedule .pgGrid{ grid-template-columns: repeat(2, 1fr); }
+body.gbPrintMobile.gbPrintingSchedule .pgGrid{ grid-template-columns: repeat(1, 1fr); }
 body.gbPrintMobile.gbPrintingSchedule .pgTitle{ font-size:16pt; }
 body.gbPrintMobile.gbPrintingSchedule .pgTable th,
 body.gbPrintMobile.gbPrintingSchedule .pgTable td{ padding:5px 8px; font-size:9pt; }
@@ -3671,13 +3693,13 @@ body.gbPrintingSchedule #gbPrintRoot,
 body.gbPrintingSchedule #gbPrintRoot *{ visibility:visible !important; }
 body.gbPrintingSchedule #gbPrintRoot{
   display:block !important;
-  position:absolute;
-  left:0; top:0;
+  position:relative;
   width:100%;
   padding:0 !important;
   margin:0 !important;
   background:#fff;
   color:#000;
+  overflow:visible;
 }
 body.gbPrintingSchedule #gbPrintRoot,
 body.gbPrintingSchedule #gbPrintRoot *{ color:#000 !important; }

@@ -8491,13 +8491,26 @@ function buildPlanGeneralPrintHTML(){
     return `
       <div class="pgPrintWrap">
         <div class="pgPrintHeader">
-          <div class="pgTitle">Plan General</div>
-          <div class="pgSub"><b>${project}</b> · ${esc(gen)}</div>
+          <div class="pgHeaderLeft">
+            <div class="pgTitle">Plan General</div>
+            <div class="pgProject">${project}</div>
+          </div>
+          <div class="pgHeaderRight">
+            <div><b>Generado:</b> ${esc(gen)}</div>
+          </div>
         </div>
         <div class="muted">${esc(msg)}</div>
       </div>
     `;
   }
+
+  // KPIs simples para el header
+  const firstDate = days[0]?.date || "";
+  const lastDate  = days[days.length-1]?.date || "";
+  const range = (firstDate && lastDate)
+    ? (firstDate === lastDate ? formatDayTitle(firstDate) : `${formatDayTitle(firstDate)} → ${formatDayTitle(lastDate)}`)
+    : "";
+  const kpis = `${days.length} día${days.length===1?"":"s"}${range ? " · "+esc(range) : ""}`;
 
   const cards = days.map((d)=>{
     ensureDayTimingMaps(d);
@@ -8551,6 +8564,13 @@ function buildPlanGeneralPrintHTML(){
 
     const nightBadge = d.night ? `<span class="pgBadge">Nocturno</span>` : "";
 
+    const pills = `
+      <div class="pgPills">
+        <span class="pgPill"><b>Call</b> ${esc(call||"—")}</span>
+        <span class="pgPill"><b>Locación</b> ${esc(loc||"—")}</span>
+      </div>
+    `;
+
     return `
       <div class="pgDayCard">
         <div class="pgDayHead">
@@ -8558,7 +8578,7 @@ function buildPlanGeneralPrintHTML(){
             <div class="pgDayTitle">${esc(dayTitle||"Día")}</div>
             ${nightBadge}
           </div>
-          <div class="pgDayMeta">Call ${esc(call||"—")} · ${esc(loc||"—")}</div>
+          <div class="pgDayMeta">${pills}</div>
         </div>
 
         <table class="pgTable">
@@ -8578,8 +8598,15 @@ function buildPlanGeneralPrintHTML(){
   return `
     <div class="pgPrintWrap">
       <div class="pgPrintHeader">
-        <div class="pgTitle">Plan General</div>
-        <div class="pgSub"><b>${project}</b> · ${esc(gen)}</div>
+        <div class="pgHeaderLeft">
+          <div class="pgTitle">Plan General</div>
+          <div class="pgProject">${project}</div>
+          <div class="pgKpis">${kpis}</div>
+        </div>
+        <div class="pgHeaderRight">
+          <div><b>Generado:</b> ${esc(gen)}</div>
+          <div><b>Días:</b> ${days.length}</div>
+        </div>
       </div>
       <div class="pgGrid">${cards}</div>
     </div>
