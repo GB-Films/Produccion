@@ -3659,7 +3659,6 @@ function renderDayCast(){
 
       // PU Cast
       top.querySelector("#tglPUCast")?.addEventListener("click", ()=>{
-        if(isReadOnly()){ roToast(); return; }
         d.pickupCastEnabled = !d.pickupCastEnabled;
         touch();
         rerender();
@@ -3682,7 +3681,6 @@ function renderDayCast(){
 
       // RTS
       top.querySelector("#tglRTS")?.addEventListener("click", ()=>{
-        if(isReadOnly()){ roToast(); return; }
         d.rtsEnabled = !d.rtsEnabled;
         touch();
         rerender();
@@ -3903,7 +3901,6 @@ function renderDayCast(){
     wrap.appendChild(puBox);
 
     puBox.querySelector("#tglPUCrew")?.addEventListener("click", ()=>{
-      if(isReadOnly()){ roToast(); return; }
       d.pickupCrewEnabled = !d.pickupCrewEnabled;
       touch();
       rerender();
@@ -4041,7 +4038,6 @@ function renderDayCast(){
 
         // Toggle select (except interacting with inputs/buttons)
         item.addEventListener("click", (e)=>{
-          if(isReadOnly()){ roToast(); return; }
           if(e.target?.closest?.("input,button,select,textarea,label")) return;
           const idx = d.crewIds.indexOf(c.id);
           if(idx >= 0) d.crewIds.splice(idx,1);
@@ -6249,10 +6245,13 @@ const height = Math.max(Math.round((absEnd - absStart) * ppm), Math.round(snapMi
         <div class="dpBlock ${isSel?"sel":""} ${showPal?"showPalette":""}"
              data-key="${eattr(it.key)}" data-kind="${eattr(it.kind)}" data-id="${eattr(it.id)}"
              style="top:${top}px;height:${height}px;background:${eattr(bg)};border-left:8px solid ${eattr(col)};">
-          <div class="dpBlockBtns dpBlockBtns--abs">
+          <div class="dpBlockTop">
+            <div class="dpBlockTime">${esc(startTxt)} – ${esc(endTxt)} <span class="dpBlockDur">· ${esc(formatDurHHMM(dur))}</span></div>
+            <div class="dpBlockBtns">
               <button class="dpMiniBtn noPrint" data-action="palette" title="Color">🎨</button>
               ${actionBtns}
             </div>
+          </div>
 <div class="dpBlockTitle">${
   it.kind==="scene"
     ? `<span class="dpNum">#${esc(it.number||"")}</span><span class="dpSlug">${esc(it.slugline||"")}</span>`
@@ -6263,9 +6262,10 @@ ${
   it.kind==="scene"
     ? `
       <div class="dpBlockMeta">
-        <div class="dpMetaItem"><div class="v">${esc(it.intExt||"—")}</div></div>
-        <div class="dpMetaItem"><div class="v">${esc(it.location||"—")}</div></div>
-        <div class="dpMetaItem"><div class="v">${esc(it.timeOfDay||"—")}</div></div>
+        <div class="dpMetaItem"><div class="k">I/E</div><div class="v">${esc(it.intExt||"—")}</div></div>
+        <div class="dpMetaItem"><div class="k">Lugar</div><div class="v">${esc(it.location||"—")}</div></div>
+        <div class="dpMetaItem"><div class="k">Momento</div><div class="v">${esc(it.timeOfDay||"—")}</div></div>
+        <div class="dpMetaItem"><div class="k">Pág</div><div class="v">${esc((Number(it.pages)||0) > 0 ? fmtPages(it.pages) : "—")}</div></div>
       </div>
       ${(()=>{ const t = notesOrShortSummary(it.notes, it.summary); return t ? `<div class="dpBlockSummary">${esc(t)}</div>` : ``; })()}
     `
@@ -8288,7 +8288,7 @@ function renderReportDayplanDetail(d){
     return _gbPrintRoot;
   }
   function cleanupGbPrintRoot(){
-    try{ document.body.classList.remove("gbPrintingShotlist","gbPrintingCallsheet","gbPrintingElements","gbPrintingSchedule","gbPrintMobile"); }catch(_e){}
+    try{ document.body.classList.remove("gbPrintingShotlist","gbPrintingCallsheet","gbPrintingElements","gbPrintingDayplan","gbPrintingSchedule","gbPrintMobile"); }catch(_e){}
     try{ if(_gbPrintRoot) _gbPrintRoot.innerHTML = ""; }catch(_e){}
   }
 
@@ -8461,6 +8461,103 @@ function renderReportDayplanDetail(d){
   }
 
 
+
+
+
+  function buildDayplanReportPrintHTML(d){
+    if(!d) return `<div class="catBlock"><div class="items">Elegí un día con rodaje.</div></div>`;
+    ensureDayTimingMaps(d);
+
+    const eattr = (s)=> esc(String(s||"")) .replace(/"/g,"&quot;");
+    const items = buildDayplanItems(d);
+
+    const proj = esc(state.meta?.title || "Proyecto");
+    const dayTxt = `${formatDayTitle(d.date)}${d.label ? " · "+esc(d.label) : ""}`;
+
+    const scenes = (d.sceneIds||[]).map(getScene).filter(Boolean);
+    const pages = scenes.reduce((acc, s)=> acc + (Number(s.pages)||0), 0);
+
+    const base = minutesFromHHMM(d.callTime || "08:00");
+    const dpEndAbs = dayplanEndAbs(d);
+    const snapMin = Number(el("schedSnap")?.value || 15);
+    try{ resolveOverlapsPushDown(d, snapMin); }catch(_e){}
+
+    const rows = items.map((it)=>{
+      const absStart = clamp(base + (it.start||0), base, dpEndAbs - snapMin);
+      const durMax = Math.max(snapMin, dpEndAbs - absStart);
+      const dur = clamp(Math.max(snapMin, it.dur||snapMin), snapMin, durMax);
+      const absEnd = clamp(absStart + dur, base, dpEndAbs);
+
+      const isNote = it.kind==="block";
+      const num = isNote ? "NOTA" : (it.number||"");
+      const title = isNote ? (it.title||"") : (it.slugline||it.title||"");
+      const ie = isNote ? "" : (it.intExt||"");
+      const locTxt = isNote ? "" : (it.location||"");
+      const todTxt = isNote ? "" : (it.timeOfDay||"");
+      const sumTxt = isNote ? (it.detail||"") : (notesOrShortSummary(it.notes, it.summary) || "");
+
+      const col = safeHexColor(it.color || (it.kind==="scene" ? "#BFDBFE" : "#E5E7EB"));
+      const bg = hexToRgba(col, isNote ? 0.10 : 0.12);
+
+      const tA = clockLabelAbs(absStart);
+      const tB = clockLabelAbs(absEnd);
+      const clockHTML = `<div class="dpClock2"><div>${esc(tA)}</div><div>${esc(tB)}</div></div>`;
+
+      return `
+        <tr class="${isNote ? "dpPrintNote" : ""}" style="background:${eattr(bg)};border-left:8px solid ${eattr(col)};">
+          <td class="cHour">${clockHTML}</td>
+          <td class="cDur">${esc(formatDurHHMMCompact(dur))}</td>
+          <td class="cNro">${esc(num)}</td>
+          <td class="cTitle">${esc(title)}</td>
+          <td class="cIE">${esc(ie)}</td>
+          <td class="cLoc">${esc(locTxt)}</td>
+          <td class="cTod">${esc(todTxt)}</td>
+          <td class="cSum">${esc(sumTxt)}</td>
+        </tr>
+      `;
+    }).join("");
+
+    return `
+      <div class="catBlock">
+        <div class="hdr"><span class="dot" style="background:var(--cat-vehicles)"></span>Plan de Rodaje</div>
+        <div class="items">
+          <div><b>${proj}</b> · ${dayTxt}</div>
+          <div><b>Call:</b> ${esc(d.callTime||"")} &nbsp; <b>Locación:</b> ${esc(d.location||"")}</div>
+          <div class="dpHdrChips screenOnly">
+            <span class="dpChip">Escenas: <b>${scenes.length}</b></span>
+            <span class="dpChip">Pág: <b>${esc(fmtPages(pages))}</b></span>
+          </div>
+
+          <table class="dayplanPrintTable">
+            <colgroup>
+              <col class="colHour"><col class="colDur"><col class="colNro"><col class="colTitle">
+              <col class="colIE"><col class="colLoc"><col class="colTod"><col class="colSum">
+            </colgroup>
+            <thead>
+              <tr>
+                <th>Hora</th><th>Dur</th><th>Nro</th><th>Título</th><th>I/E</th><th>Locación</th><th>Momento</th><th>Notas</th>
+              </tr>
+            </thead>
+            <tbody>${rows || `<tr><td colspan="8" class="muted">—</td></tr>`}</tbody>
+          </table>
+        </div>
+      </div>
+    `;
+  }
+
+  function printDayplanByDayId(dayId){
+    const d = dayId ? getDay(dayId) : null;
+    if(!d){ toast("Elegí un día con rodaje"); return; }
+    ensureDayTimingMaps(d);
+
+    applyPrintDeviceFlag();
+    const root = ensureGbPrintRoot();
+    root.innerHTML = buildDayplanReportPrintHTML(d);
+
+    document.body.classList.add("gbPrintingDayplan");
+    setPrintOrientation("landscape", 6);
+    try{ window.print(); } finally { clearPrintOrientation(); cleanupGbPrintRoot(); }
+  }
 
 async function printShotlistByDayId(dayId){
     const d = dayId ? getDay(dayId) : null;
@@ -9341,7 +9438,7 @@ el("btnDayplanAddNote")?.addEventListener("click", addDayplanNote);
       renderReportsDetail();
       renderReports();
     });
-    el("btnDayplanPrint")?.addEventListener("click", ()=>{ setPrintOrientation("landscape"); window.print(); });
+    el("btnDayplanPrint")?.addEventListener("click", ()=>{ printDayplanByDayId(selectedDayplanDayId || getReportsSelectedDayId()); });
     el("dayplanSnap")?.addEventListener("change", ()=> renderDayPlan());
     el("dayplanZoom")?.addEventListener("change", ()=>{
       const sc = el("dpScroller");
@@ -9870,9 +9967,8 @@ el("scriptVerSelect")?.addEventListener("change", ()=>{
         printPlanGeneral();
         return;
       }
-      setPrintOrientation("landscape");
-      window.print();
-    });
+      printDayplanByDayId(getReportsSelectedDayId());
+});
     window.addEventListener("afterprint", ()=>{ clearPrintOrientation(); cleanupGbPrintRoot(); });
 
     el("btnSaveCfg")?.addEventListener("click", saveCfgFromUI);

@@ -1579,6 +1579,26 @@ body.gbPrintingElements #gbPrintRoot{ display:block !important; position:absolut
 body.gbPrintingElements{ background:#fff !important; color:#000 !important; }
 body.gbPrintingElements .muted{ color:#333 !important; }
 
+  /* Plan de Rodaje print (unificado) */
+  body.gbPrintingDayplan *{ visibility:hidden !important; }
+  body.gbPrintingDayplan #gbPrintRoot,
+  body.gbPrintingDayplan #gbPrintRoot *{ visibility:visible !important; }
+  body.gbPrintingDayplan #gbPrintRoot{ display:block !important; position:absolute; left:0; top:0; width:100%; padding:0 !important; margin:0 !important; }
+
+  body.gbPrintingDayplan{ background:#fff !important; color:#000 !important; }
+  body.gbPrintingDayplan .muted{ color:#333 !important; }
+
+  body.gbPrintingDayplan .catBlock{ background:#fff !important; border:1px solid #ddd !important; overflow:visible !important; border-radius:0 !important; }
+  body.gbPrintingDayplan .catBlock .hdr{ background:#f6f6f6 !important; border-bottom:1px solid #ddd !important; color:#111 !important; }
+
+  /* Multi-página: no cortar filas + repetir encabezado */
+  body.gbPrintingDayplan .dayplanPrintTable thead{ display: table-header-group !important; }
+  body.gbPrintingDayplan .dayplanPrintTable tr{ break-inside: avoid; page-break-inside: avoid; }
+
+  /* Por si imprimen sin clase (desde el navegador) */
+  .dayplanPrintTable thead{ display: table-header-group !important; }
+  .dayplanPrintTable tr{ break-inside: avoid; page-break-inside: avoid; }
+
   body.gbPrintingCallsheet{ background:#fff !important; color:#000 !important; }
   body.gbPrintingCallsheet .muted{ color:#333 !important; }
 
@@ -2102,12 +2122,6 @@ body.gbPrintingElements .muted{ color:#333 !important; }
   gap:6px;
   align-items:center;
 }
-
-.dpBlockBtns--abs{
-  position:absolute;
-  top:6px;
-  right:8px;
-}
 .dpMiniBtn{
   border:1px solid rgba(255,255,255,.12);
   background:rgba(0,0,0,.18);
@@ -2119,8 +2133,7 @@ body.gbPrintingElements .muted{ color:#333 !important; }
 }
 .dpMiniBtn:hover{ background:rgba(0,0,0,.28); }
 .dpBlockTitle{
-  margin-top:0;
-  padding-right:96px;
+  margin-top:4px;
   font-weight:900;
   line-height:1.12;
   display:flex;
@@ -2131,10 +2144,10 @@ body.gbPrintingElements .muted{ color:#333 !important; }
 .dpBlockTitle .dpNum{ font-weight:950; opacity:.92; white-space:nowrap; }
 .dpBlockTitle .dpSlug{ font-weight:900; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .dpBlockMeta{
-  margin-top:4px;
+  margin-top:6px;
   display:grid;
-  grid-template-columns: repeat(3, minmax(0,1fr));
-gap:6px 10px;
+  grid-template-columns: repeat(4, minmax(0,1fr));
+  gap:6px 10px;
 }
 @media screen and (max-width:900px){
   .dpBlockMeta{ grid-template-columns: repeat(2, minmax(0,1fr)); }
