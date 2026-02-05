@@ -428,13 +428,8 @@ const shotlistCollapsedSceneIds = new Set();
       if(isAllowed(t)) return;
 
       // Block common edit controls (buttons, action icons).
-      const btn = t?.closest?.('button, [role="button"], [data-action], .dpMiniBtn, .dpSwatchBtn, .btn, .resize, .dpResize, .chip.toggle, .crewPickItem');
+      const btn = t?.closest?.('button, [role="button"], [data-action], .dpMiniBtn, .dpSwatchBtn, .btn, .resize, .dpResize');
       if(!btn) return;
-
-      // Si estás clickeando un input dentro de un item de Crew, dejamos el foco (para copiar), pero sin permitir cambios.
-      if(btn.classList?.contains("crewPickItem")){
-        if(t?.closest?.("input,button,select,textarea,label")) return;
-      }
 
       // Nav is always allowed
       if(btn.classList?.contains("navBtn") || btn.closest?.(".navBtn")) return;
@@ -6251,7 +6246,6 @@ const height = Math.max(Math.round((absEnd - absStart) * ppm), Math.round(snapMi
              data-key="${eattr(it.key)}" data-kind="${eattr(it.kind)}" data-id="${eattr(it.id)}"
              style="top:${top}px;height:${height}px;background:${eattr(bg)};border-left:8px solid ${eattr(col)};">
           <div class="dpBlockTop">
-            <div class="dpBlockTime">${esc(startTxt)} – ${esc(endTxt)} <span class="dpBlockDur">· ${esc(formatDurHHMM(dur))}</span></div>
             <div class="dpBlockBtns">
               <button class="dpMiniBtn noPrint" data-action="palette" title="Color">🎨</button>
               ${actionBtns}
@@ -6267,10 +6261,9 @@ ${
   it.kind==="scene"
     ? `
       <div class="dpBlockMeta">
-        <div class="dpMetaItem"><div class="k">I/E</div><div class="v">${esc(it.intExt||"—")}</div></div>
-        <div class="dpMetaItem"><div class="k">Lugar</div><div class="v">${esc(it.location||"—")}</div></div>
-        <div class="dpMetaItem"><div class="k">Momento</div><div class="v">${esc(it.timeOfDay||"—")}</div></div>
-        <div class="dpMetaItem"><div class="k">Pág</div><div class="v">${esc((Number(it.pages)||0) > 0 ? fmtPages(it.pages) : "—")}</div></div>
+        <div class="dpMetaItem"><div class="v">${esc(it.intExt||"—")}</div></div>
+        <div class="dpMetaItem"><div class="v">${esc(it.location||"—")}</div></div>
+        <div class="dpMetaItem"><div class="v">${esc(it.timeOfDay||"—")}</div></div>
       </div>
       ${(()=>{ const t = notesOrShortSummary(it.notes, it.summary); return t ? `<div class="dpBlockSummary">${esc(t)}</div>` : ``; })()}
     `

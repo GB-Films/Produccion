@@ -2101,6 +2101,7 @@ body.gbPrintingElements .muted{ color:#333 !important; }
   display:flex;
   gap:6px;
   align-items:center;
+  margin-left:auto;
 }
 .dpMiniBtn{
   border:1px solid rgba(255,255,255,.12);
@@ -2126,7 +2127,7 @@ body.gbPrintingElements .muted{ color:#333 !important; }
 .dpBlockMeta{
   margin-top:6px;
   display:grid;
-  grid-template-columns: repeat(4, minmax(0,1fr));
+  grid-template-columns: repeat(3, minmax(0,1fr));
   gap:6px 10px;
 }
 @media screen and (max-width:900px){
