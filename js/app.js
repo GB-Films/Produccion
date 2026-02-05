@@ -4992,7 +4992,8 @@ function renderDayCast(){
     const zoom = Number(el("schedZoom")?.value || 90);
     const pxPerMin = zoom / 60;
 
-    for(const d of state.shootDays){
+    // ✅ Renderizamos SOLO los días filtrados/seleccionados
+    for(const d of daysToShow){
       ensureDayTimingMaps(d);
       const span = Math.max(5, dayplanAvailSpan(d));
 
