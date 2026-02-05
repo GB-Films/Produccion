@@ -1355,6 +1355,71 @@ tr.groupRow td{
 
 .shotDurSel{ width:100%; }
 
+/* ----- Shotlist: contraste (UI only) ----- */
+.shotSceneBox{
+  border-color: var(--border2);
+  background: rgb(var(--panel-deep-rgb));
+  box-shadow: 0 10px 18px rgba(0,0,0,.22);
+}
+.shotSceneHead{
+  position:relative;
+  background: linear-gradient(180deg, rgba(var(--accent-rgb), .14), rgba(255,255,255,.04));
+  border-bottom: 1px solid rgba(255,255,255,.18);
+}
+.shotSceneHead::before{
+  content:"";
+  position:absolute;
+  left:0;
+  top:0;
+  bottom:0;
+  width:4px;
+  background: rgba(var(--accent-rgb), .55);
+  opacity:.9;
+}
+.shotSceneCaret{
+  background: rgba(var(--accent-rgb), .10);
+  border:1px solid rgba(var(--accent-rgb), .25);
+}
+.shotTableWrap{
+  background: rgba(255,255,255,.02);
+}
+.shotSceneBox .tableWrap{
+  border-color: rgba(255,255,255,.12);
+  background: rgba(0,0,0,.14);
+}
+.shotSceneBox .table th{
+  background: rgba(0,0,0,.26);
+  border-bottom: 1px solid rgba(255,255,255,.12);
+}
+.shotSceneBox .table td{
+  border-bottom: 1px solid rgba(255,255,255,.08);
+}
+
+/* Selected scene: un poco más presente */
+.shotSceneBox.selected{
+  border-color: rgba(var(--accent-rgb),.55);
+  box-shadow: 0 0 0 2px rgba(var(--accent-rgb),.10) inset, 0 10px 18px rgba(0,0,0,.22);
+}
+.shotSceneBox.selected .shotSceneHead::before{
+  background: rgba(var(--accent-rgb), .92);
+}
+
+/* Print: asegurar contraste (fondo blanco) */
+body.gbPrintingShotlist .shotSceneBox{
+  background:#fff !important;
+  border:1px solid #ddd !important;
+  box-shadow:none !important;
+}
+body.gbPrintingShotlist .shotSceneHead{
+  background:#f6f6f6 !important;
+  border-bottom:1px solid #ddd !important;
+}
+body.gbPrintingShotlist .shotSceneHead::before{ display:none !important; }
+body.gbPrintingShotlist .shotTableWrap{ background:#fff !important; }
+body.gbPrintingShotlist .tableWrap{ border-color:#ddd !important; background:#fff !important; }
+body.gbPrintingShotlist .table th{ background:#f6f6f6 !important; color:#111 !important; border-bottom:1px solid #ddd !important; }
+body.gbPrintingShotlist .table td{ color:#000 !important; border-bottom:1px solid #ddd !important; }
+
 /* ===== Shotlist print (unificado) ===== */
 #gbPrintRoot{ display:none; }
 
