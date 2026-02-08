@@ -3218,7 +3218,6 @@ function setupScheduleWheelScroll(){
       date:"",
       callTime:"08:00",
       location:"",
-      locationAddress:\"\",
       label:`Día ${state.shootDays.length+1}`,
       notes:"",
       sceneIds:[],
@@ -5959,7 +5958,6 @@ items.push({
         <div class="dpBadges" id="dpDayBadges">
           <span class="metaPill"><b>Call</b> ${esc(d.callTime || "—")}</span>
           <span class="metaPill"><b>Locación</b> ${esc(d.location || "—")}</span>
-                    ${((d.locationAddress||"").trim()) ? ('<span class="metaPill" title="'+esc(d.locationAddress)+'"><b>Dirección</b> '+esc(d.locationAddress)+'</span>') : ""}
           ${d.night ? `<span class="metaPill"><b>Nocturno</b> hasta 06:00</span>` : ""}
         </div>
       </div>
@@ -5974,13 +5972,22 @@ items.push({
       </div>
 
       <div class="dpMeta">
-        <div class="muted small">${esc((d.notes||"").trim() ? (d.notes||"").trim() : "Click en el título para editar call time, locación, dirección, nombre y notas.")}</div>
+        <div class="muted small">${esc((d.notes||"").trim() ? (d.notes||"").trim() : "Click en el título para editar fecha, call time, locación, nombre y notas.")}</div>
       </div>
     </div>
   </div>
 
   <div class="dayMetaEditor noPrint" id="dpDayMetaEditor" style="display:${dayplanMetaOpen ? "block" : "none"};">
     <div class="dayMetaGrid">
+      <div class="field">
+        <label>Fecha</label>
+        <div class="dateDual">
+          <input class="input" id="dp_day_date_display" type="text" inputmode="numeric" placeholder="dd/mm/aaaa" value="${eattr(formatDDMMYYYY(d.date))}"/>
+          <button class="btn icon datePickBtn" id="dp_day_date_pick" type="button" title="Elegir fecha">📅</button>
+          <input class="input hiddenDate" id="dp_day_date" type="date" value="${eattr(d.date||"")}"/>
+        </div>
+      </div>
+
       <div class="field">
         <label>Call Time</label>
         <div class="row gap">
@@ -5993,11 +6000,6 @@ items.push({
       <div class="field">
         <label>Locación</label>
         <input class="input" id="dp_day_location" value="${eattr(d.location||"")}"/>
-      </div>
-
-      <div class="field">
-        <label>Dirección</label>
-        <input class="input" id="dp_day_address" value="${eattr(d.locationAddress||"")}"/>
       </div>
 
       <div class="field">
@@ -6129,11 +6131,6 @@ items.push({
           }
           liteSave();
         }
-        if(id === "dp_day_address"){
-          d0.locationAddress = e.target.value;
-          // Actualizamos badges al salir del campo (focusout hace fullRefresh). Acá solo guardamos.
-          liteSave();
-        }
         if(id === "dp_day_label"){
           d0.label = e.target.value;
           const t = head.querySelector("#dpDayTitleBtn");
@@ -6154,9 +6151,21 @@ items.push({
           cleanupDayCallTimes(d0);
           fullRefresh();
         }
+        if(id === "dp_day_date"){
+          const iso = (e.target.value||"").trim();
+          if(!iso) return;
+          d0.date = iso;
+          const disp = head.querySelector("#dp_day_date_display");
+          if(disp) disp.value = formatDDMMYYYY(iso);
+          fullRefresh();
+        }
       });
 
       head.addEventListener("keydown", (e)=>{
+        if(e.target?.id === "dp_day_date_display" && e.key === "Enter"){
+          e.preventDefault();
+          e.target.blur();
+        }
         if(e.target?.id === "dp_day_call" && e.key === "Enter"){
           e.preventDefault();
           e.target.blur();
@@ -6168,8 +6177,21 @@ items.push({
         if(!d0) return;
 
         const id = e.target?.id;
+        if(id === "dp_day_date_display"){
+          const iso = parseDDMMYYYY(e.target.value||"");
+          if(iso){
+            d0.date = iso;
+            const hid = head.querySelector("#dp_day_date");
+            if(hid) hid.value = iso;
+            e.target.value = formatDDMMYYYY(iso);
+            fullRefresh();
+          }else{
+            e.target.value = formatDDMMYYYY(d0.date);
+          }
+          return;
+        }
 
-        if(id === "dp_day_location" || id === "dp_day_address" || id === "dp_day_label" || id === "dp_day_notes"){
+        if(id === "dp_day_location" || id === "dp_day_label" || id === "dp_day_notes"){
           fullRefresh();
         }
       });
@@ -6177,7 +6199,6 @@ items.push({
 
     const call = esc(d.callTime || "");
     const loc = esc(d.location || "");
-    const addr = esc(d.locationAddress || "");
 
     // Timeline sizing
     const ppm = getDayplanPPM() || DAYPLAN_PPM;
@@ -6405,7 +6426,7 @@ ${
         <div class="hdr"><span class="dot" style="background:var(--cat-vehicles)"></span>Plan de Rodaje</div>
         <div class="items">
           <div><b>${proj}</b> · ${dayTxt}</div>
-          <div><b>Call:</b> ${call||"—"} &nbsp; <b>Locación:</b> ${loc||"—"}${(addr||"").trim() ? ' &nbsp; <b>Dirección:</b> '+addr : ""}</div>
+          <div><b>Call:</b> ${call||"—"} &nbsp; <b>Locación:</b> ${loc||"—"}</div>
         </div>
         <div class="items">
           <table class="dayplanPrintTable">
@@ -7561,7 +7582,7 @@ grid.appendChild(cell);
       <div class="hdr"><span class="dot" style="background:var(--cat-props)"></span>${esc(state.meta.title||"Proyecto")}</div>
       <div class="items">
         <div><b>Día:</b> ${esc(formatDayTitle(d.date))}${d.label? " · "+esc(d.label):""}</div>
-        <div><b>Call:</b> ${esc(d.callTime||"")} &nbsp; <b>Locación:</b> ${esc(d.location||"")}${(d.locationAddress||"").trim() ? ' &nbsp; <b>Dirección:</b> '+esc(d.locationAddress||"") : ""}</div>
+        <div><b>Call:</b> ${esc(d.callTime||"")} &nbsp; <b>Locación:</b> ${esc(d.location||"")}</div>
         <div class="kpiRow" style="margin-top:10px;">
           <span class="kpi"><b>${scenes.length}</b> escenas</span>
           <span class="kpi"><b>${fmtPages(pages)}</b> pág</span>
@@ -7849,7 +7870,7 @@ grid.appendChild(cell);
       <div class="eleHeader">
         <div class="eleTitle">${esc(title)}</div>
         <div class="eleSub">${proj} · ${dayTxt}</div>
-        <div class="eleSub2"><b>Call:</b> ${esc(d.callTime||"")} &nbsp; <b>Locación:</b> ${esc(d.location||"")}${(d.locationAddress||"").trim() ? ' &nbsp; <b>Dirección:</b> '+esc(d.locationAddress||"") : ""}</div>
+        <div class="eleSub2"><b>Call:</b> ${esc(d.callTime||"")} &nbsp; <b>Locación:</b> ${esc(d.location||"")}</div>
       </div>
       <div class="eleList">
         ${sceneBlocks || `<div class="muted">No hay escenas asignadas.</div>`}
@@ -7921,7 +7942,7 @@ function buildElementsBySceneScreenPage(d, opts={}){
       <div class="eleHeader">
         <div class="eleTitle">${esc(title)}</div>
         <div class="eleSub"><b>${esc(project)}</b> · ${esc(dayLabel||"Día")}</div>
-        <div class="eleSub2"><b>Call:</b> ${esc(d.callTime||"—")} &nbsp; <b>Locación:</b> ${esc(d.location||"—")}${(d.locationAddress||"").trim() ? ' &nbsp; <b>Dirección:</b> '+esc(d.locationAddress||"") : ""}</div>
+        <div class="eleSub2"><b>Call:</b> ${esc(d.callTime||"—")} &nbsp; <b>Locación:</b> ${esc(d.location||"—")}</div>
       </div>
       <div class="eleCards">${cardsHTML}</div>
     </div>
@@ -8038,7 +8059,7 @@ function renderReportDayplanDetail(d){
       <div class="hdr"><span class="dot" style="background:var(--cat-vehicles)"></span>Plan de Rodaje</div>
       <div class="items">
         <div><b>${proj}</b> · ${dayTxt}</div>
-        <div><b>Call:</b> ${esc(d.callTime||"")} &nbsp; <b>Locación:</b> ${esc(d.location||"")}${(d.locationAddress||"").trim() ? ' &nbsp; <b>Dirección:</b> '+esc(d.locationAddress||"") : ""}</div>
+        <div><b>Call:</b> ${esc(d.callTime||"")} &nbsp; <b>Locación:</b> ${esc(d.location||"")}</div>
         <div class="dpHdrChips screenOnly">
           <span class="dpChip">Escenas: <b>${scenes.length}</b></span>
           <span class="dpChip">Pág: <b>${esc(fmtPages(pages))}</b></span>
@@ -8187,7 +8208,7 @@ function renderReportDayplanDetail(d){
       <div class="hdr"><span class="dot" style="background:var(--cat-camera)"></span>Shotlist</div>
       <div class="items">
         <div><b>${esc(state.meta.title||"Proyecto")}</b> · ${esc(formatDayTitle(d.date))}${d.label? " · "+esc(d.label):""}</div>
-        <div><b>Call:</b> ${esc(d.callTime||"")} &nbsp; <b>Locación:</b> ${esc(d.location||"")}${(d.locationAddress||"").trim() ? ' &nbsp; <b>Dirección:</b> '+esc(d.locationAddress||"") : ""}</div>
+        <div><b>Call:</b> ${esc(d.callTime||"")} &nbsp; <b>Locación:</b> ${esc(d.location||"")}</div>
         <div class="kpiRow" style="margin-top:10px;">
           <span class="kpi"><b>${scenes.length}</b> escenas</span>
           <span class="kpi"><b>${totalShots}</b> planos</span>
@@ -8315,7 +8336,7 @@ function renderReportDayplanDetail(d){
       <div class="shotPrintHeader">
         <div class="shotPrintTitle">Shotlist</div>
         <div class="shotPrintSub"><b>${esc(project)}</b> · ${esc(dayLabel||"Día")}</div>
-        <div class="shotPrintMeta"><b>Call:</b> ${esc(d.callTime||"")} &nbsp; <b>Locación:</b> ${esc(d.location||"")}${(d.locationAddress||"").trim() ? ' &nbsp; <b>Dirección:</b> '+esc(d.locationAddress||"") : ""}</div>
+        <div class="shotPrintMeta"><b>Call:</b> ${esc(d.callTime||"")} &nbsp; <b>Locación:</b> ${esc(d.location||"")}</div>
         ${kpi}
       </div>
     `;
