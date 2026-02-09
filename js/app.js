@@ -162,11 +162,47 @@ function sanitizeScriptState(opts={}){
 
   let state = null;
 
-
-  // ======= Permisos de edición (password 6868) =======
-  const EDIT_PASSWORD = "6868";
+  // ======= Permisos de edición (password por proyecto) =======
   let editUnlocked = false;
-  try{ editUnlocked = sessionStorage.getItem("gb_edit_unlocked") === "1"; }catch(_e){ editUnlocked = false; }
+
+  function getEditUnlockKey(){
+    // Guardamos el "unlock" por proyecto (binId) para que no desbloquee ambos con la misma sesión.
+    try{
+      const cfg = (window.StorageLayer && StorageLayer.loadCfg) ? StorageLayer.loadCfg() : null;
+      const stamp = (cfg && (cfg.binId || cfg.projectId)) ? (cfg.binId || cfg.projectId) : "default";
+      return "gb_edit_unlocked__" + String(stamp);
+    }catch(_e){
+      return "gb_edit_unlocked";
+    }
+  }
+
+  function loadEditUnlocked(){
+    try{
+      const k = getEditUnlockKey();
+      const v = sessionStorage.getItem(k);
+
+      // Migración desde la key vieja (una sola vez)
+      if(v === null){
+        const old = sessionStorage.getItem("gb_edit_unlocked");
+        if(old === "1"){
+          sessionStorage.setItem(k, "1");
+          sessionStorage.removeItem("gb_edit_unlocked");
+          return true;
+        }
+      }
+      return v === "1";
+    }catch(_e){ return false; }
+  }
+
+  function getEditPassword(){
+    try{
+      // Definida por proyecto en StorageLayer.PROJECTS
+      const p = (window.StorageLayer && StorageLayer.getEditPassword) ? StorageLayer.getEditPassword() : "";
+      return String(p || "");
+    }catch(_e){ return ""; }
+  }
+
+  editUnlocked = loadEditUnlocked();
 
   function isReadOnly(){ return !editUnlocked; }
 
@@ -178,7 +214,7 @@ function sanitizeScriptState(opts={}){
 
   function setEditUnlocked(v){
     editUnlocked = !!v;
-    try{ sessionStorage.setItem("gb_edit_unlocked", editUnlocked ? "1" : "0"); }catch(_e){}
+    try{ sessionStorage.setItem(getEditUnlockKey(), editUnlocked ? "1" : "0"); }catch(_e){}
     try{ document.body.classList.toggle("readOnly", !editUnlocked); }catch(_e){}
     updateModeBanner();
   }
@@ -198,7 +234,8 @@ function sanitizeScriptState(opts={}){
         return;
       }
       const pass = prompt("Contraseña para editar:");
-      if(pass === EDIT_PASSWORD){
+      const cur = getEditPassword();
+      if(String(pass||"").trim() === cur){
         setEditUnlocked(true);
         toast("Edición habilitada ✏️");
       }else if(pass !== null){
@@ -209,6 +246,7 @@ function sanitizeScriptState(opts={}){
     updateModeBanner();
     return pill;
   }
+
   let selectedSceneId = null;
   let selectedDayId = null;
   let callSheetDayId = null;

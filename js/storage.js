@@ -12,8 +12,8 @@ window.StorageLayer = (function(){
 
   // Two trusted projects (switchable)
   const PROJECTS = [
-    { id:"casona", name:"LA CASONA", binId:"6945d8e2ae596e708fa5c4d9", scriptBinId:"69605c5dae596e708fcee467", breakdownScriptBinId:"696e6f11ae596e708fe710c7", theme:"default" },
-    { id:"jyp", name:"JUBILADA Y PELIGROSA", binId:"694b0c25ae596e708fad1e75", scriptBinId:"69605cc5ae596e708fcee544", breakdownScriptBinId:"696e6f2ad0ea881f40769996", theme:"pink" }
+    { id:"casona", name:"LA CASONA", binId:"6945d8e2ae596e708fa5c4d9", scriptBinId:"69605c5dae596e708fcee467", breakdownScriptBinId:"696e6f11ae596e708fe710c7", theme:"default", editPassword:"1812" },
+    { id:"jyp", name:"JUBILADA Y PELIGROSA", binId:"694b0c25ae596e708fad1e75", scriptBinId:"69605cc5ae596e708fcee544", breakdownScriptBinId:"696e6f2ad0ea881f40769996", theme:"pink", editPassword:"3232" }
   ];
 
   function getProjects(){
@@ -41,6 +41,12 @@ window.StorageLayer = (function(){
     const id = getActiveProjectId();
     return PROJECTS.find(p=>p.id === id) || PROJECTS[0];
   }
+
+  function getEditPassword(){
+    const p = getActiveProject();
+    return String(p && p.editPassword ? p.editPassword : "");
+  }
+
 
   function keyState(){
     const p = getActiveProject();
@@ -197,6 +203,6 @@ window.StorageLayer = (function(){
     jsonbinGet, jsonbinPut,
     getRemoteStamp, setRemoteStamp,
     hardResetLocal,
-    getProjects, getActiveProjectId, setActiveProjectId, getActiveProject
+    getProjects, getActiveProjectId, setActiveProjectId, getActiveProject, getEditPassword
   };
 })();
