@@ -7671,8 +7671,8 @@ grid.appendChild(cell);
         <table class="callTimeTable callTimeTable--cast">
           <thead>
             <tr>
-              <th>Rol</th>
               <th>Nombre</th>
+              <th>Rol</th>
               <th class="time">PU</th>
               <th class="time">Call</th>
               <th class="time">RTS</th>
@@ -7709,8 +7709,8 @@ grid.appendChild(cell);
               const puCell = (pu === "—") ? "—" : `<span class="callTimeDot ${puSem}"></span><b>${esc(pu)}</b>`;
               const rtsCell = (rts === "—") ? "—" : `<span class="callTimeDot ${rtsSem}"></span><b>${esc(rts)}</b>`;
               return `<tr>
-                <td class="name">${esc(roleDisp)}</td>
-                <td>${esc(nameDisp)}</td>
+                <td class="name">${esc(nameDisp)}</td>
+                <td>${esc(roleDisp)}</td>
                 <td class="time ${puCls}">${puCell}</td>
                 <td class="time ${tdCls}"><span class="callTimeDot ${sem}"></span><b>${esc(call)}</b></td>
                 <td class="time ${rtsCls}">${rtsCell}</td>
