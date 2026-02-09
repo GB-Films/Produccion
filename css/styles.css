@@ -1197,6 +1197,27 @@ tr.groupRow td{
 .schedBlock .title{ font-weight:900; }
 .schedBlock .meta{ color:var(--muted); font-size:12px; margin-top:6px; }
 
+.schedTitleRow{
+  display:flex;
+  gap:10px;
+  align-items:baseline;
+}
+.schedTime{
+  flex:0 0 auto;
+  min-width:96px;
+  font-size:12px;
+  font-weight:900;
+  color:var(--muted);
+  font-variant-numeric: tabular-nums;
+  letter-spacing:.2px;
+}
+.schedTitleRow .title{
+  flex:1 1 auto;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+
 .schedTicks{
   position:absolute;
   top:6px;
@@ -2131,6 +2152,16 @@ body.gbPrintingElements .muted{ color:#333 !important; }
 }
 .dpBlockTitle .dpNum{ font-weight:950; opacity:.92; white-space:nowrap; }
 .dpBlockTitle .dpSlug{ font-weight:900; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.dpBlockTitle .dpTime{
+  flex:0 0 auto;
+  min-width:96px;
+  font-size:12px;
+  font-weight:900;
+  color:var(--muted);
+  font-variant-numeric: tabular-nums;
+  letter-spacing:.2px;
+  opacity:.95;
+}
 .dpBlockMeta{
   margin-top:4px;
   display:grid;

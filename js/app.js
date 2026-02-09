@@ -5108,10 +5108,16 @@ function bindSchedDayPickerUI(){
         block.dataset.dayId = d.id;
         block.style.top = `${top}px`;
         block.style.height = `${height}px`;
+                const startTxt = clockLabelFromCall(d, startMin);
+        const endTxt   = clockLabelFromCall(d, startMin + durMin);
+
         block.innerHTML = `
           ${ticks}
-          <div class="title">#${esc(s.number||"")} — ${esc(s.slugline||"")}</div>
-          <div class="meta">${esc(clockLabelFromCall(d, startMin))} · ${esc(formatDuration(durMin))}</div>
+          <div class="schedTitleRow">
+            <div class="schedTime">${esc(startTxt)}–${esc(endTxt)}</div>
+            <div class="title">#${esc(s.number||"")} — ${esc(s.slugline||"")}</div>
+          </div>
+          <div class="meta">${esc(formatDuration(durMin))}</div>
           <div class="resize" title="Cambiar duración"></div>
         `;
 
@@ -5154,9 +5160,15 @@ for(const b of (d.blocks||[])){
   block.style.height = `${height}px`;
   block.style.background = bg;
   block.style.borderLeft = `6px solid ${col}`;
+    const startTxt = clockLabelFromCall(d, startMin);
+  const endTxt   = clockLabelFromCall(d, startMin + durMin);
+
   block.innerHTML = `
-    <div class="title">🗒 ${esc(b.title||"Tarea")}</div>
-    <div class="meta">${esc(clockLabelFromCall(d, startMin))} · ${esc(formatDuration(durMin))}</div>
+    <div class="schedTitleRow">
+      <div class="schedTime">${esc(startTxt)}–${esc(endTxt)}</div>
+      <div class="title">🗒 ${esc(b.title||"Tarea")}</div>
+    </div>
+    <div class="meta">${esc(formatDuration(durMin))}${b.detail ? " · " + esc(b.detail) : ""}</div>
     <div class="resize" title="Cambiar duración"></div>
   `;
 
@@ -6261,11 +6273,14 @@ const height = Math.max(Math.round((absEnd - absStart) * ppm), Math.round(snapMi
               <button class="dpMiniBtn noPrint" data-action="palette" title="Color">🎨</button>
               ${actionBtns}
             </div>
-<div class="dpBlockTitle">${
-  it.kind==="scene"
-    ? `<span class="dpNum">#${esc(it.number||"")}</span><span class="dpSlug">${esc(it.slugline||"")}</span>`
-    : `${esc(it.title||"")}`
-}</div>
+<div class="dpBlockTitle">
+  <span class="dpTime">${esc(startTxt)}–${esc(endTxt)}</span>
+  ${
+    it.kind==="scene"
+      ? `<span class="dpNum">#${esc(it.number||"")}</span><span class="dpSlug">${esc(it.slugline||"")}</span>`
+      : `<span class="dpSlug">${esc(it.title||"")}</span>`
+  }
+</div>
 
 ${
   it.kind==="scene"
