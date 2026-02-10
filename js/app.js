@@ -5132,12 +5132,6 @@ function bindSchedDayPickerUI(){
 
         const top = (preOffset + startMin) * pxPerMin;
         const height = Math.max(34, durMin * pxPerMin);
-
-        const involved = sceneCatsWithItems(s);
-        const ticks = involved.length
-          ? `<div class="schedTicks">${involved.map(cat=>`<span class="tick" style="background:${catColors[cat]}"></span>`).join("")}</div>`
-          : "";
-
         const block = document.createElement("div");
         block.className = "schedBlock";
         const rowColor = d.sceneColors?.[sid];
@@ -5153,7 +5147,6 @@ function bindSchedDayPickerUI(){
 
         block.innerHTML = `
           <div class="schedContent">
-            ${ticks}
             <div class="title">#${esc(s.number||"")} — ${esc(s.slugline||"")}</div>
             <div class="meta">${esc(startTxt)} - ${esc(endTxt)} (${esc(formatDuration(durMin))})</div>
             ${noteTxt ? `<div class="schedNote">${esc(noteTxt)}</div>` : ``}
