@@ -1196,6 +1196,7 @@ tr.groupRow td{
 .schedBlock:active{ cursor:grabbing; }
 .schedBlock .title{ font-weight:900; }
 .schedBlock .meta{ color:var(--muted); font-size:12px; margin-top:6px; }
+.schedNote{ color:var(--muted); font-size:12px; margin-top:6px; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
 
 .schedTitleRow{
   display:flex;
@@ -1221,7 +1222,8 @@ tr.groupRow td{
 .schedTicks{
   position:absolute;
   top:6px;
-  left:12px;
+  right:12px;
+  left:auto;
   display:flex;
   gap:6px;
   pointer-events:none;

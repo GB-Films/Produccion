@@ -5149,13 +5149,13 @@ function bindSchedDayPickerUI(){
                 const startTxt = clockLabelFromCall(d, startMin);
         const endTxt   = clockLabelFromCall(d, startMin + durMin);
 
+        const noteTxt = (notesOrShortSummary(s.notes, s.summary) || "").replace(/\s+/g," ").trim();
+
         block.innerHTML = `
           ${ticks}
-          <div class="schedTitleRow">
-            <div class="schedTime">${esc(startTxt)}–${esc(endTxt)}</div>
-            <div class="title">#${esc(s.number||"")} — ${esc(s.slugline||"")}</div>
-          </div>
-          <div class="meta">${esc(formatDuration(durMin))}</div>
+          <div class="title">#${esc(s.number||"")} — ${esc(s.slugline||"")}</div>
+          <div class="meta">Inicio ${esc(startTxt)} · Fin ${esc(endTxt)} (${esc(formatDuration(durMin))})</div>
+          ${noteTxt ? `<div class="schedNote">${esc(noteTxt)}</div>` : ``}
           <div class="resize" title="Cambiar duración"></div>
         `;
 
@@ -5201,12 +5201,12 @@ for(const b of (d.blocks||[])){
     const startTxt = clockLabelFromCall(d, startMin);
   const endTxt   = clockLabelFromCall(d, startMin + durMin);
 
+  const noteTxt = String(b.detail||"").replace(/\s+/g," ").trim();
+
   block.innerHTML = `
-    <div class="schedTitleRow">
-      <div class="schedTime">${esc(startTxt)}–${esc(endTxt)}</div>
-      <div class="title">🗒 ${esc(b.title||"Tarea")}</div>
-    </div>
-    <div class="meta">${esc(formatDuration(durMin))}${b.detail ? " · " + esc(b.detail) : ""}</div>
+    <div class="title">🗒 ${esc(b.title||"Tarea")}</div>
+    <div class="meta">Inicio ${esc(startTxt)} · Fin ${esc(endTxt)} (${esc(formatDuration(durMin))})</div>
+    ${noteTxt ? `<div class="schedNote">${esc(noteTxt)}</div>` : ``}
     <div class="resize" title="Cambiar duración"></div>
   `;
 
