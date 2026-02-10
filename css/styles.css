@@ -1217,6 +1217,8 @@ tr.groupRow td{
   display:flex;
   gap:10px;
   align-items:baseline;
+  /* Deja lugar para las pills (ticks) pegadas arriba sin pisar el título */
+  margin-top:10px;
 }
 .schedTime{
   flex:0 0 auto;
@@ -1242,12 +1244,14 @@ tr.groupRow td{
     - Alineadas a la izquierda
     - Sin superponerse con el título
   */
-  top:-10px;
+  /* Dentro del bloque (no negativo) para que no se recorten por overflow:hidden */
+  top:2px;
   left:0;
   right:auto;
   display:flex;
   gap:6px;
   pointer-events:none;
+  z-index:3;
 }
 .schedTicks .tick{
   width:14px;
@@ -3255,7 +3259,7 @@ gap:6px 10px;
   .schedHead .m{ font-size:11px; margin-top:3px; }
   .schedBlock{ padding:8px; border-radius:14px; }
   /* Con menos padding en mobile, subimos menos las pills para que no se recorten */
-  .schedTicks{ top:-6px; left:0; right:auto; }
+  .schedTicks{ top:1px; left:0; right:auto; }
   .schedBlock .meta{ font-size:11px; margin-top:4px; }
   .hourLabel{ font-size:10px; }
 
