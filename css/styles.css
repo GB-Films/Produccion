@@ -1187,11 +1187,26 @@ tr.groupRow td{
   right:10px;
   border:1px solid var(--border);
   border-radius:16px;
-  background: rgba(var(--card-rgb),.92);
+  background: rgba(var(--card-rgb),.10);
   padding:12px;
   cursor:grab;
   user-select:none;
   touch-action:none;
+  overflow:hidden;
+}
+.schedBlock .schedContent{
+  position:relative;
+  height:100%;
+  min-height:0;
+  display:flex;
+  flex-direction:column;
+  overflow:hidden;
+  padding-bottom:18px; /* espacio para el resize bar */
+}
+.schedBlock .schedNote{
+  flex:1 1 auto;
+  min-height:0;
+  overflow:hidden;
 }
 .schedBlock:active{ cursor:grabbing; }
 .schedBlock .title{ font-weight:900; }

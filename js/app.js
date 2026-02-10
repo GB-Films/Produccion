@@ -5152,10 +5152,12 @@ function bindSchedDayPickerUI(){
         const noteTxt = (notesOrShortSummary(s.notes, s.summary) || "").replace(/\s+/g," ").trim();
 
         block.innerHTML = `
-          ${ticks}
-          <div class="title">#${esc(s.number||"")} — ${esc(s.slugline||"")}</div>
-          <div class="meta">Inicio ${esc(startTxt)} · Fin ${esc(endTxt)} (${esc(formatDuration(durMin))})</div>
-          ${noteTxt ? `<div class="schedNote">${esc(noteTxt)}</div>` : ``}
+          <div class="schedContent">
+            ${ticks}
+            <div class="title">#${esc(s.number||"")} — ${esc(s.slugline||"")}</div>
+            <div class="meta">${esc(startTxt)} - ${esc(endTxt)} (${esc(formatDuration(durMin))})</div>
+            ${noteTxt ? `<div class="schedNote">${esc(noteTxt)}</div>` : ``}
+          </div>
           <div class="resize" title="Cambiar duración"></div>
         `;
 
@@ -5187,7 +5189,7 @@ for(const b of (d.blocks||[])){
   const height = Math.max(34, durMin * pxPerMin);
 
   const col = safeHexColor(b.color || "#E5E7EB", "#E5E7EB");
-  const bg = hexToRgba(col, 0.18);
+  const bg = hexToRgba(col, 0.10);
 
   const block = document.createElement("div");
   block.className = "schedBlock";
@@ -5204,9 +5206,11 @@ for(const b of (d.blocks||[])){
   const noteTxt = String(b.detail||"").replace(/\s+/g," ").trim();
 
   block.innerHTML = `
-    <div class="title">🗒 ${esc(b.title||"Tarea")}</div>
-    <div class="meta">Inicio ${esc(startTxt)} · Fin ${esc(endTxt)} (${esc(formatDuration(durMin))})</div>
-    ${noteTxt ? `<div class="schedNote">${esc(noteTxt)}</div>` : ``}
+    <div class="schedContent">
+      <div class="title">🗒 ${esc(b.title||"Tarea")}</div>
+      <div class="meta">${esc(startTxt)} - ${esc(endTxt)} (${esc(formatDuration(durMin))})</div>
+      ${noteTxt ? `<div class="schedNote">${esc(noteTxt)}</div>` : ``}
+    </div>
     <div class="resize" title="Cambiar duración"></div>
   `;
 
