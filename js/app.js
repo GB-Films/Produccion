@@ -971,7 +971,7 @@ const shotlistCollapsedSceneIds = new Set();
     if(!cfg.binId || !cfg.accessKey){
       syncReady = true;
       initRemoteSync._running = false;
-      updateSyncPill("Local");
+      updateSyncPill(cfg?.syncLabel || "Local");
       return;
     }
 
@@ -8815,6 +8815,22 @@ async function printPlanGeneral(){
         name: cleanName,
         editPassword: String(pass || "1812").trim() || "1812"
       });
+
+      // Importante: crear el proyecto no puede quedarse solo como metadata.
+      // Guardamos inmediatamente un estado inicial en /data/core y /data/script
+      // para que aparezca completo al abrirlo desde otro navegador/equipo.
+      const initialState = defaultState(cleanName);
+      state = initialState;
+      StorageLayer.saveLocal(initialState);
+
+      if(project?.remote){
+        const { core, pack } = splitStateForBins(initialState);
+        await StorageLayer.jsonbinPut(project.id, "firebase", core);
+        if(project.scriptBinId) await StorageLayer.jsonbinPut(project.scriptBinId, "firebase", pack);
+        StorageLayer.setRemoteStamp(project.id, String(initialState?.meta?.updatedAt || ""));
+        if(project.scriptBinId) StorageLayer.setRemoteStamp(project.scriptBinId, String(initialState?.meta?.updatedAt || ""));
+      }
+
       toast(project?.remote ? "Proyecto creado en Firebase ✅" : "Proyecto local creado ✅");
       location.reload();
     }catch(err){

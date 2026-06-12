@@ -31,6 +31,32 @@ window.StorageLayer = (function(){
     return !!(cfg && cfg.apiKey && cfg.projectId && cfg.appId);
   }
 
+  function requiresFirebase(){
+    return window.GB_REQUIRE_FIREBASE === true;
+  }
+
+  function configuredProjectFallback(){
+    const cfg = window.GB_FIREBASE_CONFIG || {};
+    const id = String(cfg.projectId || "firebase-project").trim() || "firebase-project";
+    const title = id
+      .split(/[-_]+/g)
+      .filter(Boolean)
+      .map(w=>w.charAt(0).toUpperCase() + w.slice(1))
+      .join(" ") || "Proyecto Firebase";
+    return normalizeProject({
+      id,
+      name: title,
+      theme: "default",
+      editPassword: DEFAULT_EDIT_PASSWORD,
+      remote: firebaseReady,
+      localOnly: !firebaseReady
+    });
+  }
+
+  function fallbackProjects(){
+    return requiresFirebase() ? [configuredProjectFallback()] : loadLocalProjects();
+  }
+
   function firebaseCollectionName(){
     return String(window.GB_FIREBASE_COLLECTION || DEFAULT_COLLECTION).trim() || DEFAULT_COLLECTION;
   }
@@ -249,11 +275,13 @@ window.StorageLayer = (function(){
 
   function loadCfg(){
     const p = getActiveProject();
-    const remoteEnabled = firebaseReady && !!p.remote;
+    const firebaseRequired = requiresFirebase();
+    const remoteEnabled = firebaseReady && (!!p.remote || firebaseRequired);
+    const backend = remoteEnabled ? "firebase" : (firebaseRequired ? "firebase_missing" : "local");
     const safe = {
-      backend: remoteEnabled ? "firebase" : "local",
-      backendLabel: remoteEnabled ? "Firebase" : "Local",
-      syncLabel: remoteEnabled ? "Firebase" : "Local",
+      backend,
+      backendLabel: remoteEnabled ? "Firebase" : (firebaseRequired ? "Firebase pendiente" : "Local"),
+      syncLabel: remoteEnabled ? "Firebase" : (firebaseRequired ? "Firebase pendiente" : "Local"),
       projectId: p.id,
       projectName: p.name,
       theme: p.theme || "default",
@@ -263,6 +291,7 @@ window.StorageLayer = (function(){
       autosync: getAutosyncPref(),
       firebaseReady,
       firebaseError,
+      firebaseRequired,
       projects: getProjects()
     };
     try{ localStorage.setItem(KEY_CFG, JSON.stringify(safe)); }catch(_e){}
@@ -318,7 +347,7 @@ window.StorageLayer = (function(){
   async function initFirebase(){
     if(!hasFirebaseConfig()){
       firebaseReady = false;
-      firebaseError = "Falta js/firebase-config.js";
+      firebaseError = requiresFirebase() ? "Firebase incompleto: faltan apiKey/appId" : "Falta js/firebase-config.js";
       return false;
     }
 
@@ -341,7 +370,11 @@ window.StorageLayer = (function(){
           const auth = authMod.getAuth(app);
           await authMod.signInAnonymously(auth);
         }catch(authErr){
-          console.warn("Firebase anonymous auth failed", authErr);
+          console.error("Firebase anonymous auth failed", authErr);
+          firebaseReady = false;
+          firebaseError = "Firebase Auth anonimo fallo: " + String(authErr?.message || authErr || "");
+          fb = null;
+          return false;
         }
       }
 
@@ -379,7 +412,7 @@ window.StorageLayer = (function(){
   }
 
   async function refreshProjects(){
-    const local = loadLocalProjects();
+    const local = fallbackProjects();
     if(!firebaseReady || !fb){
       projectsCache = local;
       return projectsCache;
@@ -418,7 +451,7 @@ window.StorageLayer = (function(){
   async function init(){
     if(initPromise) return initPromise;
     initPromise = (async ()=>{
-      projectsCache = loadLocalProjects();
+      projectsCache = fallbackProjects();
       await initFirebase();
       await refreshProjects();
       getActiveProjectId();
@@ -481,6 +514,10 @@ window.StorageLayer = (function(){
   }
 
   async function createProject(input){
+    if(requiresFirebase() && !firebaseReady){
+      throw new Error("Firebase incompleto: no se pueden crear proyectos locales en esta instalacion");
+    }
+
     const opts = (typeof input === "string") ? { name: input } : (input || {});
     const name = String(opts.name || "").trim();
     if(!name) throw new Error("El proyecto necesita nombre");
