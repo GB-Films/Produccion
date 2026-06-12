@@ -289,6 +289,7 @@ const shotlistCollapsedSceneIds = new Set();
   // - We avoid pushing until that initial sync decision is made
   let syncReady = false;
   let bootHadLocal = false;
+  let bootHadCachedLocal = false;
   let bootAppliedRemote = false;
   let sessionPulledRemote = false;
   let lastRemoteStamp = "";
@@ -1016,7 +1017,17 @@ const shotlistCollapsedSceneIds = new Set();
           }
         }
 
-        // Boot: remote is the source of truth if it has data.
+        // Boot: for Firebase projects, any valid remote state (even an empty one)
+        // is the source of truth. A stale browser cache must never win on load.
+        if(!shouldAdoptRemote && opts && opts.boot && cfg?.backend === "firebase"){
+          shouldAdoptRemote = true;
+          if(localHasData){
+            try{ saveConflictBackup(cfg.binId, state); }catch(_e){}
+          }
+        }
+
+        // Legacy/local backends keep the older behavior: adopt remote on boot
+        // when it actually contains project data.
         if(!shouldAdoptRemote && opts && opts.boot && remoteHasData){
           shouldAdoptRemote = true;
           if(localHasData){
@@ -1062,8 +1073,10 @@ const shotlistCollapsedSceneIds = new Set();
 
         updateSyncPill(remoteSyncLabel());
       }else{
-        // Remote exists but invalid/uninitialized? Bootstrap only if local has no meaningful data.
-        if(!bootHadLocal && isUninitializedRemote(remoteCore)){
+        // Remote exists but invalid/uninitialized? Bootstrap only when there was no
+        // previous browser cache for this project. This prevents an old tab/session
+        // from treating stale local data as the first source of truth.
+        if(!bootHadLocal && !bootHadCachedLocal && isUninitializedRemote(remoteCore)){
           updateSyncPill(remoteSyncLabel());
           // Init remote with our base state (first ever run)
           try{
@@ -10171,10 +10184,12 @@ if(!state.scenes.length){
     try{ document.body.classList.add("bootLoading"); }catch(_e){}
 
     const local = StorageLayer.loadLocal();
-    bootHadLocal = !!(local && local.meta);
+    bootHadCachedLocal = !!(local && local.meta);
+    const bootFromLocal = cfg?.backend !== "firebase";
+    bootHadLocal = bootFromLocal && bootHadCachedLocal;
     state = bootHadLocal ? local : defaultState(cfg && cfg.projectName);
 
-    if(!bootHadLocal){
+    if(!bootHadLocal && cfg?.backend !== "firebase"){
       // Persist initial state locally for this project
       StorageLayer.saveLocal(state);
     }
