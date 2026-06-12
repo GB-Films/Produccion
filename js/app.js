@@ -60,7 +60,7 @@
 
   const MAX_SCRIPT_VERSIONS = 1; // Solo V1 (un único guion)
 
-// Guion: el texto crudo NO se guarda en JSONBin (solo local)
+// Guion: el texto crudo NO se guarda en remoto (solo local)
 const SCRIPT_RAW_LOCAL_PREFIX = "gb_script_raw_local_v1__";
 function getScriptRawLocalKey(){
   try{
@@ -196,7 +196,7 @@ function sanitizeScriptState(opts={}){
 
   function getEditPassword(){
     try{
-      // Definida por proyecto en StorageLayer.PROJECTS
+      // Definida por proyecto en StorageLayer (Firestore/local).
       const p = (window.StorageLayer && StorageLayer.getEditPassword) ? StorageLayer.getEditPassword() : "";
       return String(p || "");
     }catch(_e){ return ""; }
@@ -285,7 +285,7 @@ const shotlistCollapsedSceneIds = new Set();
   let selectedScriptSceneId = null;
 
   // Sync safety:
-  // - We do an initial pull from JSONBin when possible (especially on first run)
+  // - We do an initial pull from remote when possible (especially on first run)
   // - We avoid pushing until that initial sync decision is made
   let syncReady = false;
   let bootHadLocal = false;
@@ -367,7 +367,7 @@ const shotlistCollapsedSceneIds = new Set();
   function markReadOnlyAllowList(){
     const ids = [
       "modeBanner",
-      "btnNavCollapse","projectSwitch",
+      "btnNavCollapse","projectSwitch","btnNewProject","btnRefreshProjects",
       "sceneSearch","sceneFilterTOD",
       "dpBankSearch","shootDaySelect","dayplanSelect","shotDaySelect",
       "dayplanSnap","dayplanZoom",
@@ -671,7 +671,7 @@ const shotlistCollapsedSceneIds = new Set();
 
   // ======= Autosync robusto (evita pisadas por respuestas tardías) =======
   // Bug que te estaba pegando: si un PUT viejo termina después, guardaba un "stamp"
-  // más nuevo del que realmente quedó en JSONBin, y el próximo sync interpretaba
+  // más nuevo del que realmente quedó remoto, y el próximo sync interpretaba
   // eso como "cambio remoto" y te pisaba el último cambio.
   let autosyncInFlight = false;
   let autosyncPending = false;
@@ -737,7 +737,7 @@ const shotlistCollapsedSceneIds = new Set();
 
           hydrateAll();
           toast("Actualicé remoto ✅");
-          updateSyncPill("JSONBin");
+          updateSyncPill(remoteSyncLabel());
           return;
         }
 
@@ -757,7 +757,7 @@ const shotlistCollapsedSceneIds = new Set();
 
           hydrateAll();
           toast("Actualicé remoto ✅");
-          updateSyncPill("JSONBin");
+          updateSyncPill(remoteSyncLabel());
           return;
         }
       }else{
@@ -785,7 +785,7 @@ const shotlistCollapsedSceneIds = new Set();
         StorageLayer.setRemoteStamp(cfg.scriptBinId, lastScriptRemoteStamp);
       }
 
-      updateSyncPill("JSONBin");
+      updateSyncPill(remoteSyncLabel());
     }catch(err){
       updateSyncPill("Local");
       try{
@@ -794,13 +794,13 @@ const shotlistCollapsedSceneIds = new Set();
         if(msg.includes("403")){
           if(!autosyncRun._warn403){
             autosyncRun._warn403 = true;
-            toast("JSONBin 403: la Access Key no puede actualizar (Update) o el bin no es tuyo.");
+            toast("Firebase: permiso denegado para actualizar.");
           }
         }
         if(msg.includes("404")){
           if(!autosyncRun._warn404){
             autosyncRun._warn404 = true;
-            toast("JSONBin 404: bin no encontrado / no asociado a tu cuenta. Revisá BIN_ID y Access Key.");
+            toast("Firebase: proyecto remoto no encontrado.");
           }
         }
       }catch(_e){}
@@ -819,6 +819,15 @@ const shotlistCollapsedSceneIds = new Set();
   function updateSyncPill(mode){
     const p = el("syncPill");
     if(p) p.textContent = mode;
+  }
+
+  function remoteSyncLabel(){
+    try{
+      const cfg = StorageLayer.loadCfg();
+      return cfg?.syncLabel || cfg?.backendLabel || "Remoto";
+    }catch(_e){
+      return "Remoto";
+    }
   }
 
   function defaultState(title){
@@ -1048,14 +1057,14 @@ const shotlistCollapsedSceneIds = new Set();
           toast("Cargué remoto ✅");
         }else{
           // Keep local; do NOT overwrite stamps here (prevents blind overwrites on next autosync).
-          updateSyncPill("JSONBin");
+          updateSyncPill(remoteSyncLabel());
         }
 
-        updateSyncPill("JSONBin");
+        updateSyncPill(remoteSyncLabel());
       }else{
         // Remote exists but invalid/uninitialized? Bootstrap only if local has no meaningful data.
         if(!bootHadLocal && isUninitializedRemote(remoteCore)){
-          updateSyncPill("JSONBin");
+          updateSyncPill(remoteSyncLabel());
           // Init remote with our base state (first ever run)
           try{
             const { core, pack } = splitStateForBins(state);
@@ -1089,11 +1098,11 @@ const shotlistCollapsedSceneIds = new Set();
         if(!syncErrorToastShown){
           syncErrorToastShown = true;
           const msg = String(err && (err.message||err) || "");
-          const extra = " — Revisá BIN ID y Access Key en Configuración.";
+          const extra = " — Revisá la configuración de Firebase.";
           (function(){
-            if(msg.includes("404")) toast("JSONBin 404: bin no encontrado / no asociado a tu cuenta." + extra);
-            else if(msg.includes("403")) toast("JSONBin 403: la Access Key no tiene permiso (Read/Update) o el bin no es tuyo." + extra);
-            else toast("No pude conectar con JSONBin, estoy en modo Local" + extra);
+            if(msg.includes("404")) toast("Firebase: proyecto remoto no encontrado." + extra);
+            else if(msg.includes("403")) toast("Firebase: permiso denegado." + extra);
+            else toast("No pude conectar con Firebase, estoy en modo Local" + extra);
           })();
         }
       }catch(_e){}
@@ -8750,27 +8759,93 @@ async function printPlanGeneral(){
     applyDayplanBankCollapsedUI();
   }
 
-  // Settings JSONBin
+  function renderProjectSwitcher(cfg){
+    try{
+      const sw = el("projectSwitch");
+      if(!sw) return;
+      const projs = (cfg && Array.isArray(cfg.projects)) ? cfg.projects : (StorageLayer.getProjects ? StorageLayer.getProjects() : []);
+      const activeId = cfg?.projectId || StorageLayer.getActiveProjectId?.() || "";
+      sw.innerHTML = "";
+
+      for(const p of projs){
+        const opt = document.createElement("option");
+        opt.value = p.id;
+        opt.textContent = p.remote ? p.name : `${p.name} (local)`;
+        sw.appendChild(opt);
+      }
+
+      if(activeId) sw.value = activeId;
+
+      if(sw.dataset.boundProjectSwitch !== "1"){
+        sw.dataset.boundProjectSwitch = "1";
+        sw.addEventListener("change", ()=>{
+          StorageLayer.setActiveProjectId(sw.value);
+          location.reload();
+        });
+      }
+    }catch(_e){}
+  }
+
+  async function createProjectFromUI(){
+    if(createProjectFromUI._running) return;
+    const name = prompt("Nombre del nuevo proyecto:");
+    if(name === null) return;
+    const cleanName = String(name || "").trim();
+    if(!cleanName) return toast("El proyecto necesita nombre");
+
+    const pass = prompt("Clave de edicion para este proyecto:", "1812");
+    if(pass === null) return;
+
+    createProjectFromUI._running = true;
+    try{
+      const project = await StorageLayer.createProject({
+        name: cleanName,
+        editPassword: String(pass || "1812").trim() || "1812"
+      });
+      toast(project?.remote ? "Proyecto creado en Firebase ✅" : "Proyecto local creado ✅");
+      location.reload();
+    }catch(err){
+      console.error(err);
+      toast("No pude crear el proyecto ❌");
+    }finally{
+      createProjectFromUI._running = false;
+    }
+  }
+
+  async function refreshProjectsFromUI(){
+    try{
+      if(StorageLayer.refreshProjects) await StorageLayer.refreshProjects();
+      const cfg = StorageLayer.loadCfg();
+      renderProjectSwitcher(cfg);
+      updateSyncPill(cfg.syncLabel || cfg.backendLabel || "Local");
+      toast("Proyectos actualizados ✅");
+    }catch(err){
+      console.error(err);
+      toast("No pude refrescar proyectos ❌");
+    }
+  }
+
+  // Settings remoto
   function saveCfgFromUI(){
-    // Config fija (credenciales embebidas + autosync ON)
+    // Config remota + autosync ON
     StorageLayer.saveCfg(StorageLayer.loadCfg());
-    toast("Config fija (Autosync ON) ✅");
+    toast("Config remota (Autosync ON) ✅");
   }
   async function testCfg(){
     const cfg = StorageLayer.loadCfg();
-    if(!cfg.binId || !cfg.accessKey) return toast("Falta Bin ID o Access Key");
+    if(!cfg.binId || !cfg.accessKey) return toast("Firebase no configurado");
     try{
       await StorageLayer.jsonbinGet(cfg.binId, cfg.accessKey);
       if(cfg.scriptBinId) await StorageLayer.jsonbinGet(cfg.scriptBinId, cfg.accessKey);
-      toast("Conexión JSONBin OK ✅");
+      toast("Conexion Firebase OK ✅");
     }catch(err){
       console.error(err);
-      toast("Conexión falló ❌");
+      toast("Conexion falló ❌");
     }
   }
   async function pullRemote(){
     const cfg = StorageLayer.loadCfg();
-    if(!cfg.binId || !cfg.accessKey) return toast("Falta Bin ID o Access Key");
+    if(!cfg.binId || !cfg.accessKey) return toast("Firebase no configurado");
     try{
       const [core, packRaw] = await Promise.all([
         StorageLayer.jsonbinGet(cfg.binId, cfg.accessKey),
@@ -8795,7 +8870,7 @@ async function printPlanGeneral(){
 
       toast("Remoto cargado ✅");
       hydrateAll();
-      updateSyncPill("JSONBin");
+      updateSyncPill(remoteSyncLabel());
     }catch(err){
       console.error(err);
       toast("No pude traer remoto ❌");
@@ -8803,7 +8878,7 @@ async function printPlanGeneral(){
   }
   async function pushRemote(){
     const cfg = StorageLayer.loadCfg();
-    if(!cfg.binId || !cfg.accessKey) return toast("Falta Bin ID o Access Key");
+    if(!cfg.binId || !cfg.accessKey) return toast("Firebase no configurado");
     try{
       const snapshot = JSON.parse(JSON.stringify(state));
       const pushStamp = String(snapshot?.meta?.updatedAt || "");
@@ -8820,7 +8895,7 @@ async function printPlanGeneral(){
       }
 
       toast("Estado subido ✅");
-      updateSyncPill("JSONBin");
+      updateSyncPill(remoteSyncLabel());
     }catch(err){
       console.error(err);
       toast("No pude subir ❌");
@@ -9964,11 +10039,19 @@ el("scriptVerSelect")?.addEventListener("change", ()=>{
     el("btnTestCfg")?.addEventListener("click", testCfg);
     el("btnPullRemote")?.addEventListener("click", pullRemote);
     el("btnPushRemote")?.addEventListener("click", pushRemote);
+    el("btnNewProject")?.addEventListener("click", createProjectFromUI);
+    el("btnRefreshProjects")?.addEventListener("click", refreshProjectsFromUI);
 
     el("projectTitle")?.addEventListener("input", ()=>{
       state.meta.title = el("projectTitle").value || "Proyecto";
       const pill = el("projPill");
       if(pill) pill.textContent = projectInitials(state.meta.title);
+      try{
+        StorageLayer.updateActiveProjectMeta?.({ name: state.meta.title, updatedAt: state.meta.updatedAt });
+        const sw = el("projectSwitch");
+        const opt = sw?.selectedOptions?.[0];
+        if(opt) opt.textContent = (StorageLayer.loadCfg()?.backend === "firebase") ? state.meta.title : `${state.meta.title} (local)`;
+      }catch(_e){}
       touch();
       renderReportsDetail();
     });
@@ -10065,6 +10148,12 @@ if(!state.scenes.length){
   async function init(){
     loadCallSheetCursor();
 
+    try{
+      if(StorageLayer.init) await StorageLayer.init();
+    }catch(err){
+      console.warn("Storage init failed", err);
+    }
+
     const cfg = StorageLayer.loadCfg();
 
     // Apply per-project theme (pink for Jubilada y Peligrosa)
@@ -10073,25 +10162,8 @@ if(!state.scenes.length){
       else document.documentElement.removeAttribute("data-theme");
     }catch{}
 
-    // Project switcher (trusted projects only)
-    try{
-      const sw = el("projectSwitch");
-      if(sw){
-        const projs = (cfg && Array.isArray(cfg.projects)) ? cfg.projects : [];
-        sw.innerHTML = "";
-        for(const p of projs){
-          const opt = document.createElement("option");
-          opt.value = p.id;
-          opt.textContent = p.name;
-          sw.appendChild(opt);
-        }
-        if(cfg && cfg.projectId) sw.value = cfg.projectId;
-        sw.addEventListener("change", ()=>{
-          StorageLayer.setActiveProjectId(sw.value);
-          location.reload();
-        });
-      }
-    }catch{}
+    renderProjectSwitcher(cfg);
+    updateSyncPill(cfg.syncLabel || cfg.backendLabel || "Local");
 
     initSidebarUI(cfg);
 

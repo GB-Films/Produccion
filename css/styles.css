@@ -66,6 +66,35 @@ html[data-theme="pink"]{
   font-size:12px;
 }
 
+.projectActions{
+  display:grid;
+  grid-template-columns: 1fr auto;
+  gap:8px;
+  margin-top:8px;
+}
+
+.syncMeta{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:8px;
+  margin-top:8px;
+  color:var(--muted);
+  font-size:12px;
+}
+
+.syncMeta span{
+  min-width:0;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+
+#syncPill{
+  color:var(--text);
+  font-weight:900;
+}
+
 *{ box-sizing:border-box; }
 html,body{ height:100%; }
 body{
@@ -130,7 +159,10 @@ body{
 .shell.navCollapsed .sidebar{ padding:12px 10px; }
 .shell.navCollapsed .brand{ padding:12px 10px; }
 .shell.navCollapsed .titleInput,
-.shell.navCollapsed .projectSwitch{ display:none; }
+.shell.navCollapsed .projectSwitch,
+.shell.navCollapsed .projectActions,
+.shell.navCollapsed .syncMeta,
+.shell.navCollapsed .sub{ display:none; }
 .shell.navCollapsed .projPill{ display:flex; }
 .shell.navCollapsed #btnNavCollapse{ display:none; }
 

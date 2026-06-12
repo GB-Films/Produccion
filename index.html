@@ -20,6 +20,15 @@
 
         <input class="titleInput" id="projectTitle" placeholder="Proyecto"/>
         <select class="input projectSwitch" id="projectSwitch" title="Proyecto"></select>
+        <div class="projectActions">
+          <button class="btn small primary" id="btnNewProject" type="button">+ Proyecto</button>
+          <button class="btn small ghost" id="btnRefreshProjects" type="button" title="Refrescar proyectos">Sync</button>
+        </div>
+        <div class="syncMeta">
+          <span id="syncPill">Local</span>
+          <span id="statusText">Listo</span>
+        </div>
+        <div class="sub">Guardado: <span id="savedAtText">-</span></div>
       </div>
 
       <nav class="nav">
@@ -705,7 +714,7 @@
       "https://unpkg.com/xlsx@0.18.5/dist/xlsx.full.min.js",
       "https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"
     ];
-    const appFiles = ["js/utils.js","js/storage.js","js/app.js"];
+    const appFiles = ["js/firebase-config.js","js/utils.js","js/storage.js","js/app.js"];
 
     function loadScript(src){
       return new Promise((res)=>{
