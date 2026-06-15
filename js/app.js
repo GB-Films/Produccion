@@ -722,8 +722,9 @@ const shotlistCollapsedSceneIds = new Set();
           (storedCoreStamp && coreStamp && coreStamp !== storedCoreStamp) ||
           (cfg.scriptBinId && storedPackStamp && packStamp && packStamp !== storedPackStamp);
 
-        // Si el remoto cambió desde la última vez que lo vimos, NO empujamos: primero absorbemos remoto.
-        if(changedByStamp){
+        // Si el remoto cambio desde la ultima vez que lo vimos, solo lo absorbemos
+        // cuando es mas nuevo que lo local. Un cambio recien cargado no se borra.
+        if(changedByStamp && tsUpdatedAt(remoteCombined) > tsUpdatedAt(state)){
           saveConflictBackup(cfg.binId, state); // copia local por si hay conflicto
           state = remoteCombined;
           StorageLayer.saveLocal(state);
@@ -8368,8 +8369,23 @@ function renderReportDayplanDetail(d){
     return _gbPrintRoot;
   }
   function cleanupGbPrintRoot(){
-    try{ document.body.classList.remove("gbPrintingShotlist","gbPrintingCallsheet","gbPrintingElements","gbPrintingSchedule","gbPrintMobile"); }catch(_e){}
+    try{ document.body.classList.remove("gbPrintingShotlist","gbPrintingCallsheet","gbPrintingElements","gbPrintingSchedule","gbPrintingDayplan","gbPrintMobile"); }catch(_e){}
     try{ if(_gbPrintRoot) _gbPrintRoot.innerHTML = ""; }catch(_e){}
+  }
+
+  function printCurrentDayplan(){
+    try{ renderDayPlan(); }catch(_e){}
+    const src = el("dayplanPrint");
+    if(!src || !String(src.innerHTML || "").trim()){
+      toast("No hay Plan de Rodaje para imprimir");
+      return;
+    }
+    const root = ensureGbPrintRoot();
+    root.innerHTML = src.innerHTML;
+    applyPrintDeviceFlag();
+    document.body.classList.add("gbPrintingDayplan");
+    setPrintOrientation("landscape");
+    try{ window.print(); } finally { clearPrintOrientation(); cleanupGbPrintRoot(); }
   }
 
   function applyPrintDeviceFlag(){
@@ -8854,6 +8870,29 @@ async function printPlanGeneral(){
     }
   }
 
+  async function syncOnlineFromUI(){
+    try{
+      try{
+        if(StorageLayer.refreshProjects) await StorageLayer.refreshProjects();
+      }catch(err){
+        console.warn("Could not refresh project list before sync", err);
+      }
+
+      const cfg = StorageLayer.loadCfg();
+      renderProjectSwitcher(cfg);
+      updateSyncPill(cfg.syncLabel || cfg.backendLabel || "Local");
+
+      if(cfg.binId && cfg.accessKey){
+        await pullRemote();
+      }else{
+        toast("Proyectos actualizados");
+      }
+    }catch(err){
+      console.error(err);
+      toast("No pude actualizar desde Firebase");
+    }
+  }
+
   // Settings remoto
   function saveCfgFromUI(){
     // Config remota + autosync ON
@@ -8886,6 +8925,7 @@ async function printPlanGeneral(){
 
       const pack = isValidScriptPack(packRaw) ? packRaw : null;
       state = mergeStateFromBins(core, pack);
+      sessionPulledRemote = true;
 
       StorageLayer.saveLocal(state);
 
@@ -9530,7 +9570,7 @@ el("btnDayplanAddNote")?.addEventListener("click", addDayplanNote);
       renderReportsDetail();
       renderReports();
     });
-    el("btnDayplanPrint")?.addEventListener("click", ()=>{ setPrintOrientation("landscape"); window.print(); });
+    el("btnDayplanPrint")?.addEventListener("click", printCurrentDayplan);
     el("dayplanSnap")?.addEventListener("change", ()=> renderDayPlan());
     el("dayplanZoom")?.addEventListener("change", ()=>{
       const sc = el("dpScroller");
@@ -10069,7 +10109,7 @@ el("scriptVerSelect")?.addEventListener("change", ()=>{
     el("btnPullRemote")?.addEventListener("click", pullRemote);
     el("btnPushRemote")?.addEventListener("click", pushRemote);
     el("btnNewProject")?.addEventListener("click", createProjectFromUI);
-    el("btnRefreshProjects")?.addEventListener("click", refreshProjectsFromUI);
+    el("btnRefreshProjects")?.addEventListener("click", syncOnlineFromUI);
 
     el("projectTitle")?.addEventListener("input", ()=>{
       state.meta.title = el("projectTitle").value || "Proyecto";

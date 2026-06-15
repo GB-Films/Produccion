@@ -2340,7 +2340,7 @@ gap:6px 10px;
 /* Ajuste fino de anchos (Tomi): un poco más de aire en Hora/Dur/Nro/I-E/Pág, y más en Momento/Lugar.
    Resumen sigue absorbiendo el ancho restante. */
 .dayplanPrintTable col.colHour{ width:46px; } /* +20% */
-.dayplanPrintTable col.colDur{ width:44px; }  /* +30% */
+.dayplanPrintTable col.colDur{ width:52px; }
 .dayplanPrintTable col.colNro{ width:34px; }  /* +20% */
 .dayplanPrintTable col.colIE{ width:41px; }   /* +20% */
 .dayplanPrintTable col.colPag{ width:46px; }  /* +20% */
@@ -2349,10 +2349,11 @@ gap:6px 10px;
 .dayplanPrintTable col.colTod{ width:70px; }
 
 /* Lugar: +30% */
-.dayplanPrintTable col.colLoc{ width:84px; }
+.dayplanPrintTable col.colLoc{ width:104px; }
 
 /* Título: ancho razonable; el resto se lo lleva Resumen */
 .dayplanPrintTable col.colTitle{ width:160px; }
+.dayplanPrintTable col.colSum{ width:auto; }
 
 
 .dayplanPrintTable td.cLoc, .dayplanPrintTable td.cTod{
@@ -2426,6 +2427,42 @@ gap:6px 10px;
 .dayplanPrintTable tr.dpPrintNote td{
   font-weight:750;
 }
+
+body.gbPrintingDayplan{ margin:0 !important; padding:0 !important; background:#fff !important; }
+body.gbPrintingDayplan > *{ display:none !important; }
+body.gbPrintingDayplan #gbPrintRoot{
+  display:block !important;
+  position:absolute;
+  left:0;
+  top:0;
+  width:100%;
+  padding:0 !important;
+  margin:0 !important;
+  background:#fff;
+  color:#111;
+  overflow:visible;
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+body.gbPrintingDayplan #gbPrintRoot *{
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+body.gbPrintingDayplan #gbPrintRoot .catBlock{
+  background:#fff !important;
+  border:1px solid #ddd !important;
+  border-radius:0 !important;
+  overflow:visible !important;
+}
+body.gbPrintingDayplan #gbPrintRoot .catBlock .hdr{
+  background:#f6f6f6 !important;
+  border-bottom:1px solid #ddd !important;
+  color:#111 !important;
+}
+body.gbPrintingDayplan #gbPrintRoot .catBlock .items{
+  overflow:visible !important;
+}
+
 .dayplanTable .dpHandle{
   cursor:grab;
   user-select:none;
@@ -2475,6 +2512,12 @@ gap:6px 10px;
   /* Plan de Rodaje (tabla de impresión): evitar cortes y repetir encabezado */
   .dayplanPrintTable thead{ display: table-header-group; }
   .dayplanPrintTable tr{ break-inside: avoid; page-break-inside: avoid; }
+  body.gbPrintingDayplan .dayplanPrintTable{ page-break-inside:auto; }
+  body.gbPrintingDayplan .dayplanPrintTable tbody{ display:table-row-group; }
+  body.gbPrintingDayplan .dayplanPrintTable tr{
+    break-inside:auto;
+    page-break-inside:auto;
+  }
 
 
   /* Plan del día */
